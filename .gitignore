@@ -14,6 +14,9 @@ target/
 build/
 *.class
 
+# 작업 메모 · 인수인계 문서 (개인용, 커밋 제외)
+docs/
+
 # Claude Code 개인 설정
 .claude/settings.local.json
 

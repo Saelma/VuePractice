@@ -1,0 +1,23 @@
+{
+  "name": "esp-frontend",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "rsbuild dev",
+    "build": "rsbuild build",
+    "preview": "rsbuild preview"
+  },
+  "dependencies": {
+    "vue": "3.3.0",
+    "devextreme": "23.1.15",
+    "devextreme-vue": "23.1.15"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "1.7.3",
+    "@rsbuild/plugin-vue": "^1.0.0",
+    "tailwindcss": "4.0.14",
+    "@tailwindcss/postcss": "4.0.14"
+  },
+  "packageManager": "pnpm@10.34.5"
+}
