@@ -1,0 +1,23 @@
+# 환경변수 · 비밀값 (절대 커밋 금지)
+.env
+.env.*
+*.local
+secrets*
+
+# Node / 프론트
+node_modules/
+dist/
+*.log
+
+# Java / 백엔드
+target/
+build/
+*.class
+
+# Claude Code 개인 설정
+.claude/settings.local.json
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
