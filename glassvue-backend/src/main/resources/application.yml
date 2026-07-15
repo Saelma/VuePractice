@@ -19,6 +19,10 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+    # 지연로딩 연관(예: product.category)을 페이지 단위로 일괄 로딩해 N+1 완화
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
 
   # --- Redis (로컬, 127.0.0.1:6379) ---
   data:

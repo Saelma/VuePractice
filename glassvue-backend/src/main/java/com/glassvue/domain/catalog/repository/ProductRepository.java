@@ -1,0 +1,8 @@
+package com.glassvue.domain.catalog.repository;
+
+import com.glassvue.domain.catalog.entity.Product;
+import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ProductRepository extends JpaRepository<Product, UUID>, ProductRepositoryCustom {
+}

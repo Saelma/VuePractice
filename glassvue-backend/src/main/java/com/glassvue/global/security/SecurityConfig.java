@@ -26,6 +26,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomAuthenticationEntryPoint authenticationEntryPoint;
+    private final CustomAccessDeniedHandler accessDeniedHandler;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -41,8 +42,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/notices/*").authenticated()
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
                         .requestMatchers("/api/members/**").authenticated()
+                        // 카탈로그: 조회는 공개, 등록/수정/삭제는 관리자만
+                        .requestMatchers(HttpMethod.POST, "/api/products", "/api/categories").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/products/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/*").hasRole("ADMIN")
                         .anyRequest().permitAll())
-                .exceptionHandling(e -> e.authenticationEntryPoint(authenticationEntryPoint))
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
