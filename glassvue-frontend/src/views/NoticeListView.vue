@@ -12,6 +12,7 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxDateBox } from 'devextreme-vue/date-box';
 import { DxButton } from 'devextreme-vue/button';
 import { fetchNotices } from '../api/notice';
+import { isLoggedIn } from '../stores/auth';
 
 const router = useRouter();
 const gridRef = ref(null);
@@ -82,6 +83,7 @@ function onRowClick(e) {
     <div class="mb-4 flex items-center justify-between">
       <h2 class="text-xl font-semibold text-slate-800">공지 목록</h2>
       <DxButton
+        v-if="isLoggedIn"
         text="+ 새 공지"
         type="default"
         styling-mode="contained"

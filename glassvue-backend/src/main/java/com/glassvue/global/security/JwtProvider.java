@@ -26,8 +26,8 @@ public class JwtProvider {
         this.refreshMs = props.refreshTokenValidityMs();
     }
 
-    public String createAccessToken(UUID memberId, Role role) {
-        return build(memberId, accessMs, Map.of("role", role.name()));
+    public String createAccessToken(UUID memberId, Role role, String nickname) {
+        return build(memberId, accessMs, Map.of("role", role.name(), "nickname", nickname));
     }
 
     public String createRefreshToken(UUID memberId) {

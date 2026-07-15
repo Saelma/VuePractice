@@ -55,7 +55,7 @@ public class AuthService {
         if (!passwordEncoder.matches(req.password(), member.getPassword())) {
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
-        return issueTokens(member.getId(), member.getRole());
+        return issueTokens(member);
     }
 
     /** 리프레시 토큰으로 재발급(회전). 저장된 것과 일치해야만 허용. */
@@ -71,7 +71,7 @@ public class AuthService {
         }
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-        return issueTokens(member.getId(), member.getRole());
+        return issueTokens(member);
     }
 
     public void logout(UUID memberId, String accessToken) {
@@ -92,10 +92,10 @@ public class AuthService {
         return MemberResponse.from(member);
     }
 
-    private TokenResponse issueTokens(UUID memberId, Role role) {
-        String access = jwtProvider.createAccessToken(memberId, role);
-        String refresh = jwtProvider.createRefreshToken(memberId);
-        refreshTokenStore.save(memberId, refresh);
+    private TokenResponse issueTokens(Member member) {
+        String access = jwtProvider.createAccessToken(member.getId(), member.getRole(), member.getNickname());
+        String refresh = jwtProvider.createRefreshToken(member.getId());
+        refreshTokenStore.save(member.getId(), refresh);
         return TokenResponse.of(access, refresh, jwtProperties.accessTokenValidityMs() / 1000);
     }
 }

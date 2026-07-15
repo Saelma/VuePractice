@@ -1,6 +1,8 @@
 package com.glassvue.domain.notice.controller;
 
+import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -20,8 +22,10 @@ import org.springframework.http.ResponseEntity;
 @Tag(name = "Notice", description = "사내 공지 게시판 API")
 public interface NoticeController {
 
-    @Operation(summary = "공지 등록")
-    ResponseEntity<ApiResponse<UUID>> create(@Valid NoticeCreateRequest request);
+    @Operation(summary = "공지 등록 (로그인 필요, 작성자=로그인 유저)")
+    ResponseEntity<ApiResponse<UUID>> create(
+            @Parameter(hidden = true) AuthUser user,
+            @Valid NoticeCreateRequest request);
 
     @Operation(summary = "공지 단건 조회")
     ResponseEntity<ApiResponse<NoticeResponse>> get(UUID id);

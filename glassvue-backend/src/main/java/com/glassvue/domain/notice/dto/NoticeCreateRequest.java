@@ -14,10 +14,6 @@ public record NoticeCreateRequest(
         @NotBlank
         String content,
 
-        @Schema(description = "작성자", example = "홍길동")
-        @NotBlank @Size(max = 50)
-        String author,
-
         @Schema(description = "상단 고정 여부", example = "false")
         boolean pinned
 ) {

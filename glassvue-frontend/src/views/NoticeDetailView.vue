@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxButton } from 'devextreme-vue/button';
 import { getNotice, deleteNotice, increaseView } from '../api/notice';
+import { isLoggedIn } from '../stores/auth';
 
 const props = defineProps({ id: { type: String, required: true } });
 const router = useRouter();
@@ -13,8 +14,7 @@ const loading = ref(true);
 
 onMounted(async () => {
   try {
-    // 조회수 증가(실패해도 조회는 계속) → 최신 값 포함해 조회
-    await increaseView(props.id).catch(() => {});
+    await increaseView(props.id).catch(() => {}); // 조회수 증가(실패해도 조회 계속)
     notice.value = await getNotice(props.id);
   } catch (e) {
     error.value = e.message;
@@ -59,8 +59,10 @@ function fmt(v) {
 
       <div class="mt-6 flex gap-2">
         <DxButton text="목록" styling-mode="outlined" @click="router.push('/')" />
-        <DxButton text="수정" type="default" styling-mode="contained" @click="router.push(`/notices/${id}/edit`)" />
-        <DxButton text="삭제" type="danger" styling-mode="contained" @click="onDelete" />
+        <template v-if="isLoggedIn">
+          <DxButton text="수정" type="default" styling-mode="contained" @click="router.push(`/notices/${id}/edit`)" />
+          <DxButton text="삭제" type="danger" styling-mode="contained" @click="onDelete" />
+        </template>
       </div>
     </article>
   </section>

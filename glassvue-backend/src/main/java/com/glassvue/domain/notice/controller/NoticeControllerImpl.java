@@ -11,9 +11,11 @@ import com.glassvue.domain.notice.service.command.NoticeCommandService;
 import com.glassvue.domain.notice.service.query.NoticeQueryService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.global.security.AuthUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,8 +35,10 @@ public class NoticeControllerImpl implements NoticeController {
 
     @Override
     @PostMapping
-    public ResponseEntity<ApiResponse<UUID>> create(@Valid @RequestBody NoticeCreateRequest request) {
-        UUID id = commandService.create(request);
+    public ResponseEntity<ApiResponse<UUID>> create(
+            @AuthenticationPrincipal AuthUser user,
+            @Valid @RequestBody NoticeCreateRequest request) {
+        UUID id = commandService.create(request, user.nickname());
         return ResponseEntity.created(URI.create("/api/notices/" + id))
                 .body(ApiResponse.ok(id));
     }

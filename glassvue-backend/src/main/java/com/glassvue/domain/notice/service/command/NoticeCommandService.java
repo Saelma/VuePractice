@@ -25,11 +25,11 @@ public class NoticeCommandService {
     private final NoticeViewCountStore viewCountStore;
 
     @Transactional
-    public UUID create(NoticeCreateRequest req) {
+    public UUID create(NoticeCreateRequest req, String author) {
         Notice notice = Notice.builder()
                 .title(req.title())
                 .content(req.content())
-                .author(req.author())
+                .author(author)
                 .pinned(req.pinned())
                 .build();
         Notice saved = noticeRepository.save(notice);
