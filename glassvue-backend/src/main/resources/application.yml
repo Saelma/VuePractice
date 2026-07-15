@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: glassvue-backend
+
+  # --- Oracle 19c ---
+  # 값은 프로젝트 루트의 .env 에서 환경변수로 주입한다 (파일에 비밀값을 두지 않음)
+  #   set -a; source ../.env; set +a
+  # 서비스명은 리스너에 등록된 PDB 이름(espdb). CDB 루트(ESPCDB)로는 ESP 계정이 인증되지 않는다.
+  datasource:
+    url: "jdbc:oracle:thin:@//${DB_HOST}:${DB_PORT}/${DB_SERVICE:espdb}"
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+
+  jpa:
+    database-platform: org.hibernate.dialect.OracleDialect
+    # 연습 단계: 엔티티 기준으로 테이블 자동 생성/추가. 안정되면 validate + Flyway로.
+    # (update는 컬럼 삭제/타입 변경을 반영하지 못한다)
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+  # --- Redis (로컬, 127.0.0.1:6379) ---
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+  # 캐시는 Redis 사용
+  cache:
+    type: redis
+
+# --- Actuator ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+server:
+  port: 8080
+
+# --- JWT (시크릿은 .env의 JWT_SECRET, Base64) ---
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-validity-ms: 1800000
+  refresh-token-validity-ms: 1209600000
+
+# 조회수: Redis 누적분을 DB에 반영하는 주기(ms)
+notice:
+  view-count:
+    flush-interval-ms: 30000
