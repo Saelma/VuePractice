@@ -43,6 +43,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
                         .requestMatchers("/api/members/**").authenticated()
                         .requestMatchers("/api/cart/**").authenticated()
+                        .requestMatchers("/api/orders/**").authenticated()
                         // 카탈로그: 조회는 공개, 등록/수정/삭제는 관리자만
                         .requestMatchers(HttpMethod.POST, "/api/products", "/api/categories").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/products/*").hasRole("ADMIN")

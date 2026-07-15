@@ -32,7 +32,14 @@ public enum ErrorCode {
     // 카탈로그(상품·카테고리)
     CATEGORY_NOT_FOUND("CATEGORY-404", HttpStatus.NOT_FOUND, "카테고리를 찾을 수 없습니다."),
     DUPLICATE_CATEGORY("CATEGORY-409", HttpStatus.CONFLICT, "이미 있는 카테고리입니다."),
-    PRODUCT_NOT_FOUND("PRODUCT-404", HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다.");
+    PRODUCT_NOT_FOUND("PRODUCT-404", HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
+    OUT_OF_STOCK("PRODUCT-400S", HttpStatus.BAD_REQUEST, "재고가 부족합니다."),
+
+    // 주문
+    CART_EMPTY("ORDER-400E", HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),
+    UNAVAILABLE_ITEM("ORDER-400U", HttpStatus.BAD_REQUEST, "구매할 수 없는 상품(품절·판매중지)이 포함되어 있습니다."),
+    ORDER_NOT_FOUND("ORDER-404", HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."),
+    ORDER_NOT_CANCELLABLE("ORDER-400C", HttpStatus.BAD_REQUEST, "취소할 수 없는 주문입니다.");
 
     private final String code;
     private final HttpStatus status;

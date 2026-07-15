@@ -61,4 +61,18 @@ public class ProductCommandService {
         return categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
     }
+
+    /** 주문용 재고 차감(원자적). 재고 부족이면 예외. (호출부는 상품 존재를 이미 검증한 상태) */
+    @CacheEvict(cacheNames = "products:list", allEntries = true)
+    public void decreaseStock(UUID productId, long quantity) {
+        if (productRepository.decreaseStock(productId, quantity) == 0) {
+            throw new BusinessException(ErrorCode.OUT_OF_STOCK);
+        }
+    }
+
+    /** 주문 취소 시 재고 복원. (상품이 이미 삭제됐으면 조용히 무시) */
+    @CacheEvict(cacheNames = "products:list", allEntries = true)
+    public void increaseStock(UUID productId, long quantity) {
+        productRepository.increaseStock(productId, quantity);
+    }
 }
