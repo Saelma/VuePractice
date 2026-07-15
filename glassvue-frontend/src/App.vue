@@ -19,9 +19,12 @@ async function onLogout() {
 <template>
   <main class="min-h-screen bg-slate-50">
     <header class="flex items-center justify-between border-b bg-white px-6 py-4">
-      <div>
+      <div class="flex items-center gap-6">
         <RouterLink to="/" class="text-2xl font-bold text-slate-800 hover:text-blue-600">Glassvue</RouterLink>
-        <p class="text-sm text-slate-500">사내 공지 게시판</p>
+        <nav class="flex gap-4 text-sm text-slate-600">
+          <RouterLink to="/" class="hover:text-blue-600">공지</RouterLink>
+          <RouterLink to="/products" class="hover:text-blue-600">상품</RouterLink>
+        </nav>
       </div>
       <div class="flex items-center gap-3 text-sm">
         <template v-if="isLoggedIn">
