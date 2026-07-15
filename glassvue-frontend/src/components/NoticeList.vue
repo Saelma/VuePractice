@@ -1,4 +1,5 @@
 <script setup>
+import { reactive, ref } from 'vue';
 import CustomStore from 'devextreme/data/custom_store';
 import {
   DxDataGrid,
@@ -6,10 +7,28 @@ import {
   DxPaging,
   DxPager,
 } from 'devextreme-vue/data-grid';
+import { DxTextBox } from 'devextreme-vue/text-box';
+import { DxDateBox } from 'devextreme-vue/date-box';
+import { DxButton } from 'devextreme-vue/button';
 import { fetchNotices } from '../api/notice';
 
-// DevExtreme의 서버 페이징: load(loadOptions)에서 skip/take를 page/size로 변환해
-// 백엔드에 요청하고 { data, totalCount } 형태로 돌려준다.
+const gridRef = ref(null);
+
+// 입력 폼 (타이핑 중 값)
+const form = reactive({ title: '', author: '', fromDate: null, toDate: null });
+
+// 실제 적용된 검색 조건 ("검색" 눌러야 반영). load()가 이 값을 읽는다.
+let applied = {};
+
+// DxDateBox의 Date 객체 → 'yyyy-MM-dd' (로컬 기준, UTC 변환으로 하루 밀리는 것 방지)
+function toLocalDate(d) {
+  if (!d) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 const store = new CustomStore({
   key: 'id',
   async load(loadOptions) {
@@ -17,10 +36,37 @@ const store = new CustomStore({
     const skip = loadOptions.skip ?? 0;
     const page = Math.floor(skip / take);
 
-    const res = await fetchNotices({ page, size: take });
+    const res = await fetchNotices({ ...applied, page, size: take });
     return { data: res.content, totalCount: res.totalElements };
   },
 });
+
+function reloadFromFirstPage() {
+  const inst = gridRef.value?.instance;
+  if (inst) {
+    inst.pageIndex(0);
+    inst.refresh();
+  }
+}
+
+function search() {
+  applied = {
+    title: form.title?.trim() || undefined,
+    author: form.author?.trim() || undefined,
+    fromDate: toLocalDate(form.fromDate),
+    toDate: toLocalDate(form.toDate),
+  };
+  reloadFromFirstPage();
+}
+
+function reset() {
+  form.title = '';
+  form.author = '';
+  form.fromDate = null;
+  form.toDate = null;
+  applied = {};
+  reloadFromFirstPage();
+}
 
 function formatDate(rowData) {
   if (!rowData.createdAt) return '';
@@ -32,13 +78,60 @@ function formatDate(rowData) {
   <section class="p-6">
     <h2 class="mb-4 text-xl font-semibold text-slate-800">공지 목록</h2>
 
+    <!-- 검색 바 -->
+    <div class="mb-4 flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4">
+      <label class="flex flex-col gap-1">
+        <span class="text-xs text-slate-500">제목</span>
+        <DxTextBox
+          v-model:value="form.title"
+          placeholder="제목 검색"
+          :width="180"
+          @enter-key="search"
+        />
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs text-slate-500">작성자</span>
+        <DxTextBox
+          v-model:value="form.author"
+          placeholder="작성자 검색"
+          :width="140"
+          @enter-key="search"
+        />
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs text-slate-500">작성일(시작)</span>
+        <DxDateBox
+          v-model:value="form.fromDate"
+          type="date"
+          display-format="yyyy-MM-dd"
+          :width="150"
+        />
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs text-slate-500">작성일(종료)</span>
+        <DxDateBox
+          v-model:value="form.toDate"
+          type="date"
+          display-format="yyyy-MM-dd"
+          :width="150"
+        />
+      </label>
+
+      <div class="flex gap-2">
+        <DxButton text="검색" type="default" styling-mode="contained" @click="search" />
+        <DxButton text="초기화" styling-mode="outlined" @click="reset" />
+      </div>
+    </div>
+
+    <!-- 목록 -->
     <DxDataGrid
+      ref="gridRef"
       :data-source="store"
       :remote-operations="{ paging: true }"
       :show-borders="true"
       :column-auto-width="true"
       :hover-state-enabled="true"
-      no-data-text="등록된 공지가 없습니다."
+      no-data-text="조건에 맞는 공지가 없습니다."
     >
       <DxColumn
         data-field="pinned"
