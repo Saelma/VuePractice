@@ -2,8 +2,10 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxButton } from 'devextreme-vue/button';
+import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText } from '../api/product';
-import { authState } from '../stores/auth';
+import { addToCart } from '../api/cart';
+import { authState, isLoggedIn } from '../stores/auth';
 
 const props = defineProps({ id: { type: String, required: true } });
 const router = useRouter();
@@ -12,6 +14,18 @@ const product = ref(null);
 const error = ref('');
 const loading = ref(true);
 const isAdmin = computed(() => authState.user?.role === 'ADMIN');
+const qty = ref(1);
+const cartMsg = ref('');
+
+async function onAddToCart() {
+  cartMsg.value = '';
+  try {
+    await addToCart(props.id, qty.value);
+    cartMsg.value = '장바구니에 담았어요.';
+  } catch (e) {
+    error.value = e.message;
+  }
+}
 
 onMounted(async () => {
   try {
@@ -50,6 +64,12 @@ async function onDelete() {
         <span>재고 {{ product.stock }}</span>
       </div>
       <p class="min-h-[6rem] whitespace-pre-wrap text-slate-700">{{ product.description }}</p>
+
+      <div v-if="isLoggedIn" class="mt-4 flex items-center gap-2">
+        <DxNumberBox v-model:value="qty" :min="1" :width="90" />
+        <DxButton text="장바구니 담기" type="success" styling-mode="contained" @click="onAddToCart" />
+        <span v-if="cartMsg" class="text-sm text-green-600">{{ cartMsg }}</span>
+      </div>
 
       <div class="mt-6 flex gap-2">
         <DxButton text="목록" styling-mode="outlined" @click="router.push('/products')" />

@@ -10,6 +10,7 @@ import ProductListView from '../views/ProductListView.vue';
 import ProductDetailView from '../views/ProductDetailView.vue';
 import ProductFormView from '../views/ProductFormView.vue';
 import CategoryAdminView from '../views/CategoryAdminView.vue';
+import CartView from '../views/CartView.vue';
 
 // 정적 경로(/notices/new)가 동적(/notices/:id)보다 우선 매칭된다(vue-router는 구체성 순).
 const routes = [
@@ -26,6 +27,7 @@ const routes = [
   { path: '/products/:id', name: 'product-detail', component: ProductDetailView, props: true },
   { path: '/products/:id/edit', name: 'product-edit', component: ProductFormView, props: true, meta: { requiresAdmin: true } },
   { path: '/admin/categories', name: 'category-admin', component: CategoryAdminView, meta: { requiresAdmin: true } },
+  { path: '/cart', name: 'cart', component: CartView, meta: { requiresAuth: true } },
 ];
 
 const router = createRouter({
