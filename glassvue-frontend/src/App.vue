@@ -30,6 +30,7 @@ async function onLogout() {
         <template v-if="isLoggedIn">
           <span class="text-slate-600"><b>{{ authState.user?.nickname }}</b>님</span>
           <RouterLink to="/cart" class="text-slate-600 hover:underline">장바구니</RouterLink>
+          <RouterLink to="/orders" class="text-slate-600 hover:underline">주문내역</RouterLink>
           <RouterLink to="/settings" class="text-slate-600 hover:underline">내 정보</RouterLink>
           <button class="rounded border px-3 py-1 hover:bg-slate-50" @click="onLogout">로그아웃</button>
         </template>

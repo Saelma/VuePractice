@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxButton } from 'devextreme-vue/button';
 import { getCart, updateCartItem, removeCartItem, clearCart } from '../api/cart';
+import { checkout as apiCheckout } from '../api/order';
 import { priceText } from '../api/product';
 
 const router = useRouter();
@@ -53,8 +54,20 @@ async function onClear() {
   }
 }
 
-function checkout() {
-  window.alert('주문 기능은 다음 단계에서 만들 예정이에요.');
+async function checkout() {
+  error.value = '';
+  if (!cart.value.items.length) return;
+  if (cart.value.items.some((i) => !i.available)) {
+    error.value = '구매할 수 없는 상품이 있어요. (품절/판매중지) 해당 항목을 빼주세요.';
+    return;
+  }
+  if (!window.confirm('주문하시겠어요?')) return;
+  try {
+    const orderId = await apiCheckout();
+    router.push(`/orders/${orderId}`);
+  } catch (e) {
+    error.value = e.message;
+  }
 }
 </script>
 
