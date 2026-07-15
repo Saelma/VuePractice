@@ -1,0 +1,55 @@
+package com.glassvue.domain.cart;
+
+import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
+
+/**
+ * 회원별 장바구니를 Redis Hash로 저장한다. 키 cart:{memberId}, field=productId, value=수량.
+ * 방치된 장바구니는 30일 뒤 만료.
+ */
+@Component
+@RequiredArgsConstructor
+public class CartStore {
+
+    private static final String PREFIX = "cart:";
+    private static final Duration TTL = Duration.ofDays(30);
+
+    private final StringRedisTemplate redis;
+
+    private static String key(UUID memberId) {
+        return PREFIX + memberId;
+    }
+
+    /** 수량 증가(없으면 생성). */
+    public void add(UUID memberId, UUID productId, long quantity) {
+        redis.opsForHash().increment(key(memberId), productId.toString(), quantity);
+        redis.expire(key(memberId), TTL);
+    }
+
+    /** 수량 지정. */
+    public void set(UUID memberId, UUID productId, long quantity) {
+        redis.opsForHash().put(key(memberId), productId.toString(), String.valueOf(quantity));
+        redis.expire(key(memberId), TTL);
+    }
+
+    public void remove(UUID memberId, UUID productId) {
+        redis.opsForHash().delete(key(memberId), productId.toString());
+    }
+
+    public void clear(UUID memberId) {
+        redis.delete(key(memberId));
+    }
+
+    /** productId → 수량 (입력 순서 유지). */
+    public Map<UUID, Long> items(UUID memberId) {
+        Map<Object, Object> raw = redis.opsForHash().entries(key(memberId));
+        Map<UUID, Long> result = new LinkedHashMap<>();
+        raw.forEach((k, v) -> result.put(UUID.fromString((String) k), Long.parseLong((String) v)));
+        return result;
+    }
+}
