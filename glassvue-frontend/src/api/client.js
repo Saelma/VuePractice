@@ -79,3 +79,19 @@ export const apiPost = (path, body) => request(path, { method: 'POST', body });
 export const apiPut = (path, body) => request(path, { method: 'PUT', body });
 export const apiPatch = (path, body) => request(path, { method: 'PATCH', body });
 export const apiDelete = (path) => request(path, { method: 'DELETE' });
+
+// 멀티파트 업로드 (FormData). Content-Type은 브라우저가 boundary와 함께 설정하도록 둔다.
+export async function apiUpload(path, formData) {
+  const options = { method: 'POST', headers: { Accept: 'application/json' }, body: formData };
+  if (authState.access) {
+    options.headers.Authorization = 'Bearer ' + authState.access;
+  }
+  const res = await fetch(new URL(path, window.location.origin), options);
+  const payload = await res.json().catch(() => null);
+  if (!res.ok || !payload || payload.success !== true) {
+    const err = new Error(payload?.error?.message || `업로드 실패 (HTTP ${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return payload.data;
+}

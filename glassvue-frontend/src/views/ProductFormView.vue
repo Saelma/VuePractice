@@ -8,15 +8,38 @@ import { DxSelectBox } from 'devextreme-vue/select-box';
 import { DxButton } from 'devextreme-vue/button';
 import { getProduct, createProduct, updateProduct, STATUS_OPTIONS } from '../api/product';
 import { fetchCategories } from '../api/category';
+import { uploadImage } from '../api/image';
 
 const props = defineProps({ id: { type: String, default: null } });
 const router = useRouter();
 const isEdit = computed(() => !!props.id);
 
 const categories = ref([]);
-const form = reactive({ name: '', description: '', price: null, stock: null, status: 'SELLING', categoryId: null });
+const form = reactive({ name: '', description: '', price: null, stock: null, status: 'SELLING', categoryId: null, images: [] });
 const error = ref('');
 const saving = ref(false);
+const uploading = ref(false);
+
+async function onFilesSelected(e) {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  uploading.value = true;
+  error.value = '';
+  try {
+    for (const file of files) {
+      const img = await uploadImage(file); // { id, url }
+      form.images.push(img);
+    }
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    uploading.value = false;
+    e.target.value = ''; // 같은 파일 재선택 허용
+  }
+}
+function removeImage(idx) {
+  form.images.splice(idx, 1);
+}
 
 onMounted(async () => {
   try {
@@ -31,6 +54,7 @@ onMounted(async () => {
         name: p.name, description: p.description, price: p.price,
         stock: p.stock, status: p.status, categoryId: p.categoryId,
       });
+      form.images = p.images || [];
     } catch (e) {
       error.value = e.message;
     }
@@ -47,6 +71,7 @@ async function onSave() {
     const payload = {
       name: form.name, description: form.description, price: form.price,
       stock: form.stock, status: form.status, categoryId: form.categoryId,
+      imageIds: form.images.map((i) => i.id),
     };
     if (isEdit.value) {
       await updateProduct(props.id, payload);
@@ -97,6 +122,22 @@ async function onSave() {
         <span class="text-sm text-slate-600">설명</span>
         <DxTextArea v-model:value="form.description" :height="160" />
       </label>
+
+      <div class="flex flex-col gap-2">
+        <span class="text-sm text-slate-600">이미지</span>
+        <input type="file" accept="image/*" multiple :disabled="uploading" @change="onFilesSelected" />
+        <span v-if="uploading" class="text-sm text-slate-400">업로드 중…</span>
+        <div v-if="form.images.length" class="flex flex-wrap gap-2">
+          <div v-for="(img, idx) in form.images" :key="img.id" class="relative">
+            <img :src="img.url" class="h-20 w-20 rounded border object-cover" />
+            <button
+              type="button"
+              class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-xs text-white"
+              @click="removeImage(idx)"
+            >×</button>
+          </div>
+        </div>
+      </div>
 
       <div class="mt-2 flex gap-2">
         <DxButton :text="saving ? '저장 중…' : '저장'" type="default" styling-mode="contained" :disabled="saving" @click="onSave" />

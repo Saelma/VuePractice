@@ -63,6 +63,10 @@ async function onDelete() {
         <span class="text-lg font-semibold text-slate-800">{{ priceText(product.price) }}</span>
         <span>재고 {{ product.stock }}</span>
       </div>
+      <div v-if="product.images && product.images.length" class="mb-4 flex flex-wrap gap-2">
+        <img v-for="img in product.images" :key="img.id" :src="img.url" class="h-32 w-32 rounded border object-cover" />
+      </div>
+
       <p class="min-h-[6rem] whitespace-pre-wrap text-slate-700">{{ product.description }}</p>
 
       <div v-if="isLoggedIn" class="mt-4 flex items-center gap-2">

@@ -124,6 +124,7 @@ const statusCell = (r) => statusText(r.status);
       @row-click="onRowClick"
       class="cursor-pointer-grid"
     >
+      <DxColumn caption="이미지" :width="70" alignment="center" cell-template="thumbCell" />
       <DxColumn data-field="name" caption="상품명" />
       <DxColumn data-field="categoryName" caption="카테고리" :width="120" />
       <DxColumn data-field="price" caption="가격" :width="120" alignment="right" :calculate-display-value="priceCell" />
@@ -132,6 +133,15 @@ const statusCell = (r) => statusText(r.status);
 
       <DxPaging :page-size="10" />
       <DxPager :show-page-size-selector="true" :allowed-page-sizes="[10, 20, 50]" :show-info="true" info-text="{2}개 중 {0}-{1}" />
+
+      <template #thumbCell="{ data }">
+        <img
+          v-if="data.data.images && data.data.images.length"
+          :src="data.data.images[0].url"
+          class="mx-auto h-10 w-10 rounded object-cover"
+        />
+        <span v-else class="text-slate-300">–</span>
+      </template>
     </DxDataGrid>
   </section>
 </template>
