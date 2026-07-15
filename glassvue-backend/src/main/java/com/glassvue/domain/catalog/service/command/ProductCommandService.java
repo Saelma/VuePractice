@@ -6,6 +6,7 @@ import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
+import com.glassvue.domain.image.service.ImageService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import java.util.UUID;
@@ -24,16 +25,19 @@ public class ProductCommandService {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final ImageService imageService;
 
     @CacheEvict(cacheNames = "products:list", allEntries = true)
     public UUID create(ProductCreateRequest req) {
         Category category = findCategory(req.categoryId());
+        UUID imageGroupId = imageService.createGroup(req.imageIds());
         Product product = Product.builder()
                 .name(req.name())
                 .description(req.description())
                 .price(req.price())
                 .stock(req.stock())
                 .status(req.status())
+                .imageGroupId(imageGroupId)
                 .category(category)
                 .build();
         Product saved = productRepository.save(product);
@@ -46,7 +50,8 @@ public class ProductCommandService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         Category category = findCategory(req.categoryId());
-        product.update(req.name(), req.description(), req.price(), req.stock(), req.status(), category);
+        UUID imageGroupId = imageService.createGroup(req.imageIds()); // 새 그룹으로 교체(간단화)
+        product.update(req.name(), req.description(), req.price(), req.stock(), req.status(), imageGroupId, category);
     }
 
     @CacheEvict(cacheNames = "products:list", allEntries = true)

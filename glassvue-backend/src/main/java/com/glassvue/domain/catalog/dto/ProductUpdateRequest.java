@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import java.util.UUID;
 
 public record ProductUpdateRequest(
@@ -26,6 +27,9 @@ public record ProductUpdateRequest(
         ProductStatus status,
 
         @NotNull
-        UUID categoryId
+        UUID categoryId,
+
+        @Schema(description = "이미지 id 목록(순서대로, 교체)")
+        List<UUID> imageIds
 ) {
 }

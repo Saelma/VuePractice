@@ -1,0 +1,53 @@
+package com.glassvue.domain.image.entity;
+
+import com.glassvue.global.common.BaseTimeEntity;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Entity
+@Getter
+@Table(name = "image")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Image extends BaseTimeEntity {
+
+    // 업로드 직후엔 그룹이 없다(null). 도메인 저장 시 그룹에 연결된다.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "image_group_id", columnDefinition = "RAW(16)")
+    private ImageGroup imageGroup;
+
+    @Column(nullable = false, length = 500)
+    private String url;
+
+    @Column(length = 255)
+    private String originalName;
+
+    @Column(length = 100)
+    private String contentType;
+
+    @Column(name = "file_size") // size는 Oracle 예약어라 컬럼명 변경
+    private long size;
+
+    @Column
+    private int sortOrder;
+
+    @Builder
+    private Image(String url, String originalName, String contentType, long size) {
+        this.url = url;
+        this.originalName = originalName;
+        this.contentType = contentType;
+        this.size = size;
+    }
+
+    public void assignToGroup(ImageGroup group, int sortOrder) {
+        this.imageGroup = group;
+        this.sortOrder = sortOrder;
+    }
+}

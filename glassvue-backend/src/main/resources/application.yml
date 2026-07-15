@@ -34,6 +34,12 @@ spring:
   cache:
     type: redis
 
+  # 이미지 업로드 크기 제한
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
+
 # --- Actuator ---
 management:
   endpoints:
@@ -57,3 +63,9 @@ jwt:
 notice:
   view-count:
     flush-interval-ms: 30000
+
+# 업로드 파일 저장 경로 + 서빙 URL 접두사 (nginx가 /uploads/를 이 디렉토리로 서빙)
+app:
+  upload:
+    dir: /var/www/glassvue-uploads
+    url-prefix: /uploads
