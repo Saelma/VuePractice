@@ -12,6 +12,7 @@ import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.response.PageResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,7 @@ public class NoticeQueryService {
         return NoticeResponse.from(notice, viewCount);
     }
 
+    @Cacheable(cacheNames = "notices:list", key = "#condition.toString() + '|' + #pageable.toString()")
     public PageResponse<NoticeResponse> search(NoticeSearchCondition condition, Pageable pageable) {
         Page<Notice> page = noticeRepository.search(condition, pageable);
 

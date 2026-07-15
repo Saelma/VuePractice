@@ -12,6 +12,7 @@ import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +27,7 @@ public class NoticeCommandService {
     private final NoticeRepository noticeRepository;
     private final NoticeViewCountStore viewCountStore;
 
+    @CacheEvict(cacheNames = "notices:list", allEntries = true)
     @Transactional
     public UUID create(NoticeCreateRequest req, UUID authorId, String author) {
         Notice notice = Notice.builder()
@@ -40,12 +42,14 @@ public class NoticeCommandService {
         return saved.getId();
     }
 
+    @CacheEvict(cacheNames = "notices:list", allEntries = true)
     @Transactional
     public void update(UUID id, NoticeUpdateRequest req, AuthUser user) {
         Notice notice = findManageable(id, user);
         notice.update(req.title(), req.content(), req.pinned());
     }
 
+    @CacheEvict(cacheNames = "notices:list", allEntries = true)
     @Transactional
     public void delete(UUID id, AuthUser user) {
         Notice notice = findManageable(id, user);

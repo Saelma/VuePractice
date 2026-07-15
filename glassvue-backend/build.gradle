@@ -32,6 +32,9 @@ dependencies {
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+	// 캐시 (Redis)
+	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	// UUIDv7 생성 (시간순 UUID)
 	implementation 'com.github.f4b6a3:uuid-creator:6.0.0'
 	// QueryDSL (동적 쿼리) — Jakarta 분류자
