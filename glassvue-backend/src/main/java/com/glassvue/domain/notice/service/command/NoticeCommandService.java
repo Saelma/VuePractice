@@ -1,6 +1,7 @@
 package com.glassvue.domain.notice.service.command;
 
 import java.util.UUID;
+import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.notice.dto.NoticeCreateRequest;
 import com.glassvue.domain.notice.dto.NoticeUpdateRequest;
 import com.glassvue.domain.notice.entity.Notice;
@@ -8,6 +9,7 @@ import com.glassvue.domain.notice.repository.NoticeRepository;
 import com.glassvue.domain.notice.viewcount.NoticeViewCountStore;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.security.AuthUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -39,22 +41,23 @@ public class NoticeCommandService {
     }
 
     @Transactional
-    public void update(UUID id, NoticeUpdateRequest req, UUID currentUserId) {
-        Notice notice = findOwned(id, currentUserId);
+    public void update(UUID id, NoticeUpdateRequest req, AuthUser user) {
+        Notice notice = findManageable(id, user);
         notice.update(req.title(), req.content(), req.pinned());
     }
 
     @Transactional
-    public void delete(UUID id, UUID currentUserId) {
-        Notice notice = findOwned(id, currentUserId);
+    public void delete(UUID id, AuthUser user) {
+        Notice notice = findManageable(id, user);
         noticeRepository.delete(notice);
     }
 
-    /** 존재 확인 + 본인 글인지 확인. 아니면 403. */
-    private Notice findOwned(UUID id, UUID currentUserId) {
+    /** 존재 확인 + (본인 글이거나 ADMIN이면) 반환. 아니면 403. */
+    private Notice findManageable(UUID id, AuthUser user) {
         Notice notice = noticeRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTICE_NOT_FOUND));
-        if (!notice.isOwnedBy(currentUserId)) {
+        boolean allowed = user.role() == Role.ADMIN || notice.isOwnedBy(user.id());
+        if (!allowed) {
             throw new BusinessException(ErrorCode.NOTICE_NOT_OWNER);
         }
         return notice;

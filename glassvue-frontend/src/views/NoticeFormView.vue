@@ -22,7 +22,7 @@ onMounted(async () => {
   if (isEdit.value) {
     try {
       const n = await getNotice(props.id);
-      if (n.authorId !== authState.user?.id) {
+      if (n.authorId !== authState.user?.id && authState.user?.role !== 'ADMIN') {
         error.value = '본인 글만 수정할 수 있습니다.';
         blocked.value = true;
         return;

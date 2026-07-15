@@ -12,9 +12,11 @@ const notice = ref(null);
 const error = ref('');
 const loading = ref(true);
 
-// 본인 글일 때만 수정/삭제 노출 (백엔드도 authorId로 강제)
+// 본인 글이거나 ADMIN일 때 수정/삭제 노출 (백엔드도 동일 규칙으로 강제)
 const isOwner = computed(
-  () => isLoggedIn.value && notice.value?.authorId && notice.value.authorId === authState.user?.id,
+  () =>
+    isLoggedIn.value &&
+    (notice.value?.authorId === authState.user?.id || authState.user?.role === 'ADMIN'),
 );
 
 onMounted(async () => {

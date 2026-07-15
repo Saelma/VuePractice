@@ -61,7 +61,7 @@ public class NoticeControllerImpl implements NoticeController {
     public ResponseEntity<ApiResponse<Void>> update(
             @LoginUser AuthUser user,
             @PathVariable UUID id, @Valid @RequestBody NoticeUpdateRequest request) {
-        commandService.update(id, request, user.id());
+        commandService.update(id, request, user);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
@@ -70,7 +70,7 @@ public class NoticeControllerImpl implements NoticeController {
     public ResponseEntity<ApiResponse<Void>> delete(
             @LoginUser AuthUser user,
             @PathVariable UUID id) {
-        commandService.delete(id, user.id());
+        commandService.delete(id, user);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
