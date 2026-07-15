@@ -8,11 +8,11 @@ import com.glassvue.domain.auth.dto.TokenResponse;
 import com.glassvue.domain.auth.service.AuthService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
+import com.glassvue.global.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,7 +48,7 @@ public class AuthControllerImpl implements AuthController {
     @Override
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
-            @AuthenticationPrincipal AuthUser user,
+            @LoginUser AuthUser user,
             @RequestHeader("Authorization") String authorization) {
         authService.logout(user.id(), authorization.substring(7));
         return ResponseEntity.ok(ApiResponse.ok());
@@ -56,7 +56,7 @@ public class AuthControllerImpl implements AuthController {
 
     @Override
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<MemberResponse>> me(@AuthenticationPrincipal AuthUser user) {
+    public ResponseEntity<ApiResponse<MemberResponse>> me(@LoginUser AuthUser user) {
         return ResponseEntity.ok(ApiResponse.ok(authService.me(user.id())));
     }
 }
