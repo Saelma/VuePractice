@@ -26,6 +26,12 @@ dependencies {
 
 	// API 문서 (Swagger UI) — /swagger-ui.html
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+
+	// 인증 (Spring Security + JWT)
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 	// UUIDv7 생성 (시간순 UUID)
 	implementation 'com.github.f4b6a3:uuid-creator:6.0.0'
 	// QueryDSL (동적 쿼리) — Jakarta 분류자
