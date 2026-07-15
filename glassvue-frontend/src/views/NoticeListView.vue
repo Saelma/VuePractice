@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import CustomStore from 'devextreme/data/custom_store';
 import {
   DxDataGrid,
@@ -12,15 +13,12 @@ import { DxDateBox } from 'devextreme-vue/date-box';
 import { DxButton } from 'devextreme-vue/button';
 import { fetchNotices } from '../api/notice';
 
+const router = useRouter();
 const gridRef = ref(null);
 
-// 입력 폼 (타이핑 중 값)
 const form = reactive({ title: '', author: '', fromDate: null, toDate: null });
-
-// 실제 적용된 검색 조건 ("검색" 눌러야 반영). load()가 이 값을 읽는다.
 let applied = {};
 
-// DxDateBox의 Date 객체 → 'yyyy-MM-dd' (로컬 기준, UTC 변환으로 하루 밀리는 것 방지)
 function toLocalDate(d) {
   if (!d) return null;
   const y = d.getFullYear();
@@ -35,7 +33,6 @@ const store = new CustomStore({
     const take = loadOptions.take ?? 10;
     const skip = loadOptions.skip ?? 0;
     const page = Math.floor(skip / take);
-
     const res = await fetchNotices({ ...applied, page, size: take });
     return { data: res.content, totalCount: res.totalElements };
   },
@@ -72,58 +69,51 @@ function formatDate(rowData) {
   if (!rowData.createdAt) return '';
   return new Date(rowData.createdAt).toLocaleString('ko-KR');
 }
+
+function onRowClick(e) {
+  if (e.rowType === 'data' && e.data) {
+    router.push(`/notices/${e.data.id}`);
+  }
+}
 </script>
 
 <template>
   <section class="p-6">
-    <h2 class="mb-4 text-xl font-semibold text-slate-800">공지 목록</h2>
+    <div class="mb-4 flex items-center justify-between">
+      <h2 class="text-xl font-semibold text-slate-800">공지 목록</h2>
+      <DxButton
+        text="+ 새 공지"
+        type="default"
+        styling-mode="contained"
+        @click="router.push('/notices/new')"
+      />
+    </div>
 
     <!-- 검색 바 -->
     <div class="mb-4 flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4">
       <label class="flex flex-col gap-1">
         <span class="text-xs text-slate-500">제목</span>
-        <DxTextBox
-          v-model:value="form.title"
-          placeholder="제목 검색"
-          :width="180"
-          @enter-key="search"
-        />
+        <DxTextBox v-model:value="form.title" placeholder="제목 검색" :width="180" @enter-key="search" />
       </label>
       <label class="flex flex-col gap-1">
         <span class="text-xs text-slate-500">작성자</span>
-        <DxTextBox
-          v-model:value="form.author"
-          placeholder="작성자 검색"
-          :width="140"
-          @enter-key="search"
-        />
+        <DxTextBox v-model:value="form.author" placeholder="작성자 검색" :width="140" @enter-key="search" />
       </label>
       <label class="flex flex-col gap-1">
         <span class="text-xs text-slate-500">작성일(시작)</span>
-        <DxDateBox
-          v-model:value="form.fromDate"
-          type="date"
-          display-format="yyyy-MM-dd"
-          :width="150"
-        />
+        <DxDateBox v-model:value="form.fromDate" type="date" display-format="yyyy-MM-dd" :width="150" />
       </label>
       <label class="flex flex-col gap-1">
         <span class="text-xs text-slate-500">작성일(종료)</span>
-        <DxDateBox
-          v-model:value="form.toDate"
-          type="date"
-          display-format="yyyy-MM-dd"
-          :width="150"
-        />
+        <DxDateBox v-model:value="form.toDate" type="date" display-format="yyyy-MM-dd" :width="150" />
       </label>
-
       <div class="flex gap-2">
         <DxButton text="검색" type="default" styling-mode="contained" @click="search" />
         <DxButton text="초기화" styling-mode="outlined" @click="reset" />
       </div>
     </div>
 
-    <!-- 목록 -->
+    <!-- 목록 (행 클릭 → 상세) -->
     <DxDataGrid
       ref="gridRef"
       :data-source="store"
@@ -132,28 +122,14 @@ function formatDate(rowData) {
       :column-auto-width="true"
       :hover-state-enabled="true"
       no-data-text="조건에 맞는 공지가 없습니다."
+      @row-click="onRowClick"
+      class="cursor-pointer-grid"
     >
-      <DxColumn
-        data-field="pinned"
-        caption="고정"
-        :width="60"
-        alignment="center"
-        cell-template="pinnedCell"
-      />
+      <DxColumn data-field="pinned" caption="고정" :width="60" alignment="center" cell-template="pinnedCell" />
       <DxColumn data-field="title" caption="제목" />
       <DxColumn data-field="author" caption="작성자" :width="120" />
-      <DxColumn
-        data-field="viewCount"
-        caption="조회"
-        :width="80"
-        alignment="center"
-      />
-      <DxColumn
-        data-field="createdAt"
-        caption="작성일"
-        :width="190"
-        :calculate-display-value="formatDate"
-      />
+      <DxColumn data-field="viewCount" caption="조회" :width="80" alignment="center" />
+      <DxColumn data-field="createdAt" caption="작성일" :width="190" :calculate-display-value="formatDate" />
 
       <DxPaging :page-size="10" />
       <DxPager
@@ -169,3 +145,9 @@ function formatDate(rowData) {
     </DxDataGrid>
   </section>
 </template>
+
+<style scoped>
+.cursor-pointer-grid :deep(.dx-data-row) {
+  cursor: pointer;
+}
+</style>

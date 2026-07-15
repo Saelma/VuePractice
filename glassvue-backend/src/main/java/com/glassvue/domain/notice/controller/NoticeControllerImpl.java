@@ -66,4 +66,11 @@ public class NoticeControllerImpl implements NoticeController {
         commandService.delete(id);
         return ResponseEntity.ok(ApiResponse.ok());
     }
+
+    @Override
+    @PostMapping("/{id}/views")
+    public ResponseEntity<ApiResponse<Void>> increaseView(@PathVariable UUID id) {
+        commandService.increaseView(id);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
 }

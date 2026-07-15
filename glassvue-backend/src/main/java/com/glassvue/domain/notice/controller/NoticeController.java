@@ -36,4 +36,7 @@ public interface NoticeController {
 
     @Operation(summary = "공지 삭제")
     ResponseEntity<ApiResponse<Void>> delete(UUID id);
+
+    @Operation(summary = "공지 조회수 증가")
+    ResponseEntity<ApiResponse<Void>> increaseView(UUID id);
 }

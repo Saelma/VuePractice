@@ -47,4 +47,11 @@ public class NoticeCommandService {
         }
         noticeRepository.deleteById(id);
     }
+
+    // 조회수 증가. (지금은 DB 업데이트 — 이후 Redis 카운터로 이관 예정)
+    public void increaseView(UUID id) {
+        Notice notice = noticeRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTICE_NOT_FOUND));
+        notice.increaseViewCount();
+    }
 }

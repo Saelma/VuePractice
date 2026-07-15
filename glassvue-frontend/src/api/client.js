@@ -4,7 +4,7 @@
 //   에러: { success: false, error: { code, message } }
 // 여기서 래퍼를 벗겨 data만 돌려주고, 실패면 message로 예외를 던진다.
 
-async function request(path, { params, ...options } = {}) {
+async function request(path, { method = 'GET', params, body } = {}) {
   const url = new URL(path, window.location.origin);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -14,20 +14,23 @@ async function request(path, { params, ...options } = {}) {
     }
   }
 
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json', ...(options.headers || {}) },
-    ...options,
-  });
+  const options = { method, headers: { Accept: 'application/json' } };
+  if (body !== undefined) {
+    options.headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(body);
+  }
 
-  const body = await res.json().catch(() => null);
+  const res = await fetch(url, options);
+  const payload = await res.json().catch(() => null);
 
-  if (!res.ok || !body || body.success !== true) {
-    const message = body?.error?.message || `요청 실패 (HTTP ${res.status})`;
+  if (!res.ok || !payload || payload.success !== true) {
+    const message = payload?.error?.message || `요청 실패 (HTTP ${res.status})`;
     throw new Error(message);
   }
-  return body.data;
+  return payload.data;
 }
 
-export function apiGet(path, params) {
-  return request(path, { method: 'GET', params });
-}
+export const apiGet = (path, params) => request(path, { method: 'GET', params });
+export const apiPost = (path, body) => request(path, { method: 'POST', body });
+export const apiPut = (path, body) => request(path, { method: 'PUT', body });
+export const apiDelete = (path) => request(path, { method: 'DELETE' });
