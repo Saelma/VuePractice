@@ -1,20 +1,14 @@
 <script setup>
-import { ref } from 'vue';
-import { DxButton } from 'devextreme-vue/button';
-
-const count = ref(0);
+import NoticeList from './components/NoticeList.vue';
 </script>
 
 <template>
-  <main class="min-h-screen flex flex-col items-center justify-center gap-6 bg-slate-50">
-    <h1 class="text-3xl font-bold text-slate-800">ESP Frontend</h1>
-    <p class="text-slate-600">Vue 3 · rsbuild · DevExtreme · Tailwind CSS</p>
+  <main class="min-h-screen bg-slate-50">
+    <header class="border-b bg-white px-6 py-4">
+      <h1 class="text-2xl font-bold text-slate-800">Glassvue</h1>
+      <p class="text-sm text-slate-500">사내 공지 게시판</p>
+    </header>
 
-    <DxButton
-      :text="`클릭 수: ${count}`"
-      type="default"
-      styling-mode="contained"
-      @click="count++"
-    />
+    <NoticeList />
   </main>
 </template>
