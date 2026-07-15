@@ -4,8 +4,8 @@
 set -euo pipefail
 
 BACK_DIR=/home/ecstel/work/glassvue-backend
-JAR_DST=/opt/esp-backend/esp-backend.jar   # 인프라 이름 정리 시 여기만 바꾸면 됨
-SERVICE=esp-backend
+JAR_DST=/opt/glassvue-backend/glassvue-backend.jar   # 인프라 이름 정리 시 여기만 바꾸면 됨
+SERVICE=glassvue-backend
 
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 

@@ -4,7 +4,7 @@
 set -euo pipefail
 
 FRONT_DIR=/home/ecstel/work/glassvue-frontend
-WEBROOT=/var/www/esp-frontend          # 인프라 이름 정리 시 여기만 바꾸면 됨
+WEBROOT=/var/www/glassvue-frontend          # 인프라 이름 정리 시 여기만 바꾸면 됨
 
 # root면 sudo 불필요, 아니면 sudo 사용
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
