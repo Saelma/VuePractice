@@ -15,4 +15,10 @@ public class BusinessException extends RuntimeException {
         super(errorCode.getMessage());
         this.errorCode = errorCode;
     }
+
+    /** 기본 메시지 대신 상황별 메시지를 실을 때 (코드는 그대로). */
+    public BusinessException(ErrorCode errorCode, String message) {
+        super(message);
+        this.errorCode = errorCode;
+    }
 }

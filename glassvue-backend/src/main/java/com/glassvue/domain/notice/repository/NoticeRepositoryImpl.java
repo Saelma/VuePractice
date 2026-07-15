@@ -10,6 +10,7 @@ import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,12 +26,16 @@ public class NoticeRepositoryImpl implements NoticeRepositoryCustom {
 
     private static final QNotice notice = QNotice.notice;
 
+    // 정렬 허용 필드(화이트리스트). 그 외 ?sort=필드 는 400.
+    private static final Set<String> SORTABLE =
+            Set.of("createdAt", "updatedAt", "viewCount", "title", "author", "pinned");
+
     @Override
     public Page<Notice> search(NoticeSearchCondition condition, Pageable pageable) {
         BooleanBuilder where = ConditionBuilder.of(notice, condition).build();
 
         OrderSpecifier<?>[] orders = pageable.getSort().isSorted()
-                ? SortSupport.toOrders(pageable.getSort(), notice)
+                ? SortSupport.toOrders(pageable.getSort(), notice, SORTABLE)
                 : new OrderSpecifier<?>[]{notice.pinned.desc(), notice.createdAt.desc()};
 
         JPAQuery<Notice> content = queryFactory
