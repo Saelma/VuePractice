@@ -5,6 +5,7 @@ import com.glassvue.domain.notice.dto.NoticeCreateRequest;
 import com.glassvue.domain.notice.dto.NoticeUpdateRequest;
 import com.glassvue.domain.notice.entity.Notice;
 import com.glassvue.domain.notice.repository.NoticeRepository;
+import com.glassvue.domain.notice.viewcount.NoticeViewCountStore;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -13,16 +14,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 공지 조작(command) — 등록 · 수정 · 삭제.
+ * 공지 조작(command) — 등록 · 수정 · 삭제 · 조회수 증가.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class NoticeCommandService {
 
     private final NoticeRepository noticeRepository;
+    private final NoticeViewCountStore viewCountStore;
 
+    @Transactional
     public UUID create(NoticeCreateRequest req) {
         Notice notice = Notice.builder()
                 .title(req.title())
@@ -35,12 +37,14 @@ public class NoticeCommandService {
         return saved.getId();
     }
 
+    @Transactional
     public void update(UUID id, NoticeUpdateRequest req) {
         Notice notice = noticeRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTICE_NOT_FOUND));
         notice.update(req.title(), req.content(), req.pinned());
     }
 
+    @Transactional
     public void delete(UUID id) {
         if (!noticeRepository.existsById(id)) {
             throw new BusinessException(ErrorCode.NOTICE_NOT_FOUND);
@@ -48,10 +52,11 @@ public class NoticeCommandService {
         noticeRepository.deleteById(id);
     }
 
-    // 조회수 증가. (지금은 DB 업데이트 — 이후 Redis 카운터로 이관 예정)
+    /**
+     * 조회수 증가 — DB가 아니라 Redis에 누적(INCR). DB 반영은 Flusher가 주기적으로.
+     * 성능을 위해 존재 여부를 확인하지 않는다(없는 id의 누적분은 플러시 때 조용히 버려짐).
+     */
     public void increaseView(UUID id) {
-        Notice notice = noticeRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOTICE_NOT_FOUND));
-        notice.increaseViewCount();
+        viewCountStore.increment(id);
     }
 }

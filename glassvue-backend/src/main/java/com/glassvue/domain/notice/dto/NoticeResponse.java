@@ -15,12 +15,17 @@ public record NoticeResponse(
         Instant updatedAt
 ) {
     public static NoticeResponse from(Notice n) {
+        return from(n, n.getViewCount());
+    }
+
+    /** 조회수를 별도로 넘겨 생성 (DB 값 + Redis 미반영분 합산용) */
+    public static NoticeResponse from(Notice n, long viewCount) {
         return new NoticeResponse(
                 n.getId(),
                 n.getTitle(),
                 n.getContent(),
                 n.getAuthor(),
-                n.getViewCount(),
+                viewCount,
                 n.isPinned(),
                 n.getCreatedAt(),
                 n.getUpdatedAt()

@@ -46,9 +46,5 @@ public class Notice extends BaseTimeEntity {
         this.content = content;
         this.pinned = pinned;
     }
-
-    /** 조회수 증가. (실제 카운팅은 이후 단계에서 Redis로 이관 예정) */
-    public void increaseViewCount() {
-        this.viewCount++;
-    }
+    // 조회수 증가는 Redis(NoticeViewCountStore) + 주기 플러시(NoticeRepository.addViewCount)로 처리한다.
 }
