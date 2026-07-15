@@ -32,7 +32,7 @@ MSA 전환 시 **폴더째 들어내면 하나의 서비스**가 되도록 도�
 최상위를 **`domain/`(업무) + `global/`(공통·인프라)** 로 나눈다.
 
 ```
-kr.co.ecstel.esp
+com.glassvue
 ├─ domain/                     업무 도메인 — MSA 분리 단위
 │  ├─ notice/                  도메인 1 — 게시판 (현재)
 │  │  ├─ entity/               Notice

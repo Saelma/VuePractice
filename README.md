@@ -9,7 +9,7 @@ Vue 3와 Spring Boot로 만드는 연습용 프로젝트. Claude Code와 함께 
 
 ## 기술 스택
 
-### 프론트엔드 (`esp-frontend/`)
+### 프론트엔드 (`glassvue-frontend/`)
 
 | 기술 | 버전 | 용도 |
 |---|---|---|
@@ -19,7 +19,7 @@ Vue 3와 Spring Boot로 만드는 연습용 프로젝트. Claude Code와 함께 
 | Tailwind CSS | 4.0.14 | 레이아웃 · 스타일 |
 | pnpm | 10 | 패키지 매니저 |
 
-### 백엔드 (`esp-backend/`)
+### 백엔드 (`glassvue-backend/`)
 
 | 기술 | 버전 | 용도 |
 |---|---|---|
@@ -47,8 +47,8 @@ Vue 3와 Spring Boot로 만드는 연습용 프로젝트. Claude Code와 함께 
 
 ```
 work/
-├─ esp-backend/     Spring Boot (REST API)
-├─ esp-frontend/    Vue 3 SPA
+├─ glassvue-backend/     Spring Boot (REST API)
+├─ glassvue-frontend/    Vue 3 SPA
 └─ CLAUDE.md        Claude Code용 프로젝트 규칙 (버전 고정 등)
 ```
 
@@ -87,7 +87,7 @@ DB_PASSWORD=<비밀번호>
 ### 백엔드
 
 ```bash
-cd esp-backend
+cd glassvue-backend
 set -a; . ../.env; set +a      # .env를 환경변수로 주입
 ./gradlew bootRun              # http://localhost:8080
 ```
@@ -102,7 +102,7 @@ curl http://localhost:8080/actuator/health
 ### 프론트엔드
 
 ```bash
-cd esp-frontend
+cd glassvue-frontend
 pnpm install
 pnpm dev                       # http://localhost:3000
 ```
@@ -111,10 +111,10 @@ pnpm dev                       # http://localhost:3000
 
 ```bash
 # 백엔드 → 실행 가능한 jar
-cd esp-backend && ./gradlew bootJar
+cd glassvue-backend && ./gradlew bootJar
 
 # 프론트 → 정적 파일 (Nginx가 서빙)
-cd esp-frontend && pnpm build
+cd glassvue-frontend && pnpm build
 ```
 
 ---
