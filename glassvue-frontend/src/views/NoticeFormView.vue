@@ -6,6 +6,7 @@ import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxCheckBox } from 'devextreme-vue/check-box';
 import { DxButton } from 'devextreme-vue/button';
 import { getNotice, createNotice, updateNotice } from '../api/notice';
+import { authState } from '../stores/auth';
 
 // id가 있으면 수정, 없으면 작성. 작성자는 서버가 로그인 유저로 지정한다.
 const props = defineProps({ id: { type: String, default: null } });
@@ -15,11 +16,17 @@ const isEdit = computed(() => !!props.id);
 const form = reactive({ title: '', content: '', pinned: false });
 const error = ref('');
 const saving = ref(false);
+const blocked = ref(false);
 
 onMounted(async () => {
   if (isEdit.value) {
     try {
       const n = await getNotice(props.id);
+      if (n.authorId !== authState.user?.id) {
+        error.value = '본인 글만 수정할 수 있습니다.';
+        blocked.value = true;
+        return;
+      }
       form.title = n.title;
       form.content = n.content;
       form.pinned = n.pinned;
@@ -79,7 +86,7 @@ async function onSave() {
           :text="saving ? '저장 중…' : '저장'"
           type="default"
           styling-mode="contained"
-          :disabled="saving"
+          :disabled="saving || blocked"
           @click="onSave"
         />
         <DxButton text="취소" styling-mode="outlined" @click="router.back()" />

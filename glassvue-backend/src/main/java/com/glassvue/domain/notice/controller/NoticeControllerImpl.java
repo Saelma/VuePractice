@@ -38,7 +38,7 @@ public class NoticeControllerImpl implements NoticeController {
     public ResponseEntity<ApiResponse<UUID>> create(
             @LoginUser AuthUser user,
             @Valid @RequestBody NoticeCreateRequest request) {
-        UUID id = commandService.create(request, user.nickname());
+        UUID id = commandService.create(request, user.id(), user.nickname());
         return ResponseEntity.created(URI.create("/api/notices/" + id))
                 .body(ApiResponse.ok(id));
     }
@@ -59,15 +59,18 @@ public class NoticeControllerImpl implements NoticeController {
     @Override
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> update(
+            @LoginUser AuthUser user,
             @PathVariable UUID id, @Valid @RequestBody NoticeUpdateRequest request) {
-        commandService.update(id, request);
+        commandService.update(id, request, user.id());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
     @Override
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        commandService.delete(id);
+    public ResponseEntity<ApiResponse<Void>> delete(
+            @LoginUser AuthUser user,
+            @PathVariable UUID id) {
+        commandService.delete(id, user.id());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 

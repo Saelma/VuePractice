@@ -18,6 +18,7 @@ public enum ErrorCode {
 
     // 공지(notice)
     NOTICE_NOT_FOUND("NOTICE-404", HttpStatus.NOT_FOUND, "공지를 찾을 수 없습니다."),
+    NOTICE_NOT_OWNER("NOTICE-403", HttpStatus.FORBIDDEN, "본인 글만 수정·삭제할 수 있습니다."),
 
     // 회원 · 인증
     MEMBER_NOT_FOUND("MEMBER-404", HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다."),

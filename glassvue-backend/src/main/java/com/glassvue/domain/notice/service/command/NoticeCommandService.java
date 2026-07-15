@@ -25,31 +25,39 @@ public class NoticeCommandService {
     private final NoticeViewCountStore viewCountStore;
 
     @Transactional
-    public UUID create(NoticeCreateRequest req, String author) {
+    public UUID create(NoticeCreateRequest req, UUID authorId, String author) {
         Notice notice = Notice.builder()
                 .title(req.title())
                 .content(req.content())
                 .author(author)
+                .authorId(authorId)
                 .pinned(req.pinned())
                 .build();
         Notice saved = noticeRepository.save(notice);
-        log.info("Notice created: id={}", saved.getId());
+        log.info("Notice created: id={} by={}", saved.getId(), authorId);
         return saved.getId();
     }
 
     @Transactional
-    public void update(UUID id, NoticeUpdateRequest req) {
-        Notice notice = noticeRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOTICE_NOT_FOUND));
+    public void update(UUID id, NoticeUpdateRequest req, UUID currentUserId) {
+        Notice notice = findOwned(id, currentUserId);
         notice.update(req.title(), req.content(), req.pinned());
     }
 
     @Transactional
-    public void delete(UUID id) {
-        if (!noticeRepository.existsById(id)) {
-            throw new BusinessException(ErrorCode.NOTICE_NOT_FOUND);
+    public void delete(UUID id, UUID currentUserId) {
+        Notice notice = findOwned(id, currentUserId);
+        noticeRepository.delete(notice);
+    }
+
+    /** 존재 확인 + 본인 글인지 확인. 아니면 403. */
+    private Notice findOwned(UUID id, UUID currentUserId) {
+        Notice notice = noticeRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTICE_NOT_FOUND));
+        if (!notice.isOwnedBy(currentUserId)) {
+            throw new BusinessException(ErrorCode.NOTICE_NOT_OWNER);
         }
-        noticeRepository.deleteById(id);
+        return notice;
     }
 
     /**

@@ -35,11 +35,15 @@ public interface NoticeController {
             @ParameterObject NoticeSearchCondition condition,
             @ParameterObject Pageable pageable);
 
-    @Operation(summary = "공지 수정")
-    ResponseEntity<ApiResponse<Void>> update(UUID id, @Valid NoticeUpdateRequest request);
+    @Operation(summary = "공지 수정 (본인 글만)")
+    ResponseEntity<ApiResponse<Void>> update(
+            @Parameter(hidden = true) AuthUser user,
+            UUID id, @Valid NoticeUpdateRequest request);
 
-    @Operation(summary = "공지 삭제")
-    ResponseEntity<ApiResponse<Void>> delete(UUID id);
+    @Operation(summary = "공지 삭제 (본인 글만)")
+    ResponseEntity<ApiResponse<Void>> delete(
+            @Parameter(hidden = true) AuthUser user,
+            UUID id);
 
     @Operation(summary = "공지 조회수 증가")
     ResponseEntity<ApiResponse<Void>> increaseView(UUID id);

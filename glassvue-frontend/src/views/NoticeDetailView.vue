@@ -1,9 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxButton } from 'devextreme-vue/button';
 import { getNotice, deleteNotice, increaseView } from '../api/notice';
-import { isLoggedIn } from '../stores/auth';
+import { isLoggedIn, authState } from '../stores/auth';
 
 const props = defineProps({ id: { type: String, required: true } });
 const router = useRouter();
@@ -11,6 +11,11 @@ const router = useRouter();
 const notice = ref(null);
 const error = ref('');
 const loading = ref(true);
+
+// 본인 글일 때만 수정/삭제 노출 (백엔드도 authorId로 강제)
+const isOwner = computed(
+  () => isLoggedIn.value && notice.value?.authorId && notice.value.authorId === authState.user?.id,
+);
 
 onMounted(async () => {
   try {
@@ -59,7 +64,7 @@ function fmt(v) {
 
       <div class="mt-6 flex gap-2">
         <DxButton text="목록" styling-mode="outlined" @click="router.push('/')" />
-        <template v-if="isLoggedIn">
+        <template v-if="isOwner">
           <DxButton text="수정" type="default" styling-mode="contained" @click="router.push(`/notices/${id}/edit`)" />
           <DxButton text="삭제" type="danger" styling-mode="contained" @click="onDelete" />
         </template>
