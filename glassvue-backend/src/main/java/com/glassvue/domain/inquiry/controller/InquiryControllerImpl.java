@@ -71,8 +71,9 @@ public class InquiryControllerImpl implements InquiryController {
     @Override
     @PostMapping("/inquiries/{id}/answer")
     public ResponseEntity<ApiResponse<Void>> answer(
+            @LoginUser AuthUser user,
             @PathVariable UUID id, @Valid @RequestBody InquiryAnswerRequest request) {
-        commandService.answer(id, request);
+        commandService.answer(id, request, user);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 }

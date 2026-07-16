@@ -66,11 +66,17 @@ public class InquiryCommandService {
         inquiryRepository.delete(inquiry);
     }
 
-    /** 답변 등록/수정 — 관리자 전용(권한은 SecurityConfig에서 강제). */
-    public void answer(UUID id, InquiryAnswerRequest req) {
+    /**
+     * 답변 등록/수정 — 관리자 전용(권한은 SecurityConfig에서 강제).
+     * 단, 본인이 등록한 문의에는 답변할 수 없다(질문자≠답변자).
+     */
+    public void answer(UUID id, InquiryAnswerRequest req, AuthUser user) {
         Inquiry inquiry = findById(id);
+        if (inquiry.isOwnedBy(user.id())) {
+            throw new BusinessException(ErrorCode.INQUIRY_SELF_ANSWER);
+        }
         inquiry.answer(req.answer());
-        log.info("Inquiry answered: id={}", id);
+        log.info("Inquiry answered: id={} by={}", id, user.id());
     }
 
     private Inquiry findById(UUID id) {

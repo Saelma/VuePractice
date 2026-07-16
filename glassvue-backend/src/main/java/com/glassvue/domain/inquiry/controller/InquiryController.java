@@ -32,6 +32,7 @@ public interface InquiryController {
     @Operation(summary = "문의 삭제 (본인 또는 관리자)")
     ResponseEntity<ApiResponse<Void>> delete(@Parameter(hidden = true) AuthUser user, UUID id);
 
-    @Operation(summary = "문의 답변 (관리자 전용)")
-    ResponseEntity<ApiResponse<Void>> answer(UUID id, InquiryAnswerRequest request);
+    @Operation(summary = "문의 답변 (관리자 전용, 본인 문의 제외)")
+    ResponseEntity<ApiResponse<Void>> answer(
+            @Parameter(hidden = true) AuthUser user, UUID id, InquiryAnswerRequest request);
 }

@@ -50,7 +50,8 @@ public enum ErrorCode {
     // 문의
     INQUIRY_NOT_FOUND("INQUIRY-404", HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
     INQUIRY_NOT_OWNER("INQUIRY-403", HttpStatus.FORBIDDEN, "본인 문의만 수정·삭제할 수 있습니다."),
-    INQUIRY_ALREADY_ANSWERED("INQUIRY-400A", HttpStatus.BAD_REQUEST, "답변이 완료된 문의는 수정할 수 없습니다.");
+    INQUIRY_ALREADY_ANSWERED("INQUIRY-400A", HttpStatus.BAD_REQUEST, "답변이 완료된 문의는 수정할 수 없습니다."),
+    INQUIRY_SELF_ANSWER("INQUIRY-403S", HttpStatus.FORBIDDEN, "본인이 등록한 문의에는 답변할 수 없습니다.");
 
     private final String code;
     private final HttpStatus status;

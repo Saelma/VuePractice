@@ -179,7 +179,7 @@ onMounted(() => load(0));
           <div class="mt-2 flex gap-3">
             <button v-if="canEdit(q)" class="text-xs text-slate-500 hover:underline" @click="startEdit(q)">수정</button>
             <button v-if="canDelete(q)" class="text-xs text-red-500 hover:underline" @click="remove(q)">삭제</button>
-            <button v-if="isAdmin" class="text-xs text-green-600 hover:underline" @click="startAnswer(q)">
+            <button v-if="isAdmin && q.authorId !== myId" class="text-xs text-green-600 hover:underline" @click="startAnswer(q)">
               {{ q.answer ? '답변 수정' : '답변하기' }}
             </button>
           </div>
