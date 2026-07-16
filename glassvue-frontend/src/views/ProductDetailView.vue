@@ -6,6 +6,8 @@ import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText } from '../api/product';
 import { addToCart } from '../api/cart';
 import { authState, isLoggedIn } from '../stores/auth';
+import ProductReviews from '../components/ProductReviews.vue';
+import ProductInquiries from '../components/ProductInquiries.vue';
 
 const props = defineProps({ id: { type: String, required: true } });
 const router = useRouter();
@@ -53,7 +55,8 @@ async function onDelete() {
     <div v-if="error" class="mb-4 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
     <div v-else-if="loading" class="text-slate-500">불러오는 중…</div>
 
-    <article v-else-if="product" class="rounded-lg border bg-white p-6">
+    <template v-else-if="product">
+    <article class="rounded-lg border bg-white p-6">
       <div class="mb-2 flex items-center gap-2">
         <h2 class="text-2xl font-bold text-slate-800">{{ product.name }}</h2>
         <span class="rounded bg-slate-100 px-2 py-0.5 text-sm text-slate-600">{{ statusText(product.status) }}</span>
@@ -83,5 +86,9 @@ async function onDelete() {
         </template>
       </div>
     </article>
+
+    <ProductReviews :product-id="id" />
+    <ProductInquiries :product-id="id" />
+    </template>
   </section>
 </template>
