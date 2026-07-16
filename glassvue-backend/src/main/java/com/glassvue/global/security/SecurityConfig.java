@@ -48,6 +48,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/products", "/api/categories", "/api/images").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/products/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/products/*").hasRole("ADMIN")
+                        // 리뷰: 조회는 공개, 작성/수정/삭제는 로그인 필요(구매 인증은 서비스에서)
+                        .requestMatchers(HttpMethod.POST, "/api/products/*/reviews").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/reviews/*").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/reviews/*").authenticated()
+                        // 문의: 목록은 공개(비밀글은 마스킹), 작성/수정/삭제는 로그인, 답변은 관리자만
+                        .requestMatchers(HttpMethod.POST, "/api/inquiries/*/answer").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/products/*/inquiries").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/inquiries/*").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/inquiries/*").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(authenticationEntryPoint)

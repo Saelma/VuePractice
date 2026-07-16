@@ -51,6 +51,12 @@ public class OrderService {
         return order.getId();
     }
 
+    /** 회원이 해당 상품을 구매(취소되지 않은 주문)했는지 — 리뷰 도메인 등 타 도메인 공개 API. */
+    @Transactional(readOnly = true)
+    public boolean hasPurchased(UUID memberId, UUID productId) {
+        return orderRepository.existsPurchase(memberId, productId);
+    }
+
     @Transactional(readOnly = true)
     public List<OrderResponse> myOrders(UUID memberId) {
         return orderRepository.findByMemberIdOrderByCreatedAtDesc(memberId).stream()

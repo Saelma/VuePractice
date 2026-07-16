@@ -35,6 +35,13 @@ public class ProductQueryService {
         return ProductResponse.from(product, imageService.findByGroup(product.getImageGroupId()));
     }
 
+    /** 상품 존재 확인 (리뷰·문의 등 타 도메인이 상품에 종속 리소스를 만들 때). 없으면 PRODUCT_NOT_FOUND. */
+    public void ensureExists(UUID id) {
+        if (!productRepository.existsById(id)) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+    }
+
     /** 여러 상품을 한 번에 조회 (장바구니 등 타 도메인용). 이미지는 포함하지 않는다. */
     public List<ProductResponse> findByIds(Collection<UUID> ids) {
         if (ids.isEmpty()) {

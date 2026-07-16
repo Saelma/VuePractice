@@ -39,7 +39,18 @@ public enum ErrorCode {
     CART_EMPTY("ORDER-400E", HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),
     UNAVAILABLE_ITEM("ORDER-400U", HttpStatus.BAD_REQUEST, "구매할 수 없는 상품(품절·판매중지)이 포함되어 있습니다."),
     ORDER_NOT_FOUND("ORDER-404", HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."),
-    ORDER_NOT_CANCELLABLE("ORDER-400C", HttpStatus.BAD_REQUEST, "취소할 수 없는 주문입니다.");
+    ORDER_NOT_CANCELLABLE("ORDER-400C", HttpStatus.BAD_REQUEST, "취소할 수 없는 주문입니다."),
+
+    // 리뷰
+    REVIEW_NOT_FOUND("REVIEW-404", HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없습니다."),
+    REVIEW_NOT_OWNER("REVIEW-403", HttpStatus.FORBIDDEN, "본인 리뷰만 수정·삭제할 수 있습니다."),
+    REVIEW_NOT_PURCHASED("REVIEW-403P", HttpStatus.FORBIDDEN, "구매한 상품만 리뷰할 수 있습니다."),
+    DUPLICATE_REVIEW("REVIEW-409", HttpStatus.CONFLICT, "이미 이 상품에 리뷰를 작성했습니다."),
+
+    // 문의
+    INQUIRY_NOT_FOUND("INQUIRY-404", HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
+    INQUIRY_NOT_OWNER("INQUIRY-403", HttpStatus.FORBIDDEN, "본인 문의만 수정·삭제할 수 있습니다."),
+    INQUIRY_ALREADY_ANSWERED("INQUIRY-400A", HttpStatus.BAD_REQUEST, "답변이 완료된 문의는 수정할 수 없습니다.");
 
     private final String code;
     private final HttpStatus status;
