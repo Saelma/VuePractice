@@ -159,8 +159,19 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)
 
 ## 6. 미래 인프라 로드맵
 
-> 아래는 전부 **MSA/이커머스 단계**의 계획이다. 모노레포 연습 단계에선 설치하지 않는다.
+> **§6.0**은 단계 무관하게 *지금/곧* 도입 후보다. 그 아래(관측·MSA 인프라)는 **MSA/이커머스 단계** 계획으로, 모노레포 연습 단계에선 설치하지 않는다.
 > (현재 인프라: Nginx · Oracle 19c · Redis 7.4.7 — systemd 서비스)
+
+### 0. 조기 도입 후보 (단계 무관 — 지금/곧)
+
+MSA를 기다릴 필요 없는, 개발 편의·보안·에러 가시성 개선. 현재 단일 VM·systemd에서 바로 적용 가능.
+
+| 기술 | 판단 | 시점 | 메모 |
+|---|---|---|---|
+| **P6SPY** | ✅ 도입 | 지금 (**dev 프로파일 한정**) | JDBC 가로채 실제 SQL + 바인딩값 + 실행시간 로깅. QueryDSL 동적쿼리·N+1 육안 확인용. `p6spy-spring-boot-starter`. **운영 프로파일 제외**(오버헤드·민감정보 로깅) |
+| **HTTPS** | ✅ 도입 | 곧 | JWT를 평문으로 흘리지 않기. **nginx에서 TLS 종단**, 백엔드는 내부 HTTP 유지. 내부 VM이라 Let's Encrypt(공인 도메인) 대신 self-signed 또는 mkcert. 프론트 API base·secure 쿠키 플래그 함께 점검 |
+| **Sentry** (에러추적) | ✅ 조기 도입 | 관측 스택보다 먼저 가능 | 예외/에러 그루핑·릴리스 추적, **프론트(Vue)+백(Spring) 동시 커버**. 셀프호스트/무료티어로 가볍게. 메트릭·로그·트레이스와 별개의 "에러 전용" 도구 |
+| **Spring Batch** | ⏸ 보류 | 트리거 충족 시 | 스케줄러는 이미 사용 중(`@Scheduled` 조회수 플러시 = 미니 배치). Batch는 **청크·재시작·대량 row** 조건에서만 값을 함. 후보 작업: ①일 매출 집계 ②미결제 주문 자동취소(재고복원) ③쿠폰 만료. 그 전엔 오버킬. 다중 인스턴스 스케줄 중복 시 Quartz 클러스터 |
 
 ### 관측 (Observability)
 
@@ -178,10 +189,17 @@ Spring Boot ──(로그)──┐
 - 로그: 앱 로그 → Alloy tail → **Loki**
 - 메트릭: Spring에 `micrometer-registry-prometheus` 추가 → `/actuator/prometheus` → **Prometheus**
 - 시각화: **Grafana** (Loki + Prometheus 데이터소스)
+- **트레이스/APM**: OTel + **Grafana Tempo**(Alloy 스택에 자연 결합 — 메트릭·로그·트레이스를 한 Grafana에)로 분산추적. 대안 **Pinpoint**(Naver OSS, 바이트코드 에이전트·서버맵 — HBase 필요로 운영 무거움, 한국 생태계 학습용). **Datadog·Jennifer는 상용/유료 → 연습 단계 제외**(업계 인지만). 에러 그루핑은 별개로 **Sentry**(§6.0)가 담당.
 
 ### MSA 인프라
 
-- **Docker** (→ compose → 필요 시 k8s): 서비스를 실제로 쪼갤 때 도입. 현재 VM에 미설치. 설치는 sudo라 명령만 제안.
+- **Docker** (→ compose → **k8s는 단일 VM엔 오버, 제외**): 서비스를 실제로 쪼갤 때 도입. 현재 VM 미설치(Redis·nginx·백엔드·Oracle 전부 systemd). 설치는 sudo라 명령만 제안.
+  - **컨테이너화 대상**: 백엔드(스테이트리스)부터 → Redis·nginx 순. **Oracle 19c는 컨테이너화 비추**(이미지 거대·라이선스) → 호스트/외부 유지.
+  - **컨테이너 모니터링** (역할이 달라 상호보완 — 경쟁 아님):
+    - ~~Docker Desktop~~ — **서버(리눅스 VM)엔 부적합**. Mac/Win 워크스테이션용 GUI. 서버는 Docker Engine 직접 사용 → 후보에서 제외.
+    - **ctop** — 컨테이너용 `top`, CLI 즉석 리소스 확인. 설치 거의 0, 히스토리 없음.
+    - **Portainer** — 컨테이너/스택/볼륨 관리 웹UI. 운영 편의·학습용. 메트릭 히스토리·알림은 약함.
+    - **cAdvisor + node_exporter → Prometheus → Grafana** — 진짜 메트릭 수집·히스토리·알림. **위 관측 스택을 그대로 재사용**(별도 스택 불필요, 컨테이너 메트릭만 얹음).
 - **이벤트 큐: RabbitMQ** (`spring-boot-starter-amqp`)
   - 용도 예: *주문 완료 → 재고 차감 · 알림 · 포인트 적립*
   - RabbitMQ 선택 이유: exchange/queue/binding 개념이 직관적, 운영 단순, 이벤트 드리븐 학습에 적합. (Kafka는 대용량 스트리밍·이벤트소싱이 필요해지면 2차 목표. Redis Streams는 부하 우려로 제외.)
@@ -190,11 +208,17 @@ Spring Boot ──(로그)──┐
 
 | 기술 | 도입 시점 |
 |---|---|
+| **P6SPY** (dev SQL 로깅) | **지금** — dev 프로파일 한정 (§6.0) |
+| **HTTPS** (nginx TLS 종단) | **곧** (§6.0) |
+| **Sentry** (에러추적) | 조기 — 관측 스택 전에도 가능 (§6.0) |
+| **Spring Batch** | 대량·재시작 배치 작업이 생길 때 (§6.0) |
 | ApplicationEventPublisher (스프링 내부 이벤트) | **지금부터** — 모노레포 단계의 이벤트는 이걸로. 나중에 큐로 바꾸기 자연스러움 |
 | Spring Modulith (도메인 경계 검증) | 도메인이 늘어 경계 규칙을 테스트로 강제하고 싶을 때 |
-| Docker | 첫 서비스 분리를 시작할 때 |
+| Docker | 첫 서비스 분리를 시작할 때 (k8s 제외, compose까지) |
+| 컨테이너 모니터링 (Portainer/ctop + cAdvisor→Grafana) | Docker 전환과 세트. Docker Desktop은 서버엔 제외 |
 | RabbitMQ | 서비스가 2개 이상으로 쪼개져 서비스 간 비동기 이벤트가 필요할 때 |
 | Alloy + Loki + Prometheus + Grafana | 운영 관측이 필요해지는 시점 (이커머스 진입 무렵) |
+| 트레이싱/APM (OTel+Tempo, 대안 Pinpoint) | MSA로 서비스 간 호출 추적이 필요할 때. Datadog·Jennifer는 유료로 제외 |
 | OpenSearch (상품 검색 고도화) | QueryDSL/Oracle 검색이 부족해질 때 — 한글 형태소 분석·오타 보정·관련도 랭킹·패싯 집계, 대용량 상품. **로그용 아님(로그는 Loki)** |
 
 ---
@@ -206,3 +230,7 @@ Spring Boot ──(로그)──┐
 - 레이어 단위 패키지 ❌ — 도메인 단위
 - 모노레포 단계에서 Docker·RabbitMQ·관측 스택 설치 ❌ — 로드맵
 - OpenSearch 지금 도입 ❌ — 검색은 QueryDSL+Oracle로 충분. 상품 검색 고도화 단계의 로드맵
+- Kubernetes ❌ — 단일 VM엔 오버엔지니어링. Docker compose까지만
+- 서버에 Docker Desktop ❌ — 워크스테이션용. 서버는 Docker Engine 직접
+- Datadog·Jennifer ❌ — 상용/유료. 에러추적은 Sentry, 트레이싱은 OTel+Tempo/Pinpoint
+- Spring Batch 지금 도입 ❌ — 대량·재시작 배치 작업 생길 때. 지금은 `@Scheduled`로 충분
