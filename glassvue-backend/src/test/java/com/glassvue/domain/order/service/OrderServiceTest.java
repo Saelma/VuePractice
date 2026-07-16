@@ -9,12 +9,16 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.glassvue.domain.cart.dto.CartItemResponse;
+import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.cart.service.CartService;
+import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.entity.OrderStatus;
+import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
@@ -28,6 +32,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
@@ -35,6 +40,7 @@ class OrderServiceTest {
     @Mock OrderRepository orderRepository;
     @Mock CartService cartService;
     @Mock ProductCommandService productCommandService;
+    @Mock ApplicationEventPublisher eventPublisher;
     @InjectMocks OrderService orderService;
 
     private final UUID memberId = UUID.randomUUID();
@@ -144,5 +150,47 @@ class OrderServiceTest {
         UUID pid = UUID.randomUUID();
         when(orderRepository.existsPurchase(memberId, pid)).thenReturn(true);
         assertThat(orderService.hasPurchased(memberId, pid)).isTrue();
+    }
+
+    private CartResponse cartWith(CartItemResponse... items) {
+        long qty = 0, price = 0;
+        for (CartItemResponse i : items) { qty += i.quantity(); price += i.lineTotal(); }
+        return new CartResponse(List.of(items), qty, price);
+    }
+    private CartItemResponse availableItem(UUID pid, long qty) {
+        return new CartItemResponse(pid, "지바", 10_000, ProductStatus.SELLING, qty, 10_000 * qty, true);
+    }
+
+    @Test
+    @DisplayName("결제(checkout): 재고 차감·카트 비움·OrderPlacedEvent 발행")
+    void checkout_publishesEvent() {
+        UUID pid = UUID.randomUUID();
+        when(cartService.getCart(memberId)).thenReturn(cartWith(availableItem(pid, 2)));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.checkout(memberId);
+
+        verify(productCommandService).decreaseStock(pid, 2);
+        verify(cartService).clear(memberId);
+        verify(eventPublisher).publishEvent(any(OrderPlacedEvent.class));
+    }
+
+    @Test
+    @DisplayName("결제: 빈 장바구니 → CART_EMPTY, 이벤트/저장 없음")
+    void checkout_emptyCart() {
+        when(cartService.getCart(memberId)).thenReturn(cartWith());
+        assertErrorCode(() -> orderService.checkout(memberId), ErrorCode.CART_EMPTY);
+        verify(orderRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("결제: 구매불가 상품 포함 → UNAVAILABLE_ITEM")
+    void checkout_unavailable() {
+        UUID pid = UUID.randomUUID();
+        CartItemResponse soldOut = new CartItemResponse(pid, "품절품", 10_000, ProductStatus.SOLD_OUT, 1, 10_000, false);
+        when(cartService.getCart(memberId)).thenReturn(cartWith(soldOut));
+        assertErrorCode(() -> orderService.checkout(memberId), ErrorCode.UNAVAILABLE_ITEM);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 }

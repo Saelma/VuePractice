@@ -8,10 +8,12 @@ import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
+import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
+import org.springframework.context.ApplicationEventPublisher;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -28,6 +30,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final CartService cartService;
     private final ProductCommandService productCommandService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** 장바구니 → 주문 생성. 재고 원자적 차감 + 카트 비우기. */
     @Transactional
@@ -48,6 +51,8 @@ public class OrderService {
 
         Order order = orderRepository.save(Order.create(memberId, orderItems));
         cartService.clear(memberId);
+        // 도메인 이벤트 발행 — 구독자(알림·포인트 등)는 order가 모른다. AFTER_COMMIT 리스너가 커밋된 주문에만 반응.
+        eventPublisher.publishEvent(OrderPlacedEvent.from(order));
         log.info("Order created: {} by {}", order.getId(), memberId);
         return order.getId();
     }
