@@ -4,13 +4,14 @@ import com.glassvue.domain.cart.dto.CartItemResponse;
 import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.cart.service.CartService;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
+import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
-import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.security.AuthUser;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -64,19 +65,46 @@ public class OrderService {
                 .toList();
     }
 
+    /** 주문 상세 — 본인 주문만. 단, ADMIN은 발송 처리를 위해 전체 주문 조회 가능. */
     @Transactional(readOnly = true)
-    public OrderResponse get(UUID id, UUID memberId) {
-        Order order = orderRepository.findByIdAndMemberId(id, memberId)
+    public OrderResponse get(UUID id, AuthUser user) {
+        Order order = (user.role() == Role.ADMIN
+                ? orderRepository.findById(id)
+                : orderRepository.findByIdAndMemberId(id, user.id()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         return OrderResponse.from(order);
     }
 
-    /** 주문 취소 — 본인 주문·ORDERED 상태만. 재고 복원. */
+    /** 결제 완료 처리 — 본인 주문·ORDERED만. 실제 결제는 이후 PG 연동으로 대체(지금은 상태 전이만). */
+    @Transactional
+    public void pay(UUID id, UUID memberId) {
+        Order order = orderRepository.findByIdAndMemberId(id, memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!order.isPayable()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_PAYABLE);
+        }
+        order.pay();
+        log.info("Order paid: {} by {}", id, memberId);
+    }
+
+    /** 발송 처리(관리자 전용, 권한은 SecurityConfig에서 강제) — PAID 상태만. */
+    @Transactional
+    public void ship(UUID id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!order.isShippable()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_SHIPPABLE);
+        }
+        order.ship();
+        log.info("Order shipped: {}", id);
+    }
+
+    /** 주문 취소 — 본인 주문·취소가능(ORDERED/PAID) 상태만. 재고 복원. */
     @Transactional
     public void cancel(UUID id, UUID memberId) {
         Order order = orderRepository.findByIdAndMemberId(id, memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        if (order.getStatus() != OrderStatus.ORDERED) {
+        if (!order.isCancellable()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_CANCELLABLE);
         }
         order.cancel();

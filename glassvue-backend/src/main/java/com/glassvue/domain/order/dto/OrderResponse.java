@@ -11,7 +11,9 @@ public record OrderResponse(
         OrderStatus status,
         long totalPrice,
         List<OrderItemResponse> items,
-        Instant createdAt
+        Instant createdAt,
+        Instant paidAt,
+        Instant shippedAt
 ) {
     public static OrderResponse from(Order o) {
         return new OrderResponse(
@@ -19,6 +21,8 @@ public record OrderResponse(
                 o.getStatus(),
                 o.getTotalPrice(),
                 o.getItems().stream().map(OrderItemResponse::from).toList(),
-                o.getCreatedAt());
+                o.getCreatedAt(),
+                o.getPaidAt(),
+                o.getShippedAt());
     }
 }

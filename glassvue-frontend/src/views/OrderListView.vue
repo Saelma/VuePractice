@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxButton } from 'devextreme-vue/button';
-import { fetchOrders, orderStatusText } from '../api/order';
+import { fetchOrders, orderStatusText, orderStatusClass } from '../api/order';
 import { priceText } from '../api/product';
 
 const router = useRouter();
@@ -54,10 +54,7 @@ function summary(o) {
             <div class="font-medium text-slate-800">{{ summary(o) }}</div>
             <div class="text-sm text-slate-500">{{ fmt(o.createdAt) }}</div>
           </div>
-          <span
-            class="rounded px-2 py-0.5 text-sm"
-            :class="o.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-600'"
-          >{{ orderStatusText(o.status) }}</span>
+          <span class="rounded px-2 py-0.5 text-sm" :class="orderStatusClass(o.status)">{{ orderStatusText(o.status) }}</span>
           <div class="w-24 text-right font-semibold text-slate-800">{{ priceText(o.totalPrice) }}</div>
         </li>
       </ul>

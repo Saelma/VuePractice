@@ -39,7 +39,21 @@ public class OrderControllerImpl implements OrderController {
     @Override
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<OrderResponse>> get(@LoginUser AuthUser user, @PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.ok(orderService.get(id, user.id())));
+        return ResponseEntity.ok(ApiResponse.ok(orderService.get(id, user)));
+    }
+
+    @Override
+    @PostMapping("/{id}/pay")
+    public ResponseEntity<ApiResponse<Void>> pay(@LoginUser AuthUser user, @PathVariable UUID id) {
+        orderService.pay(id, user.id());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Override
+    @PostMapping("/{id}/ship")
+    public ResponseEntity<ApiResponse<Void>> ship(@PathVariable UUID id) {
+        orderService.ship(id);
+        return ResponseEntity.ok(ApiResponse.ok());
     }
 
     @Override

@@ -1,9 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxButton } from 'devextreme-vue/button';
-import { getOrder, cancelOrder, orderStatusText } from '../api/order';
+import { getOrder, payOrder, shipOrder, cancelOrder, orderStatusText, orderStatusClass } from '../api/order';
 import { priceText } from '../api/product';
+import { authState } from '../stores/auth';
 
 const props = defineProps({ id: { type: String, required: true } });
 const router = useRouter();
@@ -11,6 +12,7 @@ const router = useRouter();
 const order = ref(null);
 const error = ref('');
 const loading = ref(true);
+const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 
 async function load() {
   loading.value = true;
@@ -24,15 +26,19 @@ async function load() {
 }
 onMounted(load);
 
-async function onCancel() {
-  if (!window.confirm('주문을 취소할까요? (재고가 복원됩니다)')) return;
+async function act(fn, confirmMsg) {
+  if (confirmMsg && !window.confirm(confirmMsg)) return;
+  error.value = '';
   try {
-    await cancelOrder(props.id);
+    await fn(props.id);
     await load();
   } catch (e) {
     error.value = e.message;
   }
 }
+const onPay = () => act(payOrder, '결제를 진행할까요? (실제 결제 없이 상태만 결제완료로)');
+const onShip = () => act(shipOrder, '이 주문을 발송 처리할까요?');
+const onCancel = () => act(cancelOrder, '주문을 취소할까요? (재고가 복원됩니다)');
 
 function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
@@ -45,15 +51,16 @@ function fmt(v) {
     <div v-else-if="loading" class="text-slate-500">불러오는 중…</div>
 
     <article v-else-if="order" class="rounded-lg border bg-white p-6">
-      <div class="mb-4 flex items-center justify-between border-b pb-3">
+      <div class="mb-4 flex items-start justify-between border-b pb-3">
         <div>
           <h2 class="text-lg font-bold text-slate-800">주문 상세</h2>
-          <div class="text-sm text-slate-500">{{ fmt(order.createdAt) }}</div>
+          <div class="text-sm text-slate-500">주문 {{ fmt(order.createdAt) }}</div>
+          <div v-if="order.paidAt" class="text-sm text-slate-500">결제 {{ fmt(order.paidAt) }}</div>
+          <div v-if="order.shippedAt" class="text-sm text-slate-500">발송 {{ fmt(order.shippedAt) }}</div>
         </div>
-        <span
-          class="rounded px-2 py-1 text-sm"
-          :class="order.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-600'"
-        >{{ orderStatusText(order.status) }}</span>
+        <span class="rounded px-2 py-1 text-sm" :class="orderStatusClass(order.status)">
+          {{ orderStatusText(order.status) }}
+        </span>
       </div>
 
       <ul class="divide-y">
@@ -71,14 +78,25 @@ function fmt(v) {
         <span class="text-lg font-bold text-slate-800">{{ priceText(order.totalPrice) }}</span>
       </div>
 
-      <div class="mt-6 flex gap-2">
+      <div class="mt-6 flex flex-wrap gap-2">
         <DxButton text="주문 목록" styling-mode="outlined" @click="router.push('/orders')" />
+
+        <!-- 구매자 액션 -->
+        <template v-if="!isAdmin">
+          <DxButton
+            v-if="order.status === 'ORDERED'"
+            text="결제하기" type="success" styling-mode="contained" @click="onPay"
+          />
+          <DxButton
+            v-if="order.status === 'ORDERED' || order.status === 'PAID'"
+            text="주문 취소" type="danger" styling-mode="contained" @click="onCancel"
+          />
+        </template>
+
+        <!-- 관리자 액션: 결제완료 주문 발송 처리 -->
         <DxButton
-          v-if="order.status === 'ORDERED'"
-          text="주문 취소"
-          type="danger"
-          styling-mode="contained"
-          @click="onCancel"
+          v-if="isAdmin && order.status === 'PAID'"
+          text="발송 처리" type="default" styling-mode="contained" @click="onShip"
         />
       </div>
     </article>

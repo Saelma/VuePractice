@@ -19,9 +19,15 @@ public interface OrderController {
     @Operation(summary = "내 주문 목록")
     ResponseEntity<ApiResponse<List<OrderResponse>>> myOrders(@Parameter(hidden = true) AuthUser user);
 
-    @Operation(summary = "주문 상세")
+    @Operation(summary = "주문 상세 (본인, ADMIN은 전체)")
     ResponseEntity<ApiResponse<OrderResponse>> get(@Parameter(hidden = true) AuthUser user, UUID id);
 
-    @Operation(summary = "주문 취소")
+    @Operation(summary = "결제 (구매자 본인, ORDERED→PAID. 실제 결제는 이후 PG 연동)")
+    ResponseEntity<ApiResponse<Void>> pay(@Parameter(hidden = true) AuthUser user, UUID id);
+
+    @Operation(summary = "발송 처리 (관리자, PAID→SHIPPED)")
+    ResponseEntity<ApiResponse<Void>> ship(UUID id);
+
+    @Operation(summary = "주문 취소 (본인, ORDERED·PAID만)")
     ResponseEntity<ApiResponse<Void>> cancel(@Parameter(hidden = true) AuthUser user, UUID id);
 }

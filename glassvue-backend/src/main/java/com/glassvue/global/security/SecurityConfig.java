@@ -43,6 +43,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
                         .requestMatchers("/api/members/**").authenticated()
                         .requestMatchers("/api/cart/**").authenticated()
+                        // 발송 처리는 관리자만(그 외 주문 API는 로그인). ship 매처를 orders/** 보다 먼저.
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/ship").hasRole("ADMIN")
                         .requestMatchers("/api/orders/**").authenticated()
                         // 카탈로그: 조회는 공개, 등록/수정/삭제는 관리자만
                         .requestMatchers(HttpMethod.POST, "/api/products", "/api/categories", "/api/images").hasRole("ADMIN")
