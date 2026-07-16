@@ -124,10 +124,10 @@ onMounted(() => load(0));
     <div v-if="error" class="mb-3 rounded bg-red-50 p-2 text-sm text-red-600">{{ error }}</div>
 
     <!-- 작성 폼 (로그인 시) -->
-    <div v-if="isLoggedIn" class="mb-5 rounded-lg border bg-slate-50 p-4">
-      <DxTextBox v-model:value="form.title" placeholder="문의 제목" class="mb-2" />
+    <div v-if="isLoggedIn" class="mb-5 flex flex-col gap-2 rounded-lg border bg-slate-50 p-4">
+      <DxTextBox v-model:value="form.title" placeholder="문의 제목" />
       <DxTextArea v-model:value="form.content" :height="70" placeholder="궁금한 점을 남겨주세요." />
-      <div class="mt-2 flex items-center gap-3">
+      <div class="flex items-center gap-3">
         <DxCheckBox v-model:value="form.secret" text="비밀글 (작성자·판매자만 열람)" />
         <DxButton text="문의 등록" type="default" styling-mode="contained" :disabled="submitting" @click="submit" />
         <span v-if="formError" class="text-sm text-red-600">{{ formError }}</span>
@@ -154,12 +154,14 @@ onMounted(() => load(0));
 
         <!-- 수정 모드 -->
         <template v-if="editingId === q.id">
-          <DxTextBox v-model:value="editForm.title" class="mb-2" />
-          <DxTextArea v-model:value="editForm.content" :height="60" />
-          <div class="mt-2 flex items-center gap-3">
-            <DxCheckBox v-model:value="editForm.secret" text="비밀글" />
-            <DxButton text="저장" type="default" styling-mode="contained" @click="saveEdit(q)" />
-            <DxButton text="취소" styling-mode="outlined" @click="editingId = null" />
+          <div class="flex flex-col gap-2">
+            <DxTextBox v-model:value="editForm.title" />
+            <DxTextArea v-model:value="editForm.content" :height="60" />
+            <div class="flex items-center gap-3">
+              <DxCheckBox v-model:value="editForm.secret" text="비밀글" />
+              <DxButton text="저장" type="default" styling-mode="contained" @click="saveEdit(q)" />
+              <DxButton text="취소" styling-mode="outlined" @click="editingId = null" />
+            </div>
           </div>
         </template>
 
