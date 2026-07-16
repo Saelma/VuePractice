@@ -1,0 +1,127 @@
+package com.glassvue.domain.order;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.glassvue.domain.catalog.entity.Category;
+import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.entity.ProductStatus;
+import com.glassvue.domain.catalog.repository.CategoryRepository;
+import com.glassvue.domain.catalog.repository.ProductRepository;
+import com.glassvue.domain.member.entity.Member;
+import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.member.repository.MemberRepository;
+import com.jayway.jsonpath.JsonPath;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 이커머스 전체 플로우 통합 — 실 컨텍스트 + MockMvc.
+ * 장바구니 담기 → 결제(checkout) → 주문 조회 → 결제(pay) → 관리자 발송(ship)까지 관통.
+ * 회원(구매자·관리자)·상품을 리포지토리로 만들고 @Transactional 롤백 → 자체 완결·공유 DB 무오염.
+ * (장바구니는 Redis지만 checkout이 비우므로 잔여 최소.)
+ */
+@EnabledIfEnvironmentVariable(named = "DB_HOST", matches = ".+")
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class OrderFlowIntegrationTest {
+
+    @Autowired MockMvc mockMvc;
+    @Autowired MemberRepository memberRepository;
+    @Autowired PasswordEncoder passwordEncoder;
+    @Autowired CategoryRepository categoryRepository;
+    @Autowired ProductRepository productRepository;
+
+    private static final String JSON = "application/json";
+    private static final String PW = "password123";
+
+    private String buyerLoginId;
+    private String adminLoginId;
+    private UUID productId;
+
+    @BeforeEach
+    void setUp() {
+        buyerLoginId = "buyer_" + UUID.randomUUID().toString().substring(0, 8);
+        adminLoginId = "admin_" + UUID.randomUUID().toString().substring(0, 8);
+        member(buyerLoginId, "구매자", Role.USER);
+        member(adminLoginId, "판매자", Role.ADMIN);
+        Category cat = categoryRepository.save(Category.builder().name("ZZC-오더").build());
+        Product p = productRepository.save(Product.builder()
+                .name("ZZP-테스트상품").description("d").price(10_000).stock(100)
+                .status(ProductStatus.SELLING).category(cat).build());
+        productId = p.getId();
+    }
+
+    private void member(String loginId, String nickname, Role role) {
+        memberRepository.save(Member.builder()
+                .loginId(loginId).password(passwordEncoder.encode(PW)).nickname(nickname).role(role).build());
+    }
+
+    private String login(String loginId) throws Exception {
+        String body = mockMvc.perform(post("/api/auth/login").contentType(JSON)
+                        .content("{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.data.accessToken");
+    }
+
+    @Test
+    @DisplayName("장바구니→결제→주문조회→결제완료→발송(관리자) 전체 관통")
+    void fullOrderFlow() throws Exception {
+        String buyer = "Bearer " + login(buyerLoginId);
+        String admin = "Bearer " + login(adminLoginId);
+
+        // 1) 장바구니 담기
+        mockMvc.perform(post("/api/cart/items").header("Authorization", buyer).contentType(JSON)
+                        .content("{\"productId\":\"" + productId + "\",\"quantity\":2}"))
+                .andExpect(status().isOk());
+
+        // 2) 장바구니 조회 — 구매가능·합계
+        mockMvc.perform(get("/api/cart").header("Authorization", buyer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalQuantity").value(2))
+                .andExpect(jsonPath("$.data.totalPrice").value(20_000))
+                .andExpect(jsonPath("$.data.items[0].available").value(true));
+
+        // 3) 결제(checkout) → 주문 생성
+        String coBody = mockMvc.perform(post("/api/orders").header("Authorization", buyer))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String orderId = JsonPath.read(coBody, "$.data");
+
+        // 4) 주문 조회 — ORDERED + 스냅샷
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ORDERED"))
+                .andExpect(jsonPath("$.data.totalPrice").value(20_000))
+                .andExpect(jsonPath("$.data.items[0].productName").value("ZZP-테스트상품"));
+
+        // 5) 구매자는 발송 불가(관리자 전용) → 403
+        mockMvc.perform(post("/api/orders/" + orderId + "/ship").header("Authorization", buyer))
+                .andExpect(status().isForbidden());
+
+        // 6) 결제 완료(구매자) → PAID
+        mockMvc.perform(post("/api/orders/" + orderId + "/pay").header("Authorization", buyer))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.status").value("PAID"));
+
+        // 7) 발송(관리자) → SHIPPED
+        mockMvc.perform(post("/api/orders/" + orderId + "/ship").header("Authorization", admin))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.status").value("SHIPPED"));
+    }
+}
