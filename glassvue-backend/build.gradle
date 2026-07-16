@@ -33,6 +33,10 @@ dependencies {
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
+	// 스키마 마이그레이션 (Flyway) — 기존 DB는 baseline, 향후 변경은 V2+ 스크립트로 버전관리.
+	// Boot 4는 Flyway auto-config를 별도 모듈(spring-boot-flyway)로 분리 → 명시 필요.
+	implementation 'org.springframework.boot:spring-boot-flyway'
+	implementation 'org.flywaydb:flyway-database-oracle'
 	// 캐시 (Redis)
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	// UUIDv7 생성 (시간순 UUID)

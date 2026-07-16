@@ -12,12 +12,20 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: oracle.jdbc.OracleDriver
 
+  # --- 스키마 마이그레이션 (Flyway) ---
+  # 기존 DB(ddl-auto=update로 만들어짐)는 baseline으로 마킹하고, 향후 스키마 변경은 V2+ 스크립트로 관리.
+  # (Oracle CHECK 제약 수동 ALTER 같은 부채를 코드 버전관리로 대체)
+  flyway:
+    enabled: true
+    baseline-on-migrate: true      # 비어있지 않은 기존 스키마를 baseline 처리(기존 테이블 안 건드림)
+    baseline-version: 1
+    baseline-description: "existing schema (ddl-auto managed) baseline"
+
   jpa:
     database-platform: org.hibernate.dialect.OracleDialect
-    # 연습 단계: 엔티티 기준으로 테이블 자동 생성/추가. 안정되면 validate + Flyway로.
-    # (update는 컬럼 삭제/타입 변경을 반영하지 못한다)
+    # Flyway가 스키마를 소유. Hibernate는 엔티티↔스키마 일치만 검증(자동 변경 안 함).
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
     # 지연로딩 연관(예: product.category)을 페이지 단위로 일괄 로딩해 N+1 완화
     properties:
