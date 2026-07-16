@@ -151,13 +151,18 @@ updated_at  TIMESTAMP   ← BaseTimeEntity
 member          회원 · 인증 (게시판 5단계 로그인이 시작점)          ✅
   └▶ catalog    상품 · 카테고리   (게시판 CRUD/검색 패턴 이식)       ✅
        └▶ cart  장바구니          (Redis 활용)                      ✅
-            └▶ orders / order_item   주문 · 결제                     ✅
+            └▶ orders / order_item   주문 · 결제상태(PAID/SHIPPED)   ✅ 2026-07-16
                  └▶ review / inquiry  상품 리뷰 · 문의 (게시판 경험 재활용)  ✅ 2026-07-16
+                 └▶ (로드맵) payment  실제 결제(PG 연동)  ⏸ MSA 단계 + PG사 확정 시
 ```
 
 > **review / inquiry (2026-07-16 구현)**: 상품에 **느슨한 UUID 참조**(product_id)로 연결, polymorphic FK 없이 별도 테이블.
 > 리뷰는 **구매자만**(order 도메인 `hasPurchased` 공개 API로 인증)·상품당 1회·평균별점 집계. 문의는 **비밀글 마스킹**(응답 DTO)·**ADMIN 답변**·상태(WAITING/ANSWERED).
 > 도메인 간 통신은 공개 서비스로만(catalog `ProductQueryService.ensureExists`, order `OrderService.hasPurchased`).
+
+> **주문 상태(2026-07-16 구현)**: `ORDERED → PAID → SHIPPED` (+CANCELLED, ORDERED·PAID만). 취소 시 재고 복원.
+> **결제(PAID) 전이는 지금 플레이스홀더** — `POST /orders/{id}/pay`가 상태만 바꾼다(실제 돈 안 움직임). **실제 PG 연동은 MSA 단계로 보류(2026-07-16 결정)**.
+> PG 붙일 때: ①`OrderService.pay()`(seam)는 그대로, 그 앞단을 "PG 서버 금액검증 후 pay() 호출"로 교체 ②**`payment` 도메인/테이블 신설**(provider·거래ID·금액·영수증, 주문과 별도 테이블) ③webhook(멱등) ④환불 연동(취소 시 PG 환불 API). **PG사 미정 상태로 payment 도메인을 선설계하지 않는다**(§1 "미리 만들지 않는다").
 
 ---
 
@@ -230,6 +235,7 @@ Spring Boot ──(로그)──┐
 ## 7. 하지 않는 것 (요약)
 
 - 이커머스 테이블 선(先)설계 ❌ — 요구사항 나올 때
+- **`payment` 도메인 선설계 ❌** — PG사 미정. 주문 상태(PAID/SHIPPED)까지만 구현, 실제 PG 연동은 MSA 단계 + PG사 확정 시(§5). 지금 `pay`는 상태 전이 플레이스홀더
 - 만능 board 테이블 / polymorphic FK ❌ — 도메인별 별도 테이블
 - 레이어 단위 패키지 ❌ — 도메인 단위
 - 모노레포 단계에서 Docker·RabbitMQ·관측 스택 설치 ❌ — 로드맵
