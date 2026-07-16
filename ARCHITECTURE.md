@@ -173,7 +173,7 @@ MSA를 기다릴 필요 없는, 개발 편의·보안·에러 가시성 개선. 
 | 기술 | 판단 | 시점 | 메모 |
 |---|---|---|---|
 | **P6SPY** | ✅ **완료** (2026-07-16) | dev 프로파일 한정 | JDBC 가로채 실제 SQL + 바인딩값 + 실행시간 로깅. QueryDSL 동적쿼리·N+1 육안 확인용. **운영 프로파일 제외**(오버헤드·민감정보 로깅). *구현 메모*: `p6spy-spring-boot-starter`(gavlyukovskiy)는 Boot 4.1 자동설정 호환이 불확실해 채택하지 않고, **plain `p6spy` + dev 프로파일에서 datasource URL만 `jdbc:p6spy:…`로 재작성**(자동설정 무의존)했다. 운영은 순수 oracle URL이라 p6spy 코드 경로를 안 탐. 포맷/카테고리는 `spy.properties`(SLF4J·한 줄·결과셋 제외) |
-| **HTTPS** | ✅ 도입 | 곧 | JWT를 평문으로 흘리지 않기. **nginx에서 TLS 종단**, 백엔드는 내부 HTTP 유지. 내부 VM이라 Let's Encrypt(공인 도메인) 대신 self-signed 또는 mkcert. 프론트 API base·secure 쿠키 플래그 함께 점검 |
+| **HTTPS** | ✅ **완료** (2026-07-16) | — | JWT를 평문으로 흘리지 않기. **nginx에서 TLS 종단(:443), 백엔드는 내부 HTTP(:8080) 유지**. 내부 VM이라 **self-signed**(SAN에 `IP:192.168.50.36` 포함 — 브라우저는 CN 무시·SAN만 검증) 10년. **80→443 301 리다이렉트**, 방화벽 443 개방. 프론트는 `/api` 상대경로 + JWT를 localStorage에 둬서 코드·재배포 불필요(secure 쿠키 이슈 없음). 인증서 원본 `/home/ecstel/nginx-tls/`, 배포본 `/etc/nginx/ssl/`. 공인 도메인 생기면 Let's Encrypt로 교체 |
 | **Sentry** (에러추적) | ✅ 조기 도입 | 관측 스택보다 먼저 가능 | 예외/에러 그루핑·릴리스 추적, **프론트(Vue)+백(Spring) 동시 커버**. 셀프호스트/무료티어로 가볍게. 메트릭·로그·트레이스와 별개의 "에러 전용" 도구 |
 | **Spring Batch** | ⏸ 보류 | 트리거 충족 시 | 스케줄러는 이미 사용 중(`@Scheduled` 조회수 플러시 = 미니 배치). Batch는 **청크·재시작·대량 row** 조건에서만 값을 함. 후보 작업: ①일 매출 집계 ②미결제 주문 자동취소(재고복원) ③쿠폰 만료. 그 전엔 오버킬. 다중 인스턴스 스케줄 중복 시 Quartz 클러스터 |
 
@@ -213,7 +213,7 @@ Spring Boot ──(로그)──┐
 | 기술 | 도입 시점 |
 |---|---|
 | ~~**P6SPY** (dev SQL 로깅)~~ | ✅ **완료** 2026-07-16 — dev 프로파일 한정, plain p6spy + URL 재작성 (§6.0) |
-| **HTTPS** (nginx TLS 종단) | **곧** (§6.0) |
+| ~~**HTTPS** (nginx TLS 종단)~~ | ✅ **완료** 2026-07-16 — self-signed(SAN IP), 80→443 리다이렉트 (§6.0) |
 | **Sentry** (에러추적) | 조기 — 관측 스택 전에도 가능 (§6.0) |
 | **Spring Batch** | 대량·재시작 배치 작업이 생길 때 (§6.0) |
 | ApplicationEventPublisher (스프링 내부 이벤트) | **지금부터** — 모노레포 단계의 이벤트는 이걸로. 나중에 큐로 바꾸기 자연스러움 |
