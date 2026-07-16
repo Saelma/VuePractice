@@ -148,12 +148,16 @@ updated_at  TIMESTAMP   ← BaseTimeEntity
 테이블이 아니라 **도메인 순서**로만 잡는다. 실제 스키마는 각 단계에서 확정.
 
 ```
-member          회원 · 인증 (게시판 5단계 로그인이 시작점)
-  └▶ catalog    상품 · 카테고리   (게시판 CRUD/검색 패턴 이식)
-       └▶ cart  장바구니          (Redis 활용)
-            └▶ orders / order_item   주문 · 결제
-                 └▶ review / inquiry  상품 리뷰 · 문의 (게시판 경험 재활용)
+member          회원 · 인증 (게시판 5단계 로그인이 시작점)          ✅
+  └▶ catalog    상품 · 카테고리   (게시판 CRUD/검색 패턴 이식)       ✅
+       └▶ cart  장바구니          (Redis 활용)                      ✅
+            └▶ orders / order_item   주문 · 결제                     ✅
+                 └▶ review / inquiry  상품 리뷰 · 문의 (게시판 경험 재활용)  ✅ 2026-07-16
 ```
+
+> **review / inquiry (2026-07-16 구현)**: 상품에 **느슨한 UUID 참조**(product_id)로 연결, polymorphic FK 없이 별도 테이블.
+> 리뷰는 **구매자만**(order 도메인 `hasPurchased` 공개 API로 인증)·상품당 1회·평균별점 집계. 문의는 **비밀글 마스킹**(응답 DTO)·**ADMIN 답변**·상태(WAITING/ANSWERED).
+> 도메인 간 통신은 공개 서비스로만(catalog `ProductQueryService.ensureExists`, order `OrderService.hasPurchased`).
 
 ---
 
