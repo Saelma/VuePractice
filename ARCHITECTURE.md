@@ -221,7 +221,7 @@ Spring Boot ──(로그)──┐
 | ~~**HTTPS** (nginx TLS 종단)~~ | ✅ **완료** 2026-07-16 — self-signed(SAN IP), 80→443 리다이렉트 (§6.0) |
 | **Sentry** (에러추적) | ⏸ 보류 — 관측/MSA 단계에 관측 스택과 함께 (모노레포 단계엔 오버엔지니어링, 2026-07-16 재판단) |
 | **Spring Batch** | 대량·재시작 배치 작업이 생길 때 (§6.0) |
-| ApplicationEventPublisher (스프링 내부 이벤트) | **지금부터** — 모노레포 단계의 이벤트는 이걸로. 나중에 큐로 바꾸기 자연스러움 |
+| ApplicationEventPublisher (스프링 내부 이벤트) | ✅ **도입 시작**(2026-07-16) — `OrderPlacedEvent`(checkout 발행) → `OrderNotificationListener`(notification 도메인, `@TransactionalEventListener` AFTER_COMMIT). order는 구독자를 모름(이벤트로만 통신). MSA 단계에 RabbitMQ 메시지로 승격 |
 | Spring Modulith (도메인 경계 검증) | 도메인이 늘어 경계 규칙을 테스트로 강제하고 싶을 때 |
 | Docker | 첫 서비스 분리를 시작할 때 (k8s 제외, compose까지) |
 | 컨테이너 모니터링 (Portainer/ctop + cAdvisor→Grafana) | Docker 전환과 세트. Docker Desktop은 서버엔 제외 |
