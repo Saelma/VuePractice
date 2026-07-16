@@ -45,6 +45,8 @@ dependencies {
 
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.oracle.database.jdbc:ojdbc11'
+	// SQL 로깅 (dev 프로파일 한정) — 실제 SQL+바인딩값+실행시간. 운영은 URL을 안 바꿔 미사용.
+	runtimeOnly 'p6spy:p6spy:3.9.1'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
