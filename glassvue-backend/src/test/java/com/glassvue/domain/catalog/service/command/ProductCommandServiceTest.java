@@ -8,6 +8,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.glassvue.domain.catalog.config.CatalogProperties;
+import com.glassvue.domain.catalog.entity.Category;
+import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.event.StockRunningLowEvent;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
@@ -38,6 +41,15 @@ class ProductCommandServiceTest {
     private ProductCommandService service;
 
     private final UUID productId = UUID.randomUUID();
+
+    /** 이미지 그룹을 가진 상품 — 삭제 시 이미지까지 정리되는지 보려면 그룹이 있어야 한다. */
+    private Product productWithImageGroup(UUID groupId) {
+        return Product.builder()
+                .name("지바").description("d").price(10_000).stock(1)
+                .status(ProductStatus.SELLING).imageGroupId(groupId)
+                .category(Category.builder().name("키보드").build())
+                .build();
+    }
 
     @BeforeEach
     void setUp() {
@@ -111,19 +123,25 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    @DisplayName("삭제: 없는 상품 → PRODUCT_NOT_FOUND, deleteById 호출 안 함")
+    @DisplayName("삭제: 없는 상품 → PRODUCT_NOT_FOUND, 삭제·이미지 정리 안 함")
     void delete_notFound() {
-        when(productRepository.existsById(productId)).thenReturn(false);
+        when(productRepository.findById(productId)).thenReturn(Optional.empty());
         assertErrorCode(() -> service.delete(productId), ErrorCode.PRODUCT_NOT_FOUND);
-        verify(productRepository, never()).deleteById(any());
+        verify(productRepository, never()).delete(any());
+        verify(imageService, never()).deleteGroup(any());
     }
 
     @Test
-    @DisplayName("삭제: 존재하면 deleteById 호출")
+    @DisplayName("삭제: 상품과 함께 이미지 그룹도 정리한다(주인 없는 이미지 방지)")
     void delete_ok() {
-        when(productRepository.existsById(productId)).thenReturn(true);
+        UUID groupId = UUID.randomUUID();
+        Product product = productWithImageGroup(groupId);
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
         service.delete(productId);
-        verify(productRepository).deleteById(productId);
+
+        verify(productRepository).delete(product);
+        verify(imageService).deleteGroup(groupId);
     }
 
     @Test

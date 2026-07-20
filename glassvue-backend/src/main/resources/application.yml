@@ -76,6 +76,12 @@ notice:
 catalog:
   low-stock-threshold: 5
 
+# 고아 이미지(업로드만 하고 어디에도 안 붙은 것) 정리
+image:
+  cleanup-enabled: true
+  cleanup-grace-hours: 24      # 업로드 후 이 시간이 지난 것만 — 작성 중인 폼의 이미지를 뺏지 않기 위한 유예
+  cleanup-interval-ms: 3600000 # 1시간마다
+
 # 업로드 파일 저장 경로 + 서빙 URL 접두사 (nginx가 /uploads/를 이 디렉토리로 서빙)
 app:
   upload:

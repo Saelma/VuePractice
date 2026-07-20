@@ -61,15 +61,20 @@ public class ReviewCommandService {
 
     public void update(UUID id, ReviewUpdateRequest req, AuthUser user) {
         Review review = findManageable(id, user);
+        UUID oldGroupId = review.getImageGroupId();
         // 이미지는 새 그룹으로 교체(Product.update와 동일한 간단화) — 빈 목록이면 null이 되어 이미지 제거
         review.update(req.rating(), req.content(), imageService.createGroup(req.imageIds()));
+        // createGroup 뒤에 호출해야 한다 — 그래야 옛 그룹엔 사용자가 뺀 이미지만 남는다.
+        imageService.deleteGroup(oldGroupId);
         publishRatingChanged(review.getProductId());
     }
 
     public void delete(UUID id, AuthUser user) {
         Review review = findManageable(id, user);
         UUID productId = review.getProductId();
+        UUID imageGroupId = review.getImageGroupId();
         reviewRepository.delete(review);
+        imageService.deleteGroup(imageGroupId); // 리뷰가 사라지면 첨부 사진도 주인이 없다
         publishRatingChanged(productId);
     }
 

@@ -55,16 +55,21 @@ public class ProductCommandService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         Category category = findCategory(req.categoryId());
+        UUID oldGroupId = product.getImageGroupId();
         UUID imageGroupId = imageService.createGroup(req.imageIds()); // 새 그룹으로 교체(간단화)
         product.update(req.name(), req.description(), req.price(), req.stock(), req.status(), imageGroupId, category);
+        // createGroup이 유지할 이미지를 새 그룹으로 옮긴 뒤라, 옛 그룹엔 사용자가 뺀 이미지만 남는다.
+        // 순서를 바꾸면 유지하려던 이미지까지 지워진다.
+        imageService.deleteGroup(oldGroupId);
     }
 
     @CacheEvict(cacheNames = "products:list", allEntries = true)
     public void delete(UUID id) {
-        if (!productRepository.existsById(id)) {
-            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
-        }
-        productRepository.deleteById(id);
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        UUID imageGroupId = product.getImageGroupId();
+        productRepository.delete(product);
+        imageService.deleteGroup(imageGroupId); // 상품이 사라지면 그 이미지도 주인이 없다
     }
 
     private Category findCategory(UUID categoryId) {

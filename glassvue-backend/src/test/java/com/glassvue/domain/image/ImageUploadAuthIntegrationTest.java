@@ -8,8 +8,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
+import com.glassvue.global.storage.FileStorageService;
 import com.jayway.jsonpath.JsonPath;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,9 +45,23 @@ class ImageUploadAuthIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired MemberRepository memberRepository;
     @Autowired PasswordEncoder passwordEncoder;
+    @Autowired FileStorageService fileStorageService;
+
+    /**
+     * 업로드가 실제로 만든 파일들. **@Transactional은 DB만 롤백하고 파일 쓰기는 되돌리지 않는다** —
+     * 정리하지 않으면 업로드 디렉토리에 8바이트짜리 테스트 파일이 계속 쌓인다(2026-07-20 실제로 5개 발견).
+     * DB row가 없어 고아 이미지 스위퍼도 못 잡으므로 테스트가 스스로 치운다.
+     */
+    private final List<String> uploadedUrls = new ArrayList<>();
 
     private static final String PW = "password123";
     private String userLoginId;
+
+    @AfterEach
+    void cleanUploadedFiles() {
+        uploadedUrls.forEach(fileStorageService::delete);
+        uploadedUrls.clear();
+    }
 
     /** 1x1 PNG — 내용은 중요하지 않고 멀티파트로 받아지는지만 본다. */
     private MockMultipartFile pngFile() {
@@ -71,11 +89,13 @@ class ImageUploadAuthIntegrationTest {
     @DisplayName("일반 사용자(USER)도 이미지를 업로드할 수 있다 — 포토 리뷰의 전제")
     void userCanUpload() throws Exception {
         String token = "Bearer " + login(userLoginId);
-        mockMvc.perform(multipart("/api/images").file(pngFile()).header("Authorization", token))
+        String body = mockMvc.perform(multipart("/api/images").file(pngFile()).header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").isNotEmpty())
-                .andExpect(jsonPath("$.data.url").isNotEmpty());
+                .andExpect(jsonPath("$.data.url").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        uploadedUrls.add(JsonPath.read(body, "$.data.url")); // @AfterEach가 파일 삭제
     }
 
     @Test

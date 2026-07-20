@@ -75,6 +75,35 @@ public class FileStorageService {
         }
     }
 
+    /**
+     * 저장된 파일을 지운다. 없으면 조용히 넘어간다(이미 지워진 경우 = 목표 상태 달성).
+     *
+     * <p>url은 {@code store()}가 돌려준 {@code {urlPrefix}/{uuid}.{ext}} 형태다.
+     * 마지막 경로 조각만 파일명으로 쓰고, {@code dir} 밖으로 나가는 경로는 거부한다
+     * (url이 DB에서 오므로 경로 조작 여지를 남기지 않는다).
+     *
+     * @return 실제로 지웠으면 true
+     */
+    public boolean delete(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        String filename = url.substring(url.lastIndexOf('/') + 1);
+        if (filename.isBlank() || filename.contains("..")) {
+            return false;
+        }
+        Path target = dir.resolve(filename).normalize();
+        if (!target.startsWith(dir)) {
+            return false; // 업로드 디렉토리 밖 → 건드리지 않는다
+        }
+        try {
+            return Files.deleteIfExists(target);
+        } catch (IOException e) {
+            // 정리 작업이라 실패해도 흐름을 막지 않는다. 다음 주기에 다시 시도된다.
+            return false;
+        }
+    }
+
     private static String extensionOf(String name) {
         if (name == null) {
             return "";
