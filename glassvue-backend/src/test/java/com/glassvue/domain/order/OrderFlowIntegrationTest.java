@@ -106,6 +106,9 @@ class OrderFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("ORDERED"))
                 .andExpect(jsonPath("$.data.totalPrice").value(20_000))
+                // memberId는 화면이 "내 주문인가"를 판단해 결제·취소 버튼을 띄우는 근거다.
+                // 빠지면 버튼이 조용히 사라지므로(2026-07-20 실제 발생) 응답 계약으로 고정한다.
+                .andExpect(jsonPath("$.data.memberId").isNotEmpty())
                 .andExpect(jsonPath("$.data.items[0].productName").value("ZZP-테스트상품"));
 
         // 5) 구매자는 발송 불가(관리자 전용) → 403

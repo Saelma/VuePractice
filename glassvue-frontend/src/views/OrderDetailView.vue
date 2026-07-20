@@ -13,6 +13,10 @@ const order = ref(null);
 const error = ref('');
 const loading = ref(true);
 const isAdmin = computed(() => authState.user?.role === 'ADMIN');
+// 결제·취소는 역할이 아니라 **소유 여부**로 갈린다 — 백엔드 pay/cancel이 findByIdAndMemberId로
+// 본인만 허용하는 것과 같은 규칙. 관리자도 직접 구매하므로 !isAdmin으로 가르면
+// 자기 주문인데 버튼이 사라진다(2026-07-20 실제로 발생한 버그).
+const isMine = computed(() => !!order.value && order.value.memberId === authState.user?.id);
 
 async function load() {
   loading.value = true;
@@ -81,8 +85,8 @@ function fmt(v) {
       <div class="mt-6 flex flex-wrap gap-2">
         <DxButton text="주문 목록" styling-mode="outlined" @click="router.push('/orders')" />
 
-        <!-- 구매자 액션 -->
-        <template v-if="!isAdmin">
+        <!-- 구매자 액션: 본인 주문일 때만(관리자도 본인 주문이면 보인다) -->
+        <template v-if="isMine">
           <DxButton
             v-if="order.status === 'ORDERED'"
             text="결제하기" type="success" styling-mode="contained" @click="onPay"
