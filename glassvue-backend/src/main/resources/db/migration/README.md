@@ -28,18 +28,34 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
   V3~V5가 추가하는 컬럼이 이미 들어 있어, 빈 DB에서 "이미 있는 컬럼 ADD"로 실패한다.
 - **검증 방법**(2026-07-20 실측): 빈 스키마를 만들어 앱을 띄우면 V1→V5가 순서대로 적용되고
   `ddl-auto=validate`가 통과해야 한다.
+  검증 전용 계정 **`esptest`는 이미 만들어 두었고 상시 유지한다**(지우지 말 것).
+  마이그레이션을 추가할 때마다 여기서 한 번 돌려보면 된다.
+
   ```bash
-  # 1) 스크래치 계정 (DBA 필요)
+  # 1) 이전 검증 결과를 비운다 (빈 스키마에서 시작해야 의미가 있다)
   sudo -iu oracle bash -c 'sqlplus -S / as sysdba' <<'EOF'
   ALTER SESSION SET CONTAINER=espdb;
-  CREATE USER esptest IDENTIFIED BY "TestPw#2026" QUOTA UNLIMITED ON USERS;
-  GRANT CREATE SESSION, CREATE TABLE, CREATE SEQUENCE TO esptest;
+  -- 스키마만 비우기: 테이블 전부 DROP (계정은 유지)
+  BEGIN
+    FOR t IN (SELECT table_name FROM dba_tables WHERE owner='ESPTEST') LOOP
+      EXECUTE IMMEDIATE 'DROP TABLE ESPTEST."'||t.table_name||'" CASCADE CONSTRAINTS PURGE';
+    END LOOP;
+  END;
+  /
   EOF
+
   # 2) 그 계정으로 기동 (기본 DB를 안 건드리게 자격증명만 덮어쓴다)
   ./gradlew bootRun --args="--server.port=8083 --spring.profiles.active=dev \
       --spring.datasource.username=esptest --spring.datasource.password=TestPw#2026"
-  # 3) 끝나면 DROP USER esptest CASCADE;
+  # 로그에 V1→…→Vn이 순서대로 applied 되고 앱이 뜨면 성공(ddl-auto=validate 통과 = 엔티티와 일치).
   ```
+
+  > 계정이 없어졌다면 다시 만든다(DBA 필요):
+  > ```sql
+  > ALTER SESSION SET CONTAINER=espdb;
+  > CREATE USER esptest IDENTIFIED BY "TestPw#2026" QUOTA UNLIMITED ON USERS;
+  > GRANT CREATE SESSION, CREATE TABLE, CREATE SEQUENCE TO esptest;
+  > ```
 
 > 앞으로 엔티티가 바뀌면 `V1__init.sql`이 아니라 **새 버전**을 추가한다. 적용된 마이그레이션은
 > 수정 금지(체크섬)이고, V1은 baseline 시점 스냅샷으로 고정된 채 남는다.
