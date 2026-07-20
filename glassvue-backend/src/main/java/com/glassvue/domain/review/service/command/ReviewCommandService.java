@@ -1,6 +1,7 @@
 package com.glassvue.domain.review.service.command;
 
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
+import com.glassvue.domain.image.service.ImageService;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.domain.review.dto.ReviewCreateRequest;
@@ -18,7 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 리뷰 조작(command) — 작성 · 수정 · 삭제.
- * 상품 존재는 catalog 공개 서비스, 구매 인증은 order 공개 서비스로 확인한다(도메인 경계).
+ * 상품 존재는 catalog 공개 서비스, 구매 인증은 order 공개 서비스, 포토 리뷰 이미지는
+ * image 공개 서비스로 다룬다(도메인 경계 — 어느 쪽 엔티티도 직접 참조하지 않는다).
  */
 @Slf4j
 @Service
@@ -29,6 +31,7 @@ public class ReviewCommandService {
     private final ReviewRepository reviewRepository;
     private final ProductQueryService productQueryService;
     private final OrderService orderService;
+    private final ImageService imageService;
 
     public UUID create(UUID productId, ReviewCreateRequest req, AuthUser user) {
         productQueryService.ensureExists(productId);
@@ -44,6 +47,7 @@ public class ReviewCommandService {
                 .author(user.nickname())
                 .rating(req.rating())
                 .content(req.content())
+                .imageGroupId(imageService.createGroup(req.imageIds())) // 비면 null
                 .build();
         Review saved = reviewRepository.save(review);
         log.info("Review created: id={} product={} by={}", saved.getId(), productId, user.id());
@@ -52,7 +56,8 @@ public class ReviewCommandService {
 
     public void update(UUID id, ReviewUpdateRequest req, AuthUser user) {
         Review review = findManageable(id, user);
-        review.update(req.rating(), req.content());
+        // 이미지는 새 그룹으로 교체(Product.update와 동일한 간단화) — 빈 목록이면 null이 되어 이미지 제거
+        review.update(req.rating(), req.content(), imageService.createGroup(req.imageIds()));
     }
 
     public void delete(UUID id, AuthUser user) {

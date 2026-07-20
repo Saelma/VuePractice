@@ -16,6 +16,9 @@ import org.hibernate.type.SqlTypes;
 /**
  * 상품 리뷰. 상품(catalog)에는 느슨한 UUID 참조(product_id)로만 연결한다(도메인 경계 유지).
  * 구매 인증은 작성 시점에 order 도메인 공개 서비스로 검증한다(엔티티엔 저장 안 함).
+ *
+ * <p>포토 리뷰는 Product와 동일하게 {@code image_group_id}(느슨한 UUID) 하나만 들고
+ * image 도메인 공개 서비스로 다룬다 — ImageGroup이 설계한 재사용 구조를 그대로 따른다.
  */
 @Entity
 @Getter
@@ -41,21 +44,28 @@ public class Review extends BaseTimeEntity {
     @Column(nullable = false)
     private String content;
 
+    /** 포토 리뷰 이미지 묶음. 이미지가 없으면 null(= 그룹을 만들지 않는다). */
+    @JdbcTypeCode(SqlTypes.BINARY)
+    @Column(name = "image_group_id", columnDefinition = "RAW(16)")
+    private UUID imageGroupId;
+
     @Builder
-    private Review(UUID productId, UUID authorId, String author, int rating, String content) {
+    private Review(UUID productId, UUID authorId, String author, int rating, String content, UUID imageGroupId) {
         this.productId = productId;
         this.authorId = authorId;
         this.author = author;
         this.rating = rating;
         this.content = content;
+        this.imageGroupId = imageGroupId;
     }
 
     public boolean isOwnedBy(UUID memberId) {
         return authorId.equals(memberId);
     }
 
-    public void update(int rating, String content) {
+    public void update(int rating, String content, UUID imageGroupId) {
         this.rating = rating;
         this.content = content;
+        this.imageGroupId = imageGroupId;
     }
 }
