@@ -7,18 +7,26 @@ import { priceText } from '../api/product';
 
 const router = useRouter();
 const orders = ref([]);
+const pageInfo = ref({ page: 0, totalPages: 0, last: true });
 const error = ref('');
 const loading = ref(true);
 
-onMounted(async () => {
+async function load(p = 0) {
+  loading.value = true;
+  error.value = '';
   try {
-    orders.value = await fetchOrders();
+    // 응답이 List → PageResponse로 바뀌었다(2026-07-20 묶음 3). content를 꺼내 써야 한다.
+    const data = await fetchOrders({ page: p, size: 10 });
+    orders.value = data.content;
+    pageInfo.value = { page: data.page, totalPages: data.totalPages, last: data.last };
   } catch (e) {
     error.value = e.message;
   } finally {
     loading.value = false;
   }
-});
+}
+
+onMounted(() => load(0));
 
 function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
@@ -58,6 +66,12 @@ function summary(o) {
           <div class="w-24 text-right font-semibold text-slate-800">{{ priceText(o.totalPrice) }}</div>
         </li>
       </ul>
+
+      <div v-if="pageInfo.totalPages > 1" class="mt-3 flex items-center justify-center gap-3 text-sm">
+        <button class="text-slate-500 disabled:text-slate-300" :disabled="pageInfo.page === 0" @click="load(pageInfo.page - 1)">이전</button>
+        <span class="text-slate-500">{{ pageInfo.page + 1 }} / {{ pageInfo.totalPages }}</span>
+        <button class="text-slate-500 disabled:text-slate-300" :disabled="pageInfo.last" @click="load(pageInfo.page + 1)">다음</button>
+      </div>
     </template>
   </section>
 </template>

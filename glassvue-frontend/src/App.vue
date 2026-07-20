@@ -1,10 +1,11 @@
 <script setup>
-import { onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { RouterLink, RouterView, useRouter } from 'vue-router';
 import { authState, isLoggedIn } from './stores/auth';
 import { logout as apiLogout, loadMe } from './api/auth';
 
 const router = useRouter();
+const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 
 onMounted(() => {
   loadMe(); // 저장된 토큰으로 내 정보 갱신
@@ -24,6 +25,7 @@ async function onLogout() {
         <nav class="flex gap-4 text-sm text-slate-600">
           <RouterLink to="/" class="hover:text-blue-600">공지</RouterLink>
           <RouterLink to="/products" class="hover:text-blue-600">상품</RouterLink>
+          <RouterLink v-if="isAdmin" to="/admin/orders" class="font-medium text-slate-700 hover:text-blue-600">주문 관리</RouterLink>
         </nav>
       </div>
       <div class="flex items-center gap-3 text-sm">

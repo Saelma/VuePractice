@@ -9,6 +9,7 @@ import MyPageView from '../views/MyPageView.vue';
 import ProductListView from '../views/ProductListView.vue';
 import ProductDetailView from '../views/ProductDetailView.vue';
 import ProductFormView from '../views/ProductFormView.vue';
+import OrderAdminView from '../views/OrderAdminView.vue';
 import CategoryAdminView from '../views/CategoryAdminView.vue';
 import CartView from '../views/CartView.vue';
 import OrderListView from '../views/OrderListView.vue';
@@ -31,6 +32,7 @@ const routes = [
   { path: '/admin/categories', name: 'category-admin', component: CategoryAdminView, meta: { requiresAdmin: true } },
   { path: '/cart', name: 'cart', component: CartView, meta: { requiresAuth: true } },
   { path: '/orders', name: 'order-list', component: OrderListView, meta: { requiresAuth: true } },
+  { path: '/admin/orders', name: 'order-admin', component: OrderAdminView, meta: { requiresAdmin: true } },
   { path: '/orders/:id', name: 'order-detail', component: OrderDetailView, props: true, meta: { requiresAuth: true } },
 ];
 
