@@ -1,6 +1,7 @@
 package com.glassvue.domain.catalog.repository;
 
 import com.glassvue.domain.catalog.entity.Product;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -18,4 +19,9 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, Product
     @Modifying
     @Query("update Product p set p.stock = p.stock + :qty where p.id = :id")
     int increaseStock(@Param("id") UUID id, @Param("qty") long qty);
+
+    /** 차감 직후 잔여재고 확인용 — 벌크 UPDATE가 1차 캐시를 안 고치므로 스칼라 프로젝션으로 DB를 직접 읽는다. */
+    @Query("select new com.glassvue.domain.catalog.repository.StockSnapshot(p.name, p.stock)"
+            + " from Product p where p.id = :id")
+    Optional<StockSnapshot> findStockSnapshot(@Param("id") UUID id);
 }

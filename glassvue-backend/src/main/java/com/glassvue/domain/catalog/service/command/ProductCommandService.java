@@ -1,9 +1,11 @@
 package com.glassvue.domain.catalog.service.command;
 
+import com.glassvue.domain.catalog.config.CatalogProperties;
 import com.glassvue.domain.catalog.dto.ProductCreateRequest;
 import com.glassvue.domain.catalog.dto.ProductUpdateRequest;
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.event.StockRunningLowEvent;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
 import com.glassvue.domain.image.service.ImageService;
@@ -13,6 +15,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +29,8 @@ public class ProductCommandService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ImageService imageService;
+    private final CatalogProperties catalogProperties;
+    private final ApplicationEventPublisher eventPublisher;
 
     @CacheEvict(cacheNames = "products:list", allEntries = true)
     public UUID create(ProductCreateRequest req) {
@@ -73,6 +78,18 @@ public class ProductCommandService {
         if (productRepository.decreaseStock(productId, quantity) == 0) {
             throw new BusinessException(ErrorCode.OUT_OF_STOCK);
         }
+        publishIfRunningLow(productId);
+    }
+
+    /**
+     * 차감 후 잔여재고가 임계치 이하면 재고 부족 이벤트 발행 — 구독자(알림 등)는 catalog가 모른다.
+     * 재고는 catalog 소유이므로 주문이 아니라 이곳이 발행 주체다.
+     */
+    private void publishIfRunningLow(UUID productId) {
+        productRepository.findStockSnapshot(productId)
+                .filter(s -> s.stock() <= catalogProperties.lowStockThreshold())
+                .ifPresent(s -> eventPublisher.publishEvent(new StockRunningLowEvent(
+                        productId, s.name(), s.stock(), catalogProperties.lowStockThreshold())));
     }
 
     /** 주문 취소 시 재고 복원. (상품이 이미 삭제됐으면 조용히 무시) */

@@ -72,6 +72,10 @@ notice:
   view-count:
     flush-interval-ms: 30000
 
+# 재고가 이 값 이하로 떨어지면 재고 부족 이벤트 발행(0=품절 포함)
+catalog:
+  low-stock-threshold: 5
+
 # 업로드 파일 저장 경로 + 서빙 URL 접두사 (nginx가 /uploads/를 이 디렉토리로 서빙)
 app:
   upload:
