@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 class OrderTest {
 
     private Order newOrder() {
-        return Order.create(UUID.randomUUID(),
+        return Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), "지바", 10_000, 2)));
     }
 
@@ -65,7 +65,7 @@ class OrderTest {
     @DisplayName("소유권 판별")
     void ownership() {
         UUID me = UUID.randomUUID();
-        Order o = Order.create(me, List.of(OrderItem.of(UUID.randomUUID(), "x", 1000, 1)));
+        Order o = Order.create(me, "구매자닉", List.of(OrderItem.of(UUID.randomUUID(), "x", 1000, 1)));
         assertThat(o.isOwnedBy(me)).isTrue();
         assertThat(o.isOwnedBy(UUID.randomUUID())).isFalse();
     }

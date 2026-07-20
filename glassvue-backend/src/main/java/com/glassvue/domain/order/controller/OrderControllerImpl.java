@@ -1,14 +1,16 @@
 package com.glassvue.domain.order.controller;
 
 import com.glassvue.domain.order.dto.OrderResponse;
+import com.glassvue.domain.order.dto.OrderSearchCondition;
+import com.glassvue.global.response.PageResponse;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.security.LoginUser;
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,14 +28,15 @@ public class OrderControllerImpl implements OrderController {
     @Override
     @PostMapping
     public ResponseEntity<ApiResponse<UUID>> checkout(@LoginUser AuthUser user) {
-        UUID id = orderService.checkout(user.id());
+        UUID id = orderService.checkout(user);
         return ResponseEntity.created(URI.create("/api/orders/" + id)).body(ApiResponse.ok(id));
     }
 
     @Override
     @GetMapping
-    public ResponseEntity<ApiResponse<List<OrderResponse>>> myOrders(@LoginUser AuthUser user) {
-        return ResponseEntity.ok(ApiResponse.ok(orderService.myOrders(user.id())));
+    public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> myOrders(
+            @LoginUser AuthUser user, OrderSearchCondition condition, Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(orderService.myOrders(user.id(), condition, pageable)));
     }
 
     @Override

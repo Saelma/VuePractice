@@ -45,10 +45,11 @@ class OrderServiceTest {
     @InjectMocks OrderService orderService;
 
     private final UUID memberId = UUID.randomUUID();
+    private final AuthUser buyer = new AuthUser(memberId, Role.USER, "구매자닉");
     private final UUID orderId = UUID.randomUUID();
 
     private Order orderWith(OrderItem... items) {
-        return Order.create(memberId, List.of(items));
+        return Order.create(memberId, "구매자닉", List.of(items));
     }
     private Order sampleOrder() {
         return orderWith(OrderItem.of(UUID.randomUUID(), "지바", 10_000, 2));
@@ -171,7 +172,7 @@ class OrderServiceTest {
         when(cartService.getCart(memberId)).thenReturn(cartWith(availableItem(pid, 2)));
         when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        orderService.checkout(memberId);
+        orderService.checkout(buyer);
 
         verify(productCommandService).decreaseStock(pid, 2);
         verify(cartService).clear(memberId);
@@ -182,7 +183,7 @@ class OrderServiceTest {
     @DisplayName("결제: 빈 장바구니 → CART_EMPTY, 이벤트/저장 없음")
     void checkout_emptyCart() {
         when(cartService.getCart(memberId)).thenReturn(cartWith());
-        assertErrorCode(() -> orderService.checkout(memberId), ErrorCode.CART_EMPTY);
+        assertErrorCode(() -> orderService.checkout(buyer), ErrorCode.CART_EMPTY);
         verify(orderRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -193,7 +194,7 @@ class OrderServiceTest {
         UUID pid = UUID.randomUUID();
         CartItemResponse soldOut = new CartItemResponse(pid, "품절품", 10_000, ProductStatus.SOLD_OUT, 1, 10_000, false);
         when(cartService.getCart(memberId)).thenReturn(cartWith(soldOut));
-        assertErrorCode(() -> orderService.checkout(memberId), ErrorCode.UNAVAILABLE_ITEM);
+        assertErrorCode(() -> orderService.checkout(buyer), ErrorCode.UNAVAILABLE_ITEM);
         verify(eventPublisher, never()).publishEvent(any());
     }
 }

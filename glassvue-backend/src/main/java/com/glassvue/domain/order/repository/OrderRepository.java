@@ -8,9 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface OrderRepository extends JpaRepository<Order, UUID> {
-
-    List<Order> findByMemberIdOrderByCreatedAtDesc(UUID memberId);
+public interface OrderRepository extends JpaRepository<Order, UUID>, OrderRepositoryCustom {
 
     Optional<Order> findByIdAndMemberId(UUID id, UUID memberId);
 

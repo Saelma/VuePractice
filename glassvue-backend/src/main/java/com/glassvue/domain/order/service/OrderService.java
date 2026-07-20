@@ -5,7 +5,9 @@ import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.cart.service.CartService;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.order.dto.AdminOrderResponse;
 import com.glassvue.domain.order.dto.OrderResponse;
+import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
@@ -13,6 +15,7 @@ import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
 import org.springframework.context.ApplicationEventPublisher;
 import java.util.ArrayList;
@@ -20,6 +23,8 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,9 +38,15 @@ public class OrderService {
     private final ProductCommandService productCommandService;
     private final ApplicationEventPublisher eventPublisher;
 
-    /** 장바구니 → 주문 생성. 재고 원자적 차감 + 카트 비우기. */
+    /**
+     * 장바구니 → 주문 생성. 재고 원자적 차감 + 카트 비우기.
+     *
+     * <p>{@code AuthUser}를 받는 이유는 닉네임을 주문에 스냅샷으로 남기기 위해서다
+     * (탈퇴하면 회원 row가 사라지므로 조회 방식으로는 과거 주문의 구매자를 알 수 없다).
+     */
     @Transactional
-    public UUID checkout(UUID memberId) {
+    public UUID checkout(AuthUser user) {
+        UUID memberId = user.id();
         CartResponse cart = cartService.getCart(memberId);
         if (cart.items().isEmpty()) {
             throw new BusinessException(ErrorCode.CART_EMPTY);
@@ -50,7 +61,7 @@ public class OrderService {
             orderItems.add(OrderItem.of(i.productId(), i.name(), i.price(), i.quantity()));
         }
 
-        Order order = orderRepository.save(Order.create(memberId, orderItems));
+        Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems));
         cartService.clear(memberId);
         // 도메인 이벤트 발행 — 구독자(알림·포인트 등)는 order가 모른다. AFTER_COMMIT 리스너가 커밋된 주문에만 반응.
         eventPublisher.publishEvent(OrderPlacedEvent.from(order));
@@ -64,11 +75,21 @@ public class OrderService {
         return orderRepository.existsPurchase(memberId, productId);
     }
 
+    /**
+     * 내 주문 목록(페이징). 조건의 소유자 스코프를 서버가 본인 id로 고정하므로
+     * 클라이언트가 memberId를 넘겨 남의 주문을 볼 수 없다.
+     */
     @Transactional(readOnly = true)
-    public List<OrderResponse> myOrders(UUID memberId) {
-        return orderRepository.findByMemberIdOrderByCreatedAtDesc(memberId).stream()
-                .map(OrderResponse::from)
-                .toList();
+    public PageResponse<OrderResponse> myOrders(UUID memberId, OrderSearchCondition condition, Pageable pageable) {
+        Page<Order> page = orderRepository.search(condition.scopedTo(memberId), pageable);
+        return PageResponse.from(page.map(OrderResponse::from));
+    }
+
+    /** 관리자 주문 목록 — 전체 주문. 구매자 정보를 포함한 별도 응답을 쓴다. */
+    @Transactional(readOnly = true)
+    public PageResponse<AdminOrderResponse> adminOrders(OrderSearchCondition condition, Pageable pageable) {
+        Page<Order> page = orderRepository.search(condition.forAll(), pageable);
+        return PageResponse.from(page.map(AdminOrderResponse::from));
     }
 
     /** 주문 상세 — 본인 주문만. 단, ADMIN은 발송 처리를 위해 전체 주문 조회 가능. */

@@ -1,13 +1,16 @@
 package com.glassvue.domain.order.controller;
 
 import com.glassvue.domain.order.dto.OrderResponse;
+import com.glassvue.domain.order.dto.OrderSearchCondition;
+import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.util.List;
 import java.util.UUID;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "Order", description = "주문 API (로그인 필요)")
@@ -16,8 +19,11 @@ public interface OrderController {
     @Operation(summary = "주문 생성 (장바구니 결제)")
     ResponseEntity<ApiResponse<UUID>> checkout(@Parameter(hidden = true) AuthUser user);
 
-    @Operation(summary = "내 주문 목록")
-    ResponseEntity<ApiResponse<List<OrderResponse>>> myOrders(@Parameter(hidden = true) AuthUser user);
+    @Operation(summary = "내 주문 목록 (상태 필터·페이징)")
+    ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> myOrders(
+            @Parameter(hidden = true) AuthUser user,
+            @ParameterObject OrderSearchCondition condition,
+            @ParameterObject Pageable pageable);
 
     @Operation(summary = "주문 상세 (본인, ADMIN은 전체)")
     ResponseEntity<ApiResponse<OrderResponse>> get(@Parameter(hidden = true) AuthUser user, UUID id);

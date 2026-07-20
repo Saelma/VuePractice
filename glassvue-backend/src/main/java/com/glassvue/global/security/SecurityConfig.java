@@ -43,6 +43,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
                         .requestMatchers("/api/members/**").authenticated()
                         .requestMatchers("/api/cart/**").authenticated()
+                        // 관리자 전용 API는 경로로 모아 한 줄로 막는다 — 엔드포인트가 늘어도 권한 설정을
+                        // 빠뜨릴 수 없다(개별 매처를 잊는 사고 방지). /api/orders/** 보다 먼저 와야 한다.
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // 발송 처리는 관리자만(그 외 주문 API는 로그인). ship 매처를 orders/** 보다 먼저.
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/ship").hasRole("ADMIN")
                         .requestMatchers("/api/orders/**").authenticated()
