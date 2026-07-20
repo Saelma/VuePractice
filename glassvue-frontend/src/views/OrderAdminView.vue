@@ -6,7 +6,7 @@
  * 그래서 기본 필터를 **결제완료(PAID)** 로 둔다 — 관리자가 이 화면에 오는 이유가
  * "발송할 주문 찾기"이기 때문. 전체를 보려면 필터를 바꾸면 된다.
  */
-import { ref, onMounted } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
@@ -32,6 +32,20 @@ const store = new CustomStore({
   },
 });
 
+/**
+ * 빈 목록 문구는 필터에 따라 다르게 말한다.
+ *
+ * 기본 필터가 PAID(발송 대기)라 발송할 게 없으면 자연히 빈 화면이 되는데,
+ * "조건에 맞는 주문이 없습니다"만 뜨면 화면이 고장 난 것처럼 보인다.
+ * 기본 상태에서는 **"할 일이 없다"** 는 뜻으로 읽히게 문구를 바꾼다.
+ */
+const noDataText = computed(() => {
+  const { status, buyer } = applied.value;
+  if (status === 'PAID' && !buyer) return '발송 대기 중인 주문이 없습니다.';
+  if (status === null && !buyer) return '주문이 없습니다.';
+  return '조건에 맞는 주문이 없습니다.';
+});
+
 function search() {
   applied.value = { ...form.value };
   gridRef.value?.instance.refresh();
@@ -55,10 +69,6 @@ async function onShip(row) {
 function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
 }
-
-onMounted(() => {
-  // 진입 시 기본 필터(PAID)로 한 번 로드됨 — CustomStore가 알아서 호출한다.
-});
 </script>
 
 <template>
@@ -96,7 +106,7 @@ onMounted(() => {
       :show-borders="true"
       :column-auto-width="true"
       :hover-state-enabled="true"
-      no-data-text="조건에 맞는 주문이 없습니다."
+      :no-data-text="noDataText"
     >
       <DxColumn data-field="createdAt" caption="주문일시" :width="160" :calculate-display-value="(r) => fmt(r.createdAt)" />
       <DxColumn data-field="buyerNickname" caption="구매자" :width="130" />
