@@ -13,6 +13,14 @@
 - sudo가 필요한 명령은 실행하지 말고 "제안"만 할 것. 내가 직접 확인 후 실행한다.
 - 위 버전과 다른 걸 설치하려 하지 말 것.
 
+# 작업 절차 (코드 규칙과 별개 — 반드시 먼저 읽을 것)
+- **작업 시작 전 `docs/WORKING-AGREEMENTS.md`를 읽는다.** 마이그레이션·권한·검증·배포·핸드오프 작성에
+  관한 합의가 거기 있고, 각 항목이 어떤 사고에서 나왔는지도 함께 적혀 있다.
+- 작업 후보를 뽑을 때는 **최신 핸드오프 하나만 보지 않는다.** 최소 2일치 + ARCHITECTURE.md를 대조할 것
+  (직전 문서에서 조용히 빠진 이월 항목을 놓친다). 각 핸드오프 끝의 `## 이월` 절이 1차 근거다.
+- 새 규칙·교훈이 생기면 날짜별 핸드오프에만 적지 말고 `docs/WORKING-AGREEMENTS.md`로 옮긴다
+  (핸드오프는 다음 날 문서가 생기면 묻힌다).
+
 # 아키텍처 규칙 (코드 작성 시 반드시 따를 것)
 - 패키지는 domain/ + global/로 나눈다. 업무 도메인은 domain.<도메인>(member·notice·coupon·project…), 공통·인프라(common·response·exception·config·security·redis·messaging·log)는 global 아래. controller/service/repository를 최상위에 두는 레이어 구조 금지 — MSA 전환 시 domain 하위를 폴더째 분리 가능해야 함.
 - 메시징 패키지는 구현체에 묶지 않고 global/messaging 으로 둔다 (이벤트 큐는 RabbitMQ 확정, Kafka 아님).
