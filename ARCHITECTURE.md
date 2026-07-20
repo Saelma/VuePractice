@@ -180,6 +180,12 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
 
 > **review / inquiry (2026-07-16 구현)**: 상품에 **느슨한 UUID 참조**(product_id)로 연결, polymorphic FK 없이 별도 테이블.
 > 리뷰는 **구매자만**(order 도메인 `hasPurchased` 공개 API로 인증)·상품당 1회·평균별점 집계. 문의는 **비밀글 마스킹**(응답 DTO)·**ADMIN 답변**·상태(WAITING/ANSWERED).
+>
+> **2026-07-20 마감**: ①구매 인증 범위를 `ORDERED`만 → `ORDERED·PAID·SHIPPED`로 수정(**CANCELLED만 제외**).
+> 주문 상태 확장(7/16) 때 누락돼 결제·배송 완료 고객이 리뷰를 못 쓰던 버그. 새 상태가 자동으로 포함되지
+> 않도록 `<> CANCELLED`가 아닌 **명시적 열거**로 둔다. ②**포토 리뷰** — `review.image_group_id`로
+> ImageGroup 재사용 구조의 두 번째 사용처(FK 없는 느슨한 UUID, `ImageService` 공개 API로만 접근).
+> ③상품 목록 평균별점은 **비정규화 + 이벤트 동기화**(§6.0 이벤트 항목 참조).
 > 도메인 간 통신은 공개 서비스로만(catalog `ProductQueryService.ensureExists`, order `OrderService.hasPurchased`).
 
 > **주문 상태(2026-07-16 구현)**: `ORDERED → PAID → SHIPPED` (+CANCELLED, ORDERED·PAID만). 취소 시 재고 복원.
@@ -243,7 +249,7 @@ Spring Boot ──(로그)──┐
 | ~~**HTTPS** (nginx TLS 종단)~~ | ✅ **완료** 2026-07-16 — self-signed(SAN IP), 80→443 리다이렉트 (§6.0) |
 | **Sentry** (에러추적) | ⏸ 보류 — 관측/MSA 단계에 관측 스택과 함께 (모노레포 단계엔 오버엔지니어링, 2026-07-16 재판단) |
 | **Spring Batch** | 대량·재시작 배치 작업이 생길 때 (§6.0) |
-| ApplicationEventPublisher (스프링 내부 이벤트) | ✅ **도입 시작**(2026-07-16). **3층 구조**: ①`DomainEvent`(global/messaging 마커 인터페이스, 이벤트가 implements) ②`OrderEventListener`(어댑터 — `@TransactionalEventListener` AFTER_COMMIT + **`@Async`** 수신·위임만) ③`OrderNotificationHandler`(진짜 주체 — 로직). `OrderPlacedEvent`(checkout 발행) → 리스너 → 핸들러. order는 구독자를 모름. 비동기는 `AsyncConfig`(바운드 풀). 인프로세스 @Async는 best-effort → 유실 금지는 아웃박스/RabbitMQ. **MSA 시 리스너 자리에 RabbitMQ 컨슈머, Handler는 재사용**<br>**2026-07-20 확장**: `OrderCancelledEvent`(cancel 발행, Placed와 대칭) + **`StockRunningLowEvent`** 추가. 재고 이벤트는 **catalog가 발행 주체** — 재고는 catalog 소유이고 주문 외 경로(관리자 수정 등)로 줄어도 같은 알림이 나가야 하므로. 덕분에 order는 재고 알림의 존재를 모르고 `OrderService`는 무수정(fan-out 실증: 주문 1건 → Handler 2개가 각각 `event-*` 스레드에서 반응). 임계치는 `catalog.low-stock-threshold`(기본 5, 0=품절 포함). **재고 복원은 이벤트로 빼지 않는다** — 취소 처리의 일부(동기 성공 필수)지 best-effort 후처리가 아님 |
+| ApplicationEventPublisher (스프링 내부 이벤트) | ✅ **도입 시작**(2026-07-16). **3층 구조**: ①`DomainEvent`(global/messaging 마커 인터페이스, 이벤트가 implements) ②`OrderEventListener`(어댑터 — `@TransactionalEventListener` AFTER_COMMIT + **`@Async`** 수신·위임만) ③`OrderNotificationHandler`(진짜 주체 — 로직). `OrderPlacedEvent`(checkout 발행) → 리스너 → 핸들러. order는 구독자를 모름. 비동기는 `AsyncConfig`(바운드 풀). 인프로세스 @Async는 best-effort → 유실 금지는 아웃박스/RabbitMQ. **MSA 시 리스너 자리에 RabbitMQ 컨슈머, Handler는 재사용**<br>**2026-07-20 확장**: `OrderCancelledEvent`(cancel 발행, Placed와 대칭) + **`StockRunningLowEvent`** 추가. 재고 이벤트는 **catalog가 발행 주체** — 재고는 catalog 소유이고 주문 외 경로(관리자 수정 등)로 줄어도 같은 알림이 나가야 하므로. 덕분에 order는 재고 알림의 존재를 모르고 `OrderService`는 무수정(fan-out 실증: 주문 1건 → Handler 2개가 각각 `event-*` 스레드에서 반응). 임계치는 `catalog.low-stock-threshold`(기본 5, 0=품절 포함). **재고 복원은 이벤트로 빼지 않는다** — 취소 처리의 일부(동기 성공 필수)지 best-effort 후처리가 아님<br>**2026-07-20 확장 2**: **`ReviewRatingChangedEvent`**(review 발행, 작성·수정·삭제) → catalog `ReviewEventListener` → `RatingSyncHandler`가 `product.avg_rating`/`review_count` 비정규화 갱신 + `products:list` 캐시 evict. **이벤트를 쓴 이유는 성능이 아니라 순환 회피** — catalog가 review를 조회하면 기존 `review → catalog`와 합쳐져 도메인 순환이 되고 MSA 분리가 깨진다. 그래서 **집계값을 이벤트 페이로드에 실어 보낸다**(`productId`만 보내면 구독자가 review를 되물어야 해서 순환이 되살아남). 결과: 상품 목록이 조인·추가쿼리 **0회**로 별점을 읽고, 의존 방향은 `review → catalog` 한쪽뿐 |
 | Spring Modulith (도메인 경계 검증) | 도메인이 늘어 경계 규칙을 테스트로 강제하고 싶을 때 |
 | Docker | 첫 서비스 분리를 시작할 때 (k8s 제외, compose까지) |
 | 컨테이너 모니터링 (Portainer/ctop + cAdvisor→Grafana) | Docker 전환과 세트. Docker Desktop은 서버엔 제외 |
