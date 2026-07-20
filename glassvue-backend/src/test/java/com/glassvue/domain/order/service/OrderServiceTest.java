@@ -18,6 +18,7 @@ import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.entity.OrderStatus;
+import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
@@ -111,6 +112,7 @@ class OrderServiceTest {
         orderService.cancel(orderId, memberId);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         verify(productCommandService, times(1)).increaseStock(p1, 3);
+        verify(eventPublisher).publishEvent(any(OrderCancelledEvent.class));
     }
 
     @Test
@@ -122,6 +124,7 @@ class OrderServiceTest {
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
         assertErrorCode(() -> orderService.cancel(orderId, memberId), ErrorCode.ORDER_NOT_CANCELLABLE);
         verify(productCommandService, never()).increaseStock(any(), org.mockito.ArgumentMatchers.anyLong());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

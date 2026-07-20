@@ -1,5 +1,6 @@
 package com.glassvue.domain.notification;
 
+import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,6 +16,11 @@ public class OrderNotificationHandler {
 
     public void handle(OrderPlacedEvent event) {
         log.info("[알림] 주문 확인 발송(stub) — order={} member={} amount={} items={}",
+                event.orderId(), event.memberId(), event.totalPrice(), event.itemCount());
+    }
+
+    public void handle(OrderCancelledEvent event) {
+        log.info("[알림] 주문 취소 안내 발송(stub) — order={} member={} amount={} items={}",
                 event.orderId(), event.memberId(), event.totalPrice(), event.itemCount());
     }
 }

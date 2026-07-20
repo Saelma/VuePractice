@@ -8,6 +8,7 @@ import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
+import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
@@ -114,6 +115,7 @@ public class OrderService {
         }
         order.cancel();
         order.getItems().forEach(it -> productCommandService.increaseStock(it.getProductId(), it.getQuantity()));
+        eventPublisher.publishEvent(OrderCancelledEvent.from(order));
         log.info("Order cancelled: {}", id);
     }
 }

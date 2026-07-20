@@ -2,6 +2,7 @@ package com.glassvue.domain.notification;
 
 import static org.mockito.Mockito.verify;
 
+import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +23,14 @@ class OrderEventListenerTest {
     void delegatesToHandler() {
         OrderPlacedEvent event = new OrderPlacedEvent(UUID.randomUUID(), UUID.randomUUID(), 10_000, 1);
         listener.onOrderPlaced(event);
+        verify(notificationHandler).handle(event);
+    }
+
+    @Test
+    @DisplayName("취소 이벤트도 Handler에 위임만 한다")
+    void delegatesCancelledToHandler() {
+        OrderCancelledEvent event = new OrderCancelledEvent(UUID.randomUUID(), UUID.randomUUID(), 30_000, 2);
+        listener.onOrderCancelled(event);
         verify(notificationHandler).handle(event);
     }
 }
