@@ -3,6 +3,7 @@ package com.glassvue.domain.review.service.command;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,8 +13,10 @@ import com.glassvue.domain.image.service.ImageService;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.domain.review.dto.ReviewCreateRequest;
+import com.glassvue.domain.review.dto.ReviewStats;
 import com.glassvue.domain.review.dto.ReviewUpdateRequest;
 import com.glassvue.domain.review.entity.Review;
+import com.glassvue.domain.review.event.ReviewRatingChangedEvent;
 import com.glassvue.domain.review.repository.ReviewRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
@@ -21,6 +24,7 @@ import com.glassvue.global.security.AuthUser;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +32,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class ReviewCommandServiceTest {
@@ -36,12 +41,19 @@ class ReviewCommandServiceTest {
     @Mock ProductQueryService productQueryService;
     @Mock OrderService orderService;
     @Mock ImageService imageService;
+    @Mock ApplicationEventPublisher eventPublisher;
     @InjectMocks ReviewCommandService service;
 
     private final UUID productId = UUID.randomUUID();
     private final UUID oldGroupId = UUID.randomUUID();
     private final AuthUser user = new AuthUser(UUID.randomUUID(), Role.USER, "kim");
     private final AuthUser admin = new AuthUser(UUID.randomUUID(), Role.ADMIN, "admin");
+
+    /** 집계 이벤트 발행은 모든 성공 경로에 있으므로 기본값을 깔아둔다(필요한 테스트만 덮어씀). */
+    @BeforeEach
+    void stubStats() {
+        lenient().when(reviewRepository.statsByProduct(any())).thenReturn(new ReviewStats(null, 0));
+    }
 
     private Review reviewBy(UUID authorId) {
         return Review.builder().productId(productId).authorId(authorId).author("nick").rating(5).content("c")
@@ -166,5 +178,64 @@ class ReviewCommandServiceTest {
         when(reviewRepository.findById(any())).thenReturn(Optional.of(other));
         service.delete(UUID.randomUUID(), admin);
         verify(reviewRepository).delete(other);
+    }
+
+    /** 발행된 ReviewRatingChangedEvent를 잡아 반환. */
+    private ReviewRatingChangedEvent capturedEvent() {
+        ArgumentCaptor<ReviewRatingChangedEvent> captor =
+                ArgumentCaptor.forClass(ReviewRatingChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    @DisplayName("작성: 재계산한 집계를 이벤트에 담아 발행(구독자가 review를 되묻지 않도록)")
+    void create_publishesRatingChanged() {
+        when(orderService.hasPurchased(user.id(), productId)).thenReturn(true);
+        when(reviewRepository.existsByProductIdAndAuthorId(productId, user.id())).thenReturn(false);
+        when(reviewRepository.save(any(Review.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(reviewRepository.statsByProduct(productId)).thenReturn(new ReviewStats(4.25, 4));
+
+        service.create(productId, new ReviewCreateRequest(5, "좋아요", List.of()), user);
+
+        ReviewRatingChangedEvent event = capturedEvent();
+        assertThat(event.productId()).isEqualTo(productId);
+        assertThat(event.averageRating()).isEqualTo(4.3); // 소수 첫째 자리 반올림
+        assertThat(event.reviewCount()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("수정: 별점이 바뀌므로 집계 이벤트를 발행")
+    void update_publishesRatingChanged() {
+        Review mine = reviewBy(user.id());
+        when(reviewRepository.findById(any())).thenReturn(Optional.of(mine));
+        when(reviewRepository.statsByProduct(productId)).thenReturn(new ReviewStats(3.0, 2));
+
+        service.update(UUID.randomUUID(), new ReviewUpdateRequest(2, "수정됨", List.of()), user);
+
+        assertThat(capturedEvent().averageRating()).isEqualTo(3.0);
+    }
+
+    @Test
+    @DisplayName("삭제: 마지막 리뷰가 사라지면 평균 0.0·개수 0으로 발행")
+    void delete_publishesZeroWhenLastReviewGone() {
+        Review mine = reviewBy(user.id());
+        when(reviewRepository.findById(any())).thenReturn(Optional.of(mine));
+        when(reviewRepository.statsByProduct(productId)).thenReturn(new ReviewStats(null, 0));
+
+        service.delete(UUID.randomUUID(), user);
+
+        ReviewRatingChangedEvent event = capturedEvent();
+        assertThat(event.averageRating()).isEqualTo(0.0);
+        assertThat(event.reviewCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("작성 실패(구매 안 함) → 집계 이벤트 없음")
+    void create_failure_noEvent() {
+        when(orderService.hasPurchased(user.id(), productId)).thenReturn(false);
+        assertErrorCode(() -> service.create(productId, new ReviewCreateRequest(5, "좋아요", List.of()), user),
+                ErrorCode.REVIEW_NOT_PURCHASED);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 }

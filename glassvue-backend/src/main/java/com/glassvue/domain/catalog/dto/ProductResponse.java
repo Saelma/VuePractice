@@ -17,6 +17,8 @@ public record ProductResponse(
         UUID categoryId,
         String categoryName,
         List<ImageResponse> images,
+        double averageRating,
+        long reviewCount,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -29,6 +31,6 @@ public record ProductResponse(
         return new ProductResponse(
                 p.getId(), p.getName(), p.getDescription(), p.getPrice(), p.getStock(),
                 p.getStatus(), p.getCategory().getId(), p.getCategory().getName(),
-                images, p.getCreatedAt(), p.getUpdatedAt());
+                images, p.getAvgRating(), p.getReviewCount(), p.getCreatedAt(), p.getUpdatedAt());
     }
 }

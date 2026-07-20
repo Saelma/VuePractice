@@ -50,6 +50,14 @@ public class Product extends BaseTimeEntity {
     @JoinColumn(name = "category_id", columnDefinition = "RAW(16)", nullable = false)
     private Category category;
 
+    // 리뷰 집계 비정규화 — review 도메인이 ReviewRatingChangedEvent로 밀어넣는다(catalog는 review를 모른다).
+    // 목록 조회에서 조인/추가쿼리 없이 읽으려는 것. 상품 생성/수정으로는 바뀌지 않는다.
+    @Column(name = "avg_rating", nullable = false)
+    private double avgRating;
+
+    @Column(name = "review_count", nullable = false)
+    private long reviewCount;
+
     @Builder
     private Product(String name, String description, long price, long stock,
                     ProductStatus status, UUID imageGroupId, Category category) {

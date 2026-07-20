@@ -38,12 +38,11 @@ public class ReviewQueryService {
                 .map(Review::getImageGroupId).filter(Objects::nonNull).toList();
         Map<UUID, List<ImageResponse>> imagesByGroup = imageService.findByGroups(groupIds);
 
-        double average = stats.average() == null ? 0.0 : Math.round(stats.average() * 10) / 10.0;
         PageResponse<ReviewResponse> mapped = PageResponse.from(page.map(r -> ReviewResponse.from(
                 r,
                 r.getImageGroupId() == null
                         ? List.of()
                         : imagesByGroup.getOrDefault(r.getImageGroupId(), List.of()))));
-        return new ProductReviewsResponse(average, stats.count(), mapped);
+        return new ProductReviewsResponse(stats.roundedAverage(), stats.count(), mapped);
     }
 }

@@ -33,7 +33,7 @@ class CartServiceTest {
 
     private ProductResponse product(long price, long stock, ProductStatus status) {
         return new ProductResponse(p1, "지바", "desc", price, stock, status,
-                UUID.randomUUID(), "전자기기", List.of(), null, null);
+                UUID.randomUUID(), "전자기기", List.of(), 0.0, 0L, null, null);
     }
 
     @Test

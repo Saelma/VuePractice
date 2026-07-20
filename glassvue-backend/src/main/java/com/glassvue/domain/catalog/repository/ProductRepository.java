@@ -20,6 +20,15 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, Product
     @Query("update Product p set p.stock = p.stock + :qty where p.id = :id")
     int increaseStock(@Param("id") UUID id, @Param("qty") long qty);
 
+    /**
+     * 리뷰 집계 비정규화 컬럼 갱신 — ReviewRatingChangedEvent 수신 시.
+     * 상품 전체를 로딩·더티체킹할 이유가 없어 벌크 UPDATE로 두 컬럼만 건드린다.
+     * 반영된 행 수 반환(0 = 이미 삭제된 상품).
+     */
+    @Modifying
+    @Query("update Product p set p.avgRating = :avg, p.reviewCount = :cnt where p.id = :id")
+    int updateRating(@Param("id") UUID id, @Param("avg") double avg, @Param("cnt") long cnt);
+
     /** 차감 직후 잔여재고 확인용 — 벌크 UPDATE가 1차 캐시를 안 고치므로 스칼라 프로젝션으로 DB를 직접 읽는다. */
     @Query("select new com.glassvue.domain.catalog.repository.StockSnapshot(p.name, p.stock)"
             + " from Product p where p.id = :id")
