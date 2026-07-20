@@ -186,6 +186,23 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
 > 않도록 `<> CANCELLED`가 아닌 **명시적 열거**로 둔다. ②**포토 리뷰** — `review.image_group_id`로
 > ImageGroup 재사용 구조의 두 번째 사용처(FK 없는 느슨한 UUID, `ImageService` 공개 API로만 접근).
 > ③상품 목록 평균별점은 **비정규화 + 이벤트 동기화**(§6.0 이벤트 항목 참조).
+
+### 이미지 생명주기 규칙 (2026-07-20)
+
+업로드가 **2단계**(①`POST /api/images`로 올려 id를 받고 ②저장 시 `imageIds`로 전달)라
+①만 하고 ②를 안 하면 주인 없는 이미지가 남는다. 정리 책임을 이렇게 나눈다.
+
+| 고아 종류 | 누가 치우나 | 이유 |
+|---|---|---|
+| 업로드만 하고 미사용 (`image_group_id IS NULL`) | image 도메인 **스위퍼**(`@Scheduled`, 유예 24h) | 언제 저장할지 알 수 없으니 시간 기준으로만 판단 가능 |
+| 교체·삭제로 버려진 그룹 | **소유 도메인**이 `ImageService.deleteGroup` 호출 | 버려졌는지 알려면 catalog·review 참조를 봐야 하는데, 그건 `image → 타 도메인` **역방향 의존**이라 경계를 깬다. 교체하는 쪽은 옛 그룹 id를 이미 안다 |
+
+- **호출 순서**: `deleteGroup`은 반드시 `createGroup` **뒤에**. createGroup이 유지할 이미지를 새 그룹으로
+  재할당하므로, 그 뒤 옛 그룹에 남는 건 사용자가 *제거한* 이미지뿐이다. 순서를 바꾸면 유지할 이미지까지 지워진다.
+- **파일 삭제는 `AFTER_COMMIT`**(`ImageFilesReleasedEvent`). 트랜잭션 안에서 지우면 롤백 시
+  DB row는 살아나는데 파일은 사라져 **깨진 이미지**가 된다. 되돌릴 수 없는 쪽을 나중에 둔다.
+- **통합 테스트가 업로드를 하면 파일을 직접 치울 것** — `@Transactional`은 DB만 롤백하고
+  파일 쓰기는 되돌리지 않는다. DB row가 없어 스위퍼도 못 잡는다.
 > 도메인 간 통신은 공개 서비스로만(catalog `ProductQueryService.ensureExists`, order `OrderService.hasPurchased`).
 
 > **주문 상태(2026-07-16 구현)**: `ORDERED → PAID → SHIPPED` (+CANCELLED, ORDERED·PAID만). 취소 시 재고 복원.
