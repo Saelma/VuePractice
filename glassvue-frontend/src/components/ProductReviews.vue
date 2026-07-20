@@ -2,8 +2,10 @@
 import { ref, computed, onMounted } from 'vue';
 import { DxButton } from 'devextreme-vue/button';
 import { DxTextArea } from 'devextreme-vue/text-area';
-import { fetchProductReviews, createReview, updateReview, deleteReview } from '../api/review';
+import { fetchProductReviews, createReview, updateReview, deleteReview, REVIEW_IMAGE_MAX } from '../api/review';
 import { authState, isLoggedIn } from '../stores/auth';
+import StarRating from './StarRating.vue';
+import ImageUploader from './ImageUploader.vue';
 
 const props = defineProps({ productId: { type: String, required: true } });
 
@@ -18,14 +20,14 @@ function canManage(r) {
   return isAdmin.value || r.authorId === myId.value;
 }
 
-// 작성 폼
-const form = ref({ rating: 5, content: '' });
+// 작성 폼 — images는 [{id,url}] (전송 시 id만 뽑는다)
+const form = ref({ rating: 5, content: '', images: [] });
 const submitting = ref(false);
 const formError = ref('');
 
 // 인라인 수정
 const editingId = ref(null);
-const editForm = ref({ rating: 5, content: '' });
+const editForm = ref({ rating: 5, content: '', images: [] });
 
 async function load(p = 0) {
   loading.value = true;
@@ -49,8 +51,12 @@ async function submit() {
   }
   submitting.value = true;
   try {
-    await createReview(props.productId, { rating: form.value.rating, content: form.value.content.trim() });
-    form.value = { rating: 5, content: '' };
+    await createReview(props.productId, {
+      rating: form.value.rating,
+      content: form.value.content.trim(),
+      imageIds: form.value.images.map((i) => i.id),
+    });
+    form.value = { rating: 5, content: '', images: [] };
     await load(0);
   } catch (e) {
     formError.value = e.message; // 미구매(403)·중복(409) 등 서버 메시지 그대로
@@ -61,14 +67,19 @@ async function submit() {
 
 function startEdit(r) {
   editingId.value = r.id;
-  editForm.value = { rating: r.rating, content: r.content };
+  // 기존 이미지를 그대로 들고 시작한다 — 수정은 "보낸 목록으로 통째 교체"라 빠뜨리면 삭제된다.
+  editForm.value = { rating: r.rating, content: r.content, images: [...(r.images || [])] };
 }
 function cancelEdit() {
   editingId.value = null;
 }
 async function saveEdit(r) {
   try {
-    await updateReview(r.id, { rating: editForm.value.rating, content: editForm.value.content.trim() });
+    await updateReview(r.id, {
+      rating: editForm.value.rating,
+      content: editForm.value.content.trim(),
+      imageIds: editForm.value.images.map((i) => i.id),
+    });
     editingId.value = null;
     await load(page.value.page);
   } catch (e) {
@@ -97,10 +108,7 @@ onMounted(() => load(0));
   <section class="mt-8">
     <header class="mb-3 flex items-center gap-3 border-b pb-2">
       <h3 class="text-lg font-bold text-slate-800">상품 리뷰</h3>
-      <span class="text-amber-500">
-        <span class="font-semibold">★ {{ summary.averageRating.toFixed(1) }}</span>
-        <span class="ml-1 text-sm text-slate-500">({{ summary.reviewCount }})</span>
-      </span>
+      <StarRating :model-value="summary.averageRating" :count="summary.reviewCount" />
     </header>
 
     <div v-if="error" class="mb-3 rounded bg-red-50 p-2 text-sm text-red-600">{{ error }}</div>
@@ -109,18 +117,13 @@ onMounted(() => load(0));
     <div v-if="isLoggedIn" class="mb-5 rounded-lg border bg-slate-50 p-4">
       <div class="mb-2 flex items-center gap-2">
         <span class="text-sm text-slate-600">별점</span>
-        <div class="flex">
-          <button
-            v-for="n in 5"
-            :key="n"
-            type="button"
-            class="text-2xl leading-none"
-            :class="n <= form.rating ? 'text-amber-400' : 'text-slate-300'"
-            @click="form.rating = n"
-          >★</button>
-        </div>
+        <StarRating v-model="form.rating" editable size="lg" />
       </div>
       <DxTextArea v-model:value="form.content" :height="70" placeholder="이 상품은 어떠셨나요?" />
+      <div class="mt-2 flex flex-col gap-1">
+        <span class="text-sm text-slate-600">사진 첨부 <span class="text-xs text-slate-400">(최대 {{ REVIEW_IMAGE_MAX }}장)</span></span>
+        <ImageUploader v-model="form.images" :max="REVIEW_IMAGE_MAX" thumb-class="h-16 w-16" @error="formError = $event" />
+      </div>
       <div class="mt-2 flex items-center gap-2">
         <DxButton text="리뷰 등록" type="success" styling-mode="contained" :disabled="submitting" @click="submit" />
         <span v-if="formError" class="text-sm text-red-600">{{ formError }}</span>
@@ -136,21 +139,20 @@ onMounted(() => load(0));
       <li v-for="r in page.content" :key="r.id" class="rounded-lg border bg-white p-4">
         <div class="mb-1 flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <span class="text-amber-400">{{ '★'.repeat(r.rating) }}<span class="text-slate-300">{{ '★'.repeat(5 - r.rating) }}</span></span>
+            <StarRating :model-value="r.rating" size="sm" />
             <span class="text-sm font-medium text-slate-700">{{ r.author }}</span>
           </div>
           <span class="text-xs text-slate-400">{{ fmtDate(r.createdAt) }}</span>
         </div>
 
         <template v-if="editingId === r.id">
-          <div class="mb-2 flex">
-            <button
-              v-for="n in 5" :key="n" type="button" class="text-xl leading-none"
-              :class="n <= editForm.rating ? 'text-amber-400' : 'text-slate-300'"
-              @click="editForm.rating = n"
-            >★</button>
+          <div class="mb-2">
+            <StarRating v-model="editForm.rating" editable size="lg" />
           </div>
           <DxTextArea v-model:value="editForm.content" :height="60" />
+          <div class="mt-2">
+            <ImageUploader v-model="editForm.images" :max="REVIEW_IMAGE_MAX" thumb-class="h-16 w-16" @error="error = $event" />
+          </div>
           <div class="mt-2 flex gap-2">
             <DxButton text="저장" type="default" styling-mode="contained" @click="saveEdit(r)" />
             <DxButton text="취소" styling-mode="outlined" @click="cancelEdit" />
@@ -158,6 +160,11 @@ onMounted(() => load(0));
         </template>
         <template v-else>
           <p class="whitespace-pre-wrap text-slate-700">{{ r.content }}</p>
+          <div v-if="r.images?.length" class="mt-2 flex flex-wrap gap-2">
+            <a v-for="img in r.images" :key="img.id" :href="img.url" target="_blank" rel="noopener">
+              <img :src="img.url" :alt="`${r.author}님의 리뷰 사진`" class="h-20 w-20 rounded border object-cover" />
+            </a>
+          </div>
           <div v-if="canManage(r)" class="mt-2 flex gap-2">
             <button class="text-xs text-slate-500 hover:underline" @click="startEdit(r)">수정</button>
             <button class="text-xs text-red-500 hover:underline" @click="remove(r)">삭제</button>

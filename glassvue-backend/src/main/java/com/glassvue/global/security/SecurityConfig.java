@@ -46,8 +46,13 @@ public class SecurityConfig {
                         // 발송 처리는 관리자만(그 외 주문 API는 로그인). ship 매처를 orders/** 보다 먼저.
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/ship").hasRole("ADMIN")
                         .requestMatchers("/api/orders/**").authenticated()
+                        // 이미지 업로드는 로그인만 — 포토 리뷰(2026-07-20)부터 일반 사용자도 올린다.
+                        // 원래 ADMIN 전용이었지만 그건 상품 이미지가 유일한 용도였을 때 얘기다.
+                        // 업로드 자체는 그룹에 붙지 않은 고아 row라 무해하고, 실제 노출은
+                        // 리뷰 작성(구매 인증)·상품 등록(ADMIN)에서 걸린다. 크기는 5MB/파일·10MB/요청 제한.
+                        .requestMatchers(HttpMethod.POST, "/api/images").authenticated()
                         // 카탈로그: 조회는 공개, 등록/수정/삭제는 관리자만
-                        .requestMatchers(HttpMethod.POST, "/api/products", "/api/categories", "/api/images").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/products", "/api/categories").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/products/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/products/*").hasRole("ADMIN")
                         // 리뷰: 조회는 공개, 작성/수정/삭제는 로그인 필요(구매 인증은 서비스에서)

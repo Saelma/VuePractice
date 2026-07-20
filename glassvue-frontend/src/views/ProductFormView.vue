@@ -8,7 +8,7 @@ import { DxSelectBox } from 'devextreme-vue/select-box';
 import { DxButton } from 'devextreme-vue/button';
 import { getProduct, createProduct, updateProduct, STATUS_OPTIONS } from '../api/product';
 import { fetchCategories } from '../api/category';
-import { uploadImage } from '../api/image';
+import ImageUploader from '../components/ImageUploader.vue';
 
 const props = defineProps({ id: { type: String, default: null } });
 const router = useRouter();
@@ -18,28 +18,6 @@ const categories = ref([]);
 const form = reactive({ name: '', description: '', price: null, stock: null, status: 'SELLING', categoryId: null, images: [] });
 const error = ref('');
 const saving = ref(false);
-const uploading = ref(false);
-
-async function onFilesSelected(e) {
-  const files = Array.from(e.target.files || []);
-  if (!files.length) return;
-  uploading.value = true;
-  error.value = '';
-  try {
-    for (const file of files) {
-      const img = await uploadImage(file); // { id, url }
-      form.images.push(img);
-    }
-  } catch (err) {
-    error.value = err.message;
-  } finally {
-    uploading.value = false;
-    e.target.value = ''; // 같은 파일 재선택 허용
-  }
-}
-function removeImage(idx) {
-  form.images.splice(idx, 1);
-}
 
 onMounted(async () => {
   try {
@@ -125,18 +103,7 @@ async function onSave() {
 
       <div class="flex flex-col gap-2">
         <span class="text-sm text-slate-600">이미지</span>
-        <input type="file" accept="image/*" multiple :disabled="uploading" @change="onFilesSelected" />
-        <span v-if="uploading" class="text-sm text-slate-400">업로드 중…</span>
-        <div v-if="form.images.length" class="flex flex-wrap gap-2">
-          <div v-for="(img, idx) in form.images" :key="img.id" class="relative">
-            <img :src="img.url" class="h-20 w-20 rounded border object-cover" />
-            <button
-              type="button"
-              class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-xs text-white"
-              @click="removeImage(idx)"
-            >×</button>
-          </div>
-        </div>
+        <ImageUploader v-model="form.images" @error="error = $event" />
       </div>
 
       <div class="mt-2 flex gap-2">

@@ -6,6 +6,7 @@ import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText } from '../api/product';
 import { addToCart } from '../api/cart';
 import { authState, isLoggedIn } from '../stores/auth';
+import StarRating from '../components/StarRating.vue';
 import ProductReviews from '../components/ProductReviews.vue';
 import ProductInquiries from '../components/ProductInquiries.vue';
 
@@ -61,10 +62,11 @@ async function onDelete() {
         <h2 class="text-2xl font-bold text-slate-800">{{ product.name }}</h2>
         <span class="rounded bg-slate-100 px-2 py-0.5 text-sm text-slate-600">{{ statusText(product.status) }}</span>
       </div>
-      <div class="mb-4 flex flex-wrap gap-4 border-b pb-3 text-sm text-slate-500">
+      <div class="mb-4 flex flex-wrap items-center gap-4 border-b pb-3 text-sm text-slate-500">
         <span>카테고리 <b class="text-slate-700">{{ product.categoryName }}</b></span>
         <span class="text-lg font-semibold text-slate-800">{{ priceText(product.price) }}</span>
         <span>재고 {{ product.stock }}</span>
+        <StarRating :model-value="product.averageRating" :count="product.reviewCount" />
       </div>
       <div v-if="product.images && product.images.length" class="mb-4 flex flex-wrap gap-2">
         <img v-for="img in product.images" :key="img.id" :src="img.url" class="h-32 w-32 rounded border object-cover" />

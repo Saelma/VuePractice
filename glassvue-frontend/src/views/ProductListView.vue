@@ -10,6 +10,7 @@ import { DxButton } from 'devextreme-vue/button';
 import { fetchProducts, STATUS_OPTIONS, statusText, priceText } from '../api/product';
 import { fetchCategories } from '../api/category';
 import { authState } from '../stores/auth';
+import StarRating from '../components/StarRating.vue';
 
 const router = useRouter();
 const gridRef = ref(null);
@@ -129,6 +130,7 @@ const statusCell = (r) => statusText(r.status);
       <DxColumn data-field="categoryName" caption="카테고리" :width="120" />
       <DxColumn data-field="price" caption="가격" :width="120" alignment="right" :calculate-display-value="priceCell" />
       <DxColumn data-field="stock" caption="재고" :width="90" alignment="center" />
+      <DxColumn caption="별점" :width="110" alignment="center" cell-template="ratingCell" />
       <DxColumn data-field="status" caption="상태" :width="90" alignment="center" :calculate-display-value="statusCell" />
 
       <DxPaging :page-size="10" />
@@ -141,6 +143,10 @@ const statusCell = (r) => statusText(r.status);
           class="mx-auto h-10 w-10 rounded object-cover"
         />
         <span v-else class="text-slate-300">–</span>
+      </template>
+
+      <template #ratingCell="{ data }">
+        <StarRating :model-value="data.data.averageRating" :count="data.data.reviewCount" size="sm" />
       </template>
     </DxDataGrid>
   </section>
