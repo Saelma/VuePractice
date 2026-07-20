@@ -78,10 +78,32 @@ com.glassvue
 | 서비스 | 경량 CQRS — `XxxCommandService`(조작) / `XxxQueryService`(조회, `@Transactional(readOnly=true)`) |
 | DTO | Java `record` (요청 DTO 검증 애노테이션은 record 컴포넌트에) |
 | 로깅 | SLF4J `@Slf4j`. `System.out`·`printStackTrace` 금지 |
+| 쿼리 작성 | **동적이면 QueryDSL, 고정이면 JPQL `@Query`** (아래 참조) |
 
 > **CQRS 범위**: 여기서의 CQRS는 *서비스 계층을 command/query로 분리*하는 경량(application-level) CQRS다.
 > 읽기/쓰기 모델을 물리적으로 분리하고 이벤트로 동기화하는 풀 CQRS는 트래픽이 커지는 이커머스 단계의 선택지로 남겨둔다.
 > 조회 측은 QueryDSL로 엔티티를 거치지 않고 DTO를 바로 projection 한다.
+
+### 쿼리 작성 기준 — QueryDSL vs JPQL
+
+판단 기준은 **조건이 런타임에 바뀌는가** 하나다. 취향이나 최신성이 아니다.
+
+| | 쓰는 곳 | 사례 |
+|---|---|---|
+| **QueryDSL** (`XxxRepositoryCustom` + `XxxRepositoryImpl`) | **동적 쿼리** — 검색어·필터·정렬·페이징처럼 조건 조합이 런타임에 결정 | `ProductRepositoryImpl`, `NoticeRepositoryImpl`, `ReviewRepositoryImpl`, `InquiryRepositoryImpl`. 공용 지원은 `global/querydsl`(`ConditionBuilder`·`SortSupport`·`QueryDslSupport`) |
+| **JPQL `@Query`** (리포지토리 인터페이스에 직접) | **고정 쿼리** — 조건이 컴파일 타임에 확정 | `decreaseStock`·`increaseStock`(벌크 UPDATE), `findStockSnapshot`, `statsByProduct`, `existsPurchase` |
+
+고정 쿼리에 QueryDSL을 쓰면 `Custom` 인터페이스 + `Impl` 구현까지 파일 3개를 늘리면서 얻는 게 없다. 반대로 동적 조건이 하나라도 생기면 JPQL 문자열 조립으로 버티지 말고 QueryDSL로 옮긴다.
+
+> **JPQL 생성자 표현식의 알려진 약점**: `select new com.…StockSnapshot(...)`처럼 클래스 경로가 **문자열**이라, DTO를 옮기거나 이름을 바꾸면 컴파일은 통과하고 런타임에 터진다. QueryDSL의 `Projections.constructor`는 이게 컴파일 타임에 잡힌다. 고정 쿼리라 JPQL을 유지하되, **프로젝션 DTO 이동·개명 시 JPQL 문자열을 같이 고쳤는지 반드시 확인**할 것.
+
+#### 벌크 UPDATE 직후의 값은 엔티티로 읽지 않는다 (2026-07-20)
+
+`@Modifying` 벌크 JPQL UPDATE는 **DB만 고치고 영속성 컨텍스트(1차 캐시)는 건드리지 않는다.** 같은 트랜잭션에서 이미 로딩된 엔티티가 있으면 `findById`는 DB에 가지 않고 **차감 전 값(stale)** 을 돌려준다.
+
+- 실제 사례: `checkout`은 `@Transactional`이고 `cartService.getCart` → `findByIds`가 `Product`를 이미 로딩한다. 여기서 `decreaseStock` 후 `findById`로 재고를 읽으면 차감 전 값이 나와 재고 부족 알림이 안 나간다.
+- 해법: **스칼라 프로젝션**(`StockSnapshot` — 엔티티가 아니라 1차 캐시를 우회해 DB를 직접 읽음).
+- `@Modifying(clearAutomatically = true)`는 **쓰지 않는다** — 영속성 컨텍스트 *전체*를 비워서 같은 트랜잭션의 다른 엔티티(Order·Cart 등) 더티 체킹까지 날아간다.
 
 ### 예외 처리 · 응답 포맷
 
