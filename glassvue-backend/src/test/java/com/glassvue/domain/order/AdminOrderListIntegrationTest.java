@@ -113,6 +113,30 @@ class AdminOrderListIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].summary").value(MARK + "-상품"));
     }
 
+    // ---------- 상태별 건수 요약 ----------
+
+    @Test
+    @DisplayName("건수 요약: 비로그인 → 401 / USER → 403")
+    void counts_permission() throws Exception {
+        mockMvc.perform(get("/api/admin/orders/counts")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/orders/counts").header("Authorization", login(userLoginId)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("건수 요약: 관리자 → 200, 모든 상태 키가 있고 이 테스트가 만든 주문이 반영된다")
+    void counts_admin() throws Exception {
+        mockMvc.perform(get("/api/admin/orders/counts").header("Authorization", login(adminLoginId)))
+                .andExpect(status().isOk())
+                // 건수가 0인 상태도 키는 항상 있어야 한다(탭이 사라지면 오히려 헷갈린다)
+                .andExpect(jsonPath("$.data.ORDERED").exists())
+                .andExpect(jsonPath("$.data.PAID").exists())
+                .andExpect(jsonPath("$.data.SHIPPED").exists())
+                .andExpect(jsonPath("$.data.CANCELLED").exists())
+                // setUp이 ORDERED/PAID/SHIPPED를 한 건씩 넣었으므로 최소 1 이상
+                .andExpect(jsonPath("$.data.PAID").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
+    }
+
     // ---------- 필터 · 페이징 ----------
 
     @Test

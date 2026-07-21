@@ -6,13 +6,15 @@
  * 그래서 기본 필터를 **결제완료(PAID)** 로 둔다 — 관리자가 이 화면에 오는 이유가
  * "발송할 주문 찾기"이기 때문. 전체를 보려면 필터를 바꾸면 된다.
  */
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
-import { DxSelectBox } from 'devextreme-vue/select-box';
 import { DxTextBox } from 'devextreme-vue/text-box';
-import { fetchAdminOrders, shipOrder, orderStatusText, orderStatusClass, ORDER_STATUS_OPTIONS } from '../api/order';
+import {
+  fetchAdminOrders, fetchAdminOrderCounts, shipOrder,
+  orderStatusText, orderStatusClass, ORDER_STATUS_TEXT,
+} from '../api/order';
 import { priceText } from '../api/product';
 
 const router = useRouter();
@@ -20,6 +22,32 @@ const error = ref('');
 const form = ref({ status: 'PAID', buyer: '' }); // 발송 대기 주문이 기본
 const applied = ref({ ...form.value });
 const gridRef = ref(null);
+
+/**
+ * 상태별 건수 — 필터를 바꿔보지 않고도 "할 일이 몇 건인지" 보이게 한다.
+ * 발송 처리 후에도 다시 읽어 숫자가 즉시 줄어드는 게 보이게 한다.
+ */
+const counts = ref({});
+const TABS = [{ value: null, text: '전체' },
+  ...Object.entries(ORDER_STATUS_TEXT).map(([value, text]) => ({ value, text }))];
+const totalCount = computed(() => Object.values(counts.value).reduce((a, b) => a + b, 0));
+const countOf = (v) => (v === null ? totalCount.value : (counts.value[v] ?? 0));
+
+async function loadCounts() {
+  try {
+    counts.value = await fetchAdminOrderCounts();
+  } catch (e) {
+    /* 요약 실패해도 목록은 동작한다 */
+  }
+}
+onMounted(loadCounts);
+
+/** 탭 클릭 → 즉시 적용(운영 화면에선 검색 버튼을 한 번 더 누르게 하지 않는다) */
+function pickTab(v) {
+  form.value.status = v;
+  applied.value = { ...form.value };
+  gridRef.value?.instance.refresh();
+}
 
 const store = new CustomStore({
   key: 'id',
@@ -60,6 +88,7 @@ async function onShip(row) {
   try {
     await shipOrder(row.id);
     gridRef.value?.instance.refresh();
+    await loadCounts(); // 발송 대기 건수가 즉시 줄어드는 게 보이게
   } catch (e) {
     error.value = e.message;
   }
@@ -80,17 +109,27 @@ function fmt(v) {
 
     <div v-if="error" class="alert-error mb-4">{{ error }}</div>
 
+    <!-- 상태 탭 + 건수: 발송할 게 몇 건인지 한눈에 -->
+    <div class="mb-4 flex flex-wrap gap-1 border-b border-line">
+      <button
+        v-for="t in TABS"
+        :key="t.value ?? 'all'"
+        type="button"
+        class="-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
+        :class="applied.status === t.value
+          ? 'border-brand-600 font-medium text-ink-900'
+          : 'border-transparent text-ink-500 hover:text-ink-900'"
+        :aria-current="applied.status === t.value"
+        @click="pickTab(t.value)"
+      >
+        {{ t.text }}
+        <span class="badge" :class="applied.status === t.value ? 'badge-neutral' : 'bg-canvas text-ink-400'">
+          {{ countOf(t.value) }}
+        </span>
+      </button>
+    </div>
+
     <div class="card mb-4 flex flex-wrap items-end gap-3 p-4">
-      <label class="field">
-        <span class="field-label">상태</span>
-        <DxSelectBox
-          v-model:value="form.status"
-          :items="ORDER_STATUS_OPTIONS"
-          value-expr="value"
-          display-expr="text"
-          :width="140"
-        />
-      </label>
       <label class="field">
         <span class="field-label">구매자</span>
         <DxTextBox v-model:value="form.buyer" placeholder="닉네임" :width="180" @enter-key="search" />

@@ -4,12 +4,14 @@ import com.glassvue.domain.order.dto.AdminOrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.global.response.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import java.util.Map;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -29,5 +31,11 @@ public class AdminOrderControllerImpl implements AdminOrderController {
     public ResponseEntity<ApiResponse<PageResponse<AdminOrderResponse>>> list(
             OrderSearchCondition condition, Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.ok(orderService.adminOrders(condition, pageable)));
+    }
+
+    @Override
+    @GetMapping("/counts")
+    public ResponseEntity<ApiResponse<Map<OrderStatus, Long>>> counts() {
+        return ResponseEntity.ok(ApiResponse.ok(orderService.adminOrderCounts()));
     }
 }

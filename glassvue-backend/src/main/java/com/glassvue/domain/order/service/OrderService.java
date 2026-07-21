@@ -10,6 +10,7 @@ import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
+import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
@@ -19,6 +20,8 @@ import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
 import org.springframework.context.ApplicationEventPublisher;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -90,6 +93,23 @@ public class OrderService {
     public PageResponse<AdminOrderResponse> adminOrders(OrderSearchCondition condition, Pageable pageable) {
         Page<Order> page = orderRepository.search(condition.forAll(), pageable);
         return PageResponse.from(page.map(AdminOrderResponse::from));
+    }
+
+    /**
+     * 관리자용 상태별 주문 건수. 화면 상단 탭에 "발송 대기 N건"처럼 띄워
+     * 필터를 바꿔보지 않고도 할 일이 얼마나 남았는지 알 수 있게 한다.
+     * 건수가 0인 상태도 키는 항상 포함한다(탭이 사라지면 오히려 헷갈린다).
+     */
+    @Transactional(readOnly = true)
+    public Map<OrderStatus, Long> adminOrderCounts() {
+        Map<OrderStatus, Long> counts = new EnumMap<>(OrderStatus.class);
+        for (OrderStatus s : OrderStatus.values()) {
+            counts.put(s, 0L);
+        }
+        for (Object[] row : orderRepository.countByStatus()) {
+            counts.put((OrderStatus) row[0], (Long) row[1]);
+        }
+        return counts;
     }
 
     /** 주문 상세 — 본인 주문만. 단, ADMIN은 발송 처리를 위해 전체 주문 조회 가능. */

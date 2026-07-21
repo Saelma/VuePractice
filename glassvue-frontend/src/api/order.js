@@ -10,6 +10,11 @@ export function fetchOrders({ status = null, page = 0, size = 10 } = {}) {
 }
 
 // 관리자 전체 주문 목록. 사용자용과 경로가 다르고 응답에 구매자 정보(buyerNickname·summary)가 있다.
+// 상태별 주문 건수(관리자 화면 상단 요약). { ORDERED: n, PAID: n, SHIPPED: n, CANCELLED: n }
+export function fetchAdminOrderCounts() {
+  return apiGet('/api/admin/orders/counts');
+}
+
 export function fetchAdminOrders({ status = null, buyer = null, page = 0, size = 10 } = {}) {
   return apiGet('/api/admin/orders', { status, buyer, page, size });
 }

@@ -29,4 +29,14 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, OrderReposi
                     com.glassvue.domain.order.entity.OrderStatus.SHIPPED)
             """)
     boolean existsPurchase(@Param("memberId") UUID memberId, @Param("productId") UUID productId);
+
+    /**
+     * 상태별 주문 건수 — 관리자 화면이 "지금 발송할 게 몇 건인지"를 한눈에 보여주기 위함.
+     *
+     * <p>상태 수만큼 count 쿼리를 날리지 않고 **group by 한 번**으로 끝낸다.
+     * 조건이 고정이라 QueryDSL 대신 JPQL(ARCHITECTURE 쿼리 작성 기준).
+     * 건수가 0인 상태는 행 자체가 없으므로 호출부가 0으로 채운다.
+     */
+    @Query("select o.status, count(o) from Order o group by o.status")
+    List<Object[]> countByStatus();
 }
