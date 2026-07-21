@@ -28,6 +28,10 @@ const images = computed(() => product.value?.images ?? []);
 const selected = ref(0);
 const mainImage = computed(() => images.value[selected.value] ?? images.value[0] ?? null);
 
+/** 담기 전에 얼마인지 바로 보이게 — 수량을 바꾸면 합계가 따라 움직인다. */
+const lineTotal = computed(() => (product.value ? product.value.price * (qty.value || 1) : 0));
+const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
+
 async function onAddToCart() {
   cartMsg.value = '';
   try {
@@ -64,21 +68,33 @@ async function onDelete() {
     <div v-if="error" class="alert-error mb-6">{{ error }}</div>
 
     <!-- 로딩: 텍스트 대신 스켈레톤으로 2단 레이아웃을 미리 잡는다 (DESIGN.md §5) -->
-    <div v-if="loading" class="grid gap-8 lg:grid-cols-2">
-      <div class="skeleton aspect-square w-full rounded-card"></div>
-      <div class="space-y-4">
-        <div class="skeleton h-3 w-20"></div>
-        <div class="skeleton h-7 w-2/3"></div>
-        <div class="skeleton h-9 w-40"></div>
-        <div class="skeleton h-4 w-28"></div>
-        <div class="skeleton h-24 w-full rounded-card"></div>
+    <div v-if="loading" class="grid gap-8 lg:grid-cols-5">
+      <div class="lg:col-span-3">
+        <div class="skeleton aspect-square w-full rounded-card"></div>
+        <div class="mt-8 space-y-2">
+          <div class="skeleton h-5 w-24"></div>
+          <div class="skeleton h-3 w-full"></div>
+          <div class="skeleton h-3 w-4/5"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2">
+        <div class="card space-y-4 p-5">
+          <div class="skeleton h-3 w-20"></div>
+          <div class="skeleton h-6 w-2/3"></div>
+          <div class="skeleton h-4 w-28"></div>
+          <div class="skeleton h-9 w-40"></div>
+          <div class="skeleton h-20 w-full"></div>
+          <div class="skeleton h-10 w-full"></div>
+        </div>
       </div>
     </div>
 
     <template v-else-if="product">
-      <div class="grid gap-8 lg:grid-cols-2">
-        <!-- 좌: 이미지 갤러리 -->
-        <div>
+      <!-- 좌 3 : 우 2 — 좌측에 갤러리+설명(긴 콘텐츠), 우측은 구매 패널 하나로 묶어 따라오게 한다.
+           우측이 짧으면 이미지가 만든 세로 공간이 텅 비어 보이므로 정보를 한 덩어리로 모았다. -->
+      <div class="grid gap-8 lg:grid-cols-5">
+        <!-- 좌: 이미지 갤러리 + 설명 -->
+        <div class="lg:col-span-3">
           <div class="card aspect-square overflow-hidden bg-canvas">
             <img
               v-if="mainImage"
@@ -104,55 +120,84 @@ async function onDelete() {
               <img :src="img.thumbUrl" :alt="`${product.name} ${i + 1}`" class="h-full w-full object-cover" />
             </button>
           </div>
+
+          <!-- 설명을 좌측에 붙여 갤러리와 한 흐름으로 읽히게 한다(아래로 밀면 위가 비어 보인다) -->
+          <section class="mt-8">
+            <h2 class="section-title">상품 설명</h2>
+            <p
+              v-if="product.description"
+              class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink-700"
+            >{{ product.description }}</p>
+            <p v-else class="muted mt-3">등록된 설명이 없어요.</p>
+          </section>
         </div>
 
-        <!-- 우: 상품 정보 -->
-        <div>
-          <p class="muted">{{ product.categoryName }}</p>
-          <h1 class="page-title mt-1">{{ product.name }}</h1>
+        <!-- 우: 구매 패널 — 한 덩어리 카드로 묶고 스크롤을 따라오게 한다 -->
+        <div class="lg:col-span-2">
+          <div class="card p-5 lg:sticky lg:top-20">
+            <p class="muted">{{ product.categoryName }}</p>
+            <h1 class="mt-1 text-xl font-bold tracking-tight text-ink-900">{{ product.name }}</h1>
 
-          <p class="mt-4 text-3xl font-semibold tabular-nums text-ink-900">{{ priceText(product.price) }}</p>
+            <div class="mt-3">
+              <StarRating :model-value="product.averageRating" :count="product.reviewCount" />
+            </div>
 
-          <div class="mt-3">
-            <StarRating :model-value="product.averageRating" :count="product.reviewCount" />
-          </div>
+            <p class="mt-4 text-3xl font-semibold tabular-nums text-ink-900">{{ priceText(product.price) }}</p>
 
-          <div class="mt-4 flex items-center gap-2">
-            <span class="text-sm text-ink-700">재고 <b class="tabular-nums">{{ product.stock }}</b></span>
-            <!-- 판매중이면 배지를 달지 않는다(노이즈 감소) -->
-            <span
-              v-if="product.status !== 'SELLING'"
-              class="badge"
-              :class="product.status === 'SOLD_OUT' ? 'badge-warning' : 'badge-neutral'"
-            >{{ statusText(product.status) }}</span>
-          </div>
+            <!-- 상품 정보 요약 -->
+            <dl class="mt-5 space-y-2 border-t border-line pt-5 text-sm">
+              <div class="flex justify-between gap-4">
+                <dt class="text-ink-500">재고</dt>
+                <dd class="tabular-nums text-ink-900">{{ product.stock }}개</dd>
+              </div>
+              <div class="flex justify-between gap-4">
+                <dt class="text-ink-500">상태</dt>
+                <dd>
+                  <span
+                    class="badge"
+                    :class="product.status === 'SELLING' ? 'badge-success'
+                      : product.status === 'SOLD_OUT' ? 'badge-warning' : 'badge-neutral'"
+                  >{{ statusText(product.status) }}</span>
+                </dd>
+              </div>
+              <div v-if="product.createdAt" class="flex justify-between gap-4">
+                <dt class="text-ink-500">등록일</dt>
+                <dd class="tabular-nums text-ink-700">{{ fmtDate(product.createdAt) }}</dd>
+              </div>
+            </dl>
 
-          <!-- 구매 액션: 이 화면의 주 행동 -->
-          <div v-if="isLoggedIn" class="card mt-6 flex flex-wrap items-end gap-3 p-5">
-            <label class="field">
-              <span class="field-label">수량</span>
-              <DxNumberBox v-model:value="qty" :min="1" :width="90" />
-            </label>
-            <button type="button" class="btn btn-primary" @click="onAddToCart">장바구니 담기</button>
-            <p v-if="cartMsg" class="alert-success w-full">{{ cartMsg }}</p>
-          </div>
-
-          <!-- 보조 행동 -->
-          <div class="mt-6 flex gap-2">
-            <button type="button" class="btn btn-secondary" @click="router.push('/products')">목록</button>
-            <template v-if="isAdmin">
-              <button type="button" class="btn btn-secondary" @click="router.push(`/products/${id}/edit`)">수정</button>
-              <button type="button" class="btn btn-danger" @click="onDelete">삭제</button>
+            <!-- 구매 액션: 이 화면의 주 행동 -->
+            <template v-if="isLoggedIn">
+              <div class="mt-5 flex items-end justify-between gap-3 border-t border-line pt-5">
+                <label class="field">
+                  <span class="field-label">수량</span>
+                  <DxNumberBox v-model:value="qty" :min="1" :width="90" />
+                </label>
+                <div class="text-right">
+                  <p class="muted">합계</p>
+                  <p class="text-xl font-bold tabular-nums text-ink-900">{{ priceText(lineTotal) }}</p>
+                </div>
+              </div>
+              <button type="button" class="btn btn-primary mt-4 w-full" @click="onAddToCart">장바구니 담기</button>
+              <p v-if="cartMsg" class="alert-success mt-3">{{ cartMsg }}</p>
             </template>
+            <p v-else class="mt-5 border-t border-line pt-5 text-sm text-ink-500">
+              구매하려면 로그인이 필요해요.
+            </p>
+
+            <!-- 보조 행동 -->
+            <div class="mt-5 flex flex-wrap gap-2 border-t border-line pt-5">
+              <button type="button" class="btn btn-secondary btn-sm" @click="router.push('/products')">목록</button>
+              <template v-if="isAdmin">
+                <button type="button" class="btn btn-secondary btn-sm" @click="router.push(`/products/${id}/edit`)">
+                  수정
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" @click="onDelete">삭제</button>
+              </template>
+            </div>
           </div>
         </div>
       </div>
-
-      <!-- 상품 설명 -->
-      <section class="mt-10">
-        <h2 class="section-title">상품 설명</h2>
-        <p class="card-pad mt-3 min-h-[6rem] whitespace-pre-wrap text-sm text-ink-700">{{ product.description }}</p>
-      </section>
 
       <div class="mt-10">
         <ProductReviews :product-id="id" />
