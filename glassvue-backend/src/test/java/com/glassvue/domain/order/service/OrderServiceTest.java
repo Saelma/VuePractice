@@ -31,6 +31,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -52,7 +53,7 @@ class OrderServiceTest {
         return Order.create(memberId, "구매자닉", List.of(items));
     }
     private Order sampleOrder() {
-        return orderWith(OrderItem.of(UUID.randomUUID(), "지바", 10_000, 2));
+        return orderWith(OrderItem.of(UUID.randomUUID(), "지바", "/uploads/z_t.webp", 10_000, 2));
     }
     private static void assertErrorCode(Runnable r, ErrorCode expected) {
         assertThatThrownBy(r::run)
@@ -108,7 +109,7 @@ class OrderServiceTest {
     @DisplayName("취소: ORDERED 주문 → CANCELLED + 아이템별 재고 복원")
     void cancel_restoresStock() {
         UUID p1 = UUID.randomUUID();
-        Order order = orderWith(OrderItem.of(p1, "지바", 10_000, 3));
+        Order order = orderWith(OrderItem.of(p1, "지바", null, 10_000, 3));
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
         orderService.cancel(orderId, memberId);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
@@ -162,7 +163,7 @@ class OrderServiceTest {
         return new CartResponse(List.of(items), qty, price);
     }
     private CartItemResponse availableItem(UUID pid, long qty) {
-        return new CartItemResponse(pid, "지바", 10_000, ProductStatus.SELLING, qty, 10_000 * qty, true);
+        return new CartItemResponse(pid, "지바", 10_000, ProductStatus.SELLING, qty, 10_000 * qty, true, "/uploads/z_t.webp");
     }
 
     @Test
@@ -180,6 +181,24 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("결제: 주문 품목에 이름·가격과 함께 **이미지 URL도 스냅샷**한다")
+    void checkout_snapshotsProductImage() {
+        UUID pid = UUID.randomUUID();
+        when(cartService.getCart(memberId)).thenReturn(cartWith(availableItem(pid, 2)));
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        when(orderRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.checkout(buyer);
+
+        // 상품이 바뀌거나 삭제돼도 주문 이력은 "그때 모습"이어야 하므로 참조가 아니라 스냅샷이다.
+        assertThat(captor.getValue().getItems()).singleElement()
+                .satisfies(i -> {
+                    assertThat(i.getProductName()).isEqualTo("지바");
+                    assertThat(i.getProductImageUrl()).isEqualTo("/uploads/z_t.webp");
+                });
+    }
+
+    @Test
     @DisplayName("결제: 빈 장바구니 → CART_EMPTY, 이벤트/저장 없음")
     void checkout_emptyCart() {
         when(cartService.getCart(memberId)).thenReturn(cartWith());
@@ -192,7 +211,7 @@ class OrderServiceTest {
     @DisplayName("결제: 구매불가 상품 포함 → UNAVAILABLE_ITEM")
     void checkout_unavailable() {
         UUID pid = UUID.randomUUID();
-        CartItemResponse soldOut = new CartItemResponse(pid, "품절품", 10_000, ProductStatus.SOLD_OUT, 1, 10_000, false);
+        CartItemResponse soldOut = new CartItemResponse(pid, "품절품", 10_000, ProductStatus.SOLD_OUT, 1, 10_000, false, null);
         when(cartService.getCart(memberId)).thenReturn(cartWith(soldOut));
         assertErrorCode(() -> orderService.checkout(buyer), ErrorCode.UNAVAILABLE_ITEM);
         verify(eventPublisher, never()).publishEvent(any());

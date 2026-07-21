@@ -10,6 +10,7 @@ public record CartItemResponse(
         ProductStatus status,
         long quantity,
         long lineTotal,
-        boolean available // 판매중 + 재고 충분
+        boolean available, // 판매중 + 재고 충분
+        String thumbUrl // 대표 이미지 썸네일(없으면 null). 주문 생성 시 이 값을 스냅샷한다
 ) {
 }

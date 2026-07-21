@@ -9,6 +9,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { fetchOrders, orderStatusText, orderStatusClass, ORDER_STATUS_TEXT } from '../api/order';
 import { priceText } from '../api/product';
+import ItemThumb from '../components/ItemThumb.vue';
 
 const router = useRouter();
 const orders = ref([]);
@@ -106,6 +107,7 @@ const shortId = (id) => (id ? `#${String(id).slice(0, 8)}` : '');
         <!-- 품목: 무엇을 샀는지 실제로 보여준다 -->
         <ul class="divide-y divide-line">
           <li v-for="item in o.items" :key="item.productId" class="flex items-center gap-4 px-5 py-3">
+            <ItemThumb :src="item.productImageUrl" :alt="item.productName" />
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm text-ink-900">{{ item.productName }}</p>
               <p class="muted mt-0.5 tabular-nums">{{ priceText(item.price) }} × {{ item.quantity }}</p>

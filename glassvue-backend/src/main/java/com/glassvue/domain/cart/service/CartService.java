@@ -66,7 +66,8 @@ public class CartService {
             long qty = e.getValue();
             long lineTotal = p.price() * qty;
             boolean available = p.status() == ProductStatus.SELLING && p.stock() >= qty;
-            lines.add(new CartItemResponse(p.id(), p.name(), p.price(), p.status(), qty, lineTotal, available));
+            String thumb = p.images().isEmpty() ? null : p.images().get(0).thumbUrl();
+            lines.add(new CartItemResponse(p.id(), p.name(), p.price(), p.status(), qty, lineTotal, available, thumb));
             totalQuantity += qty;
             totalPrice += lineTotal;
         }

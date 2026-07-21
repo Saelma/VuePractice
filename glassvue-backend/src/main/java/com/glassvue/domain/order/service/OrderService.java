@@ -58,7 +58,7 @@ public class OrderService {
         List<OrderItem> orderItems = new ArrayList<>();
         for (CartItemResponse i : cart.items()) {
             productCommandService.decreaseStock(i.productId(), i.quantity()); // 부족하면 OUT_OF_STOCK
-            orderItems.add(OrderItem.of(i.productId(), i.name(), i.price(), i.quantity()));
+            orderItems.add(OrderItem.of(i.productId(), i.name(), i.thumbUrl(), i.price(), i.quantity()));
         }
 
         Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems));

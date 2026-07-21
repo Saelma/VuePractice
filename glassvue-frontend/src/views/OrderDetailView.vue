@@ -6,6 +6,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getOrder, payOrder, shipOrder, cancelOrder, orderStatusText, orderStatusClass } from '../api/order';
 import { priceText } from '../api/product';
+import ItemThumb from '../components/ItemThumb.vue';
 import { authState } from '../stores/auth';
 
 const props = defineProps({ id: { type: String, required: true } });
@@ -115,6 +116,7 @@ const shortId = computed(() => (order.value?.id ? `#${String(order.value.id).sli
         <h2 class="section-title border-b border-line px-5 py-4">주문 품목</h2>
         <ul class="divide-y divide-line">
           <li v-for="item in order.items" :key="item.productId" class="flex items-center gap-4 px-5 py-4">
+            <ItemThumb :src="item.productImageUrl" :alt="item.productName" />
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-ink-900">{{ item.productName }}</p>
               <p class="muted mt-1 tabular-nums">{{ priceText(item.price) }} × {{ item.quantity }}</p>

@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router';
 import { getCart, updateCartItem, removeCartItem, clearCart } from '../api/cart';
 import { checkout as apiCheckout } from '../api/order';
 import { priceText } from '../api/product';
+import ItemThumb from '../components/ItemThumb.vue';
 
 const router = useRouter();
 const cart = ref({ items: [], totalQuantity: 0, totalPrice: 0 });
@@ -115,6 +116,7 @@ async function checkout() {
       <!-- 항목 -->
       <ul class="card divide-y divide-line lg:col-span-2">
         <li v-for="item in cart.items" :key="item.productId" class="flex flex-wrap items-center gap-4 px-5 py-4">
+          <ItemThumb :src="item.thumbUrl" :alt="item.name" />
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-medium text-ink-900">{{ item.name }}</p>
             <p class="muted mt-1 tabular-nums">{{ priceText(item.price) }}</p>

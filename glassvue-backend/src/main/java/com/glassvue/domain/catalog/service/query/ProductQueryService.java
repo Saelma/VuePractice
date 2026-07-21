@@ -42,12 +42,27 @@ public class ProductQueryService {
         }
     }
 
-    /** 여러 상품을 한 번에 조회 (장바구니 등 타 도메인용). 이미지는 포함하지 않는다. */
+    /**
+     * 여러 상품을 한 번에 조회 (장바구니 등 타 도메인용).
+     *
+     * <p>이미지도 함께 싣는다 — 장바구니에 썸네일을 띄우고, 주문 생성 시 <b>이미지 URL을 스냅샷</b>하기 위함.
+     * 그룹 조회는 {@code findByGroups} 배치라 상품 수만큼 쿼리가 늘지 않는다(search와 같은 방식).
+     */
     public List<ProductResponse> findByIds(Collection<UUID> ids) {
         if (ids.isEmpty()) {
             return List.of();
         }
-        return productRepository.findAllById(ids).stream().map(ProductResponse::from).toList();
+        List<Product> products = productRepository.findAllById(ids);
+        List<UUID> groupIds = products.stream()
+                .map(Product::getImageGroupId).filter(Objects::nonNull).toList();
+        Map<UUID, List<ImageResponse>> imagesByGroup = imageService.findByGroups(groupIds);
+        return products.stream()
+                .map(p -> ProductResponse.from(
+                        p,
+                        p.getImageGroupId() == null
+                                ? List.of()
+                                : imagesByGroup.getOrDefault(p.getImageGroupId(), List.of())))
+                .toList();
     }
 
     @Cacheable(cacheNames = "products:list", key = "#condition.toString() + '|' + #pageable.toString()")
