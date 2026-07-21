@@ -34,6 +34,15 @@ public class FileStorageService {
     private static final int THUMB_PX = 200;  // 목록·그리드용
     private static final WebpWriter WEBP = WebpWriter.DEFAULT; // 손실 q=80
 
+    /**
+     * 파생본을 유지할 최소 절약 바이트. 이만큼도 못 줄이면 만들 가치가 없어 버리고 원본을 쓴다.
+     *
+     * <p>목적이 "전송 바이트 줄이기"라 픽셀 크기가 아니라 <b>실제 절약량</b>으로 판단한다.
+     * 실측(2026-07-21): 6.5KB webp 원본의 썸네일은 4.7KB로 1.8KB밖에 못 줄여 저장만 늘렸다.
+     * 반면 71KB PNG는 썸네일 4.5KB로 66KB를 줄였다.
+     */
+    private static final long MIN_SAVING_BYTES = 10 * 1024;
+
     private final Path dir;
     private final String urlPrefix;
 
@@ -91,11 +100,23 @@ public class FileStorageService {
                 originalName, file.getContentType(), (long) bytes.length);
     }
 
-    /** 원본 바이트를 maxPx 박스에 맞춰 축소(확대 안 함)한 WebP를 저장하고 URL을 돌려준다. 실패 시 null. */
+    /**
+     * 원본 바이트를 maxPx 박스에 맞춰 축소(확대 안 함)한 WebP를 저장하고 URL을 돌려준다.
+     * 만들 가치가 없거나(절약 미달) 실패하면 파일을 남기지 않고 null — 호출부·응답이 원본으로 폴백한다.
+     */
     private String makeDerivative(String base, String suffix, byte[] source, int maxPx) {
+        // 원본이 최소 절약치보다 작으면 그만큼 줄이는 게 애초에 불가능하다 → 생성 시도 자체를 건너뛴다.
+        if (source.length <= MIN_SAVING_BYTES) {
+            return null;
+        }
         String filename = base + suffix + ".webp";
         try {
             byte[] webp = ImmutableImage.loader().fromBytes(source).bound(maxPx, maxPx).bytes(WEBP);
+            if (source.length - webp.length < MIN_SAVING_BYTES) {
+                // 만들었지만 이득이 없다 → 파일을 쓰지 않고 버린다(저장·정리 대상만 늘 뿐).
+                log.debug("파생본 생략(base={}, {}px) — 절약 {}B로 기준 미달", base, maxPx, source.length - webp.length);
+                return null;
+            }
             writeFile(filename, webp);
             return urlPrefix + "/" + filename;
         } catch (Exception e) {

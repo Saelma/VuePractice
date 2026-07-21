@@ -25,16 +25,28 @@ class FileStorageServiceStoreTest {
         return new FileStorageService(dir.toString(), "/uploads");
     }
 
-    /** 축소가 의미 있도록 큰 PNG 원본을 만든다. */
+    /**
+     * 축소가 의미 있도록 <b>충분히 큰</b> PNG 원본. 고주파 패턴이라 PNG로 잘 안 눌려 원본이 크고,
+     * 축소 WebP는 훨씬 작아진다(= 파생본 유지 기준을 넉넉히 넘긴다).
+     */
     private static byte[] bigPng() throws Exception {
         BufferedImage img = new BufferedImage(1200, 900, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = img.createGraphics();
-        g.setColor(new Color(30, 120, 200));
-        g.fillRect(0, 0, 1200, 900);
-        g.setColor(Color.WHITE);
-        for (int i = 0; i < 40; i++) {
-            g.fillOval(i * 25, (i * 17) % 800, 120, 120);
+        for (int y = 0; y < 900; y++) {
+            for (int x = 0; x < 1200; x++) {
+                img.setRGB(x, y, ((x * 7 + y * 13) % 256) << 16 | ((x * 3 + y * 11) % 256) << 8 | ((x + y * 5) % 256));
+            }
         }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(img, "png", out);
+        return out.toByteArray();
+    }
+
+    /** 파생본을 만들 가치가 없는 작은 원본(단색 소형). */
+    private static byte[] tinyPng() throws Exception {
+        BufferedImage img = new BufferedImage(40, 30, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = img.createGraphics();
+        g.setColor(new Color(200, 60, 60));
+        g.fillRect(0, 0, 40, 30);
         g.dispose();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ImageIO.write(img, "png", out);
@@ -68,6 +80,24 @@ class FileStorageServiceStoreTest {
         assertThat(new String(mediumBytes, 8, 4)).isEqualTo("WEBP");
         assertThat(Files.size(thumb)).isLessThan(Files.size(medium));
         assertThat(Files.size(medium)).isLessThan((long) png.length);
+    }
+
+    @Test
+    @DisplayName("작은 원본은 파생본을 만들지 않는다 — 줄일 게 없어 저장만 늘기 때문")
+    void store_skipsDerivativesForSmallOriginal(@TempDir Path dir) throws Exception {
+        byte[] tiny = tinyPng();
+        MockMultipartFile file = new MockMultipartFile("file", "tiny.png", "image/png", tiny);
+
+        FileStorageService.Stored stored = service(dir).store(file);
+
+        // 원본은 정상 저장되지만 파생본 URL은 없다 → 응답이 원본으로 폴백한다.
+        assertThat(stored.url()).endsWith(".png");
+        assertThat(stored.mediumUrl()).isNull();
+        assertThat(stored.thumbUrl()).isNull();
+        // 디스크에도 파생본 파일이 생기지 않았다(원본 1개뿐).
+        try (var files = Files.list(dir)) {
+            assertThat(files.map(p -> p.getFileName().toString())).noneMatch(n -> n.endsWith(".webp"));
+        }
     }
 
     @Test
