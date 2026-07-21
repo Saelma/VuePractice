@@ -58,6 +58,10 @@ function fmt(v) {
       <div class="mb-4 flex items-start justify-between border-b pb-3">
         <div>
           <h2 class="text-lg font-bold text-slate-800">주문 상세</h2>
+          <!-- 관리자가 남의 주문을 볼 때 "누구 주문인지" 표시(주문 시점 스냅샷). 본인 주문엔 불필요. -->
+          <div v-if="isAdmin && !isMine" class="text-sm font-medium text-slate-600">
+            구매자 {{ order.buyerNickname }}
+          </div>
           <div class="text-sm text-slate-500">주문 {{ fmt(order.createdAt) }}</div>
           <div v-if="order.paidAt" class="text-sm text-slate-500">결제 {{ fmt(order.paidAt) }}</div>
           <div v-if="order.shippedAt" class="text-sm text-slate-500">발송 {{ fmt(order.shippedAt) }}</div>
