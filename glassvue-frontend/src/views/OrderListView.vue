@@ -1,7 +1,10 @@
 <script setup>
+/**
+ * 주문 내역 — 표가 아니라 읽기 좋은 행 리스트(DESIGN.md §7).
+ * 상품 요약이 먼저 읽히고 주문번호·날짜는 보조로 물러난다. 금액과 상태만 강조한다.
+ */
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { DxButton } from 'devextreme-vue/button';
 import { fetchOrders, orderStatusText, orderStatusClass } from '../api/order';
 import { priceText } from '../api/product';
 
@@ -35,43 +38,65 @@ function summary(o) {
   const first = o.items[0]?.productName || '';
   return first + (o.items.length > 1 ? ` 외 ${o.items.length - 1}건` : '');
 }
+function shortId(id) {
+  return id ? `#${String(id).slice(0, 8)}` : '';
+}
 </script>
 
 <template>
-  <section class="mx-auto max-w-3xl p-6">
-    <h2 class="mb-4 text-xl font-semibold text-slate-800">주문 내역</h2>
-    <div v-if="error" class="mb-4 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
-    <div v-else-if="loading" class="text-slate-500">불러오는 중…</div>
+  <section class="page">
+    <h1 class="page-title mb-5">주문 내역</h1>
 
-    <template v-else>
-      <div v-if="!orders.length" class="rounded-lg border bg-white p-8 text-center text-slate-500">
-        주문 내역이 없어요.
-        <div class="mt-3">
-          <DxButton text="상품 보러가기" type="default" styling-mode="contained" @click="router.push('/products')" />
+    <div v-if="error" class="alert-error mb-5">{{ error }}</div>
+
+    <!-- 로딩: 스켈레톤으로 목록 레이아웃을 미리 잡는다 (DESIGN.md §5) -->
+    <div v-if="loading" class="card divide-y divide-line">
+      <div v-for="n in 5" :key="n" class="flex items-center justify-between gap-4 px-5 py-4">
+        <div class="flex-1 space-y-2">
+          <div class="skeleton h-4 w-2/5"></div>
+          <div class="skeleton h-3 w-40"></div>
         </div>
+        <div class="skeleton h-5 w-16"></div>
+        <div class="skeleton h-4 w-20"></div>
       </div>
+    </div>
 
-      <ul v-else class="divide-y rounded-lg border bg-white">
-        <li
-          v-for="o in orders"
-          :key="o.id"
-          class="flex cursor-pointer items-center gap-4 px-4 py-4 hover:bg-slate-50"
+    <!-- 빈 상태 -->
+    <div v-else-if="!orders.length" class="flex flex-col items-center gap-3 py-16 text-center">
+      <span class="text-4xl">🧾</span>
+      <p class="text-sm text-ink-500">아직 주문 내역이 없어요.</p>
+      <button type="button" class="btn btn-primary" @click="router.push('/products')">상품 보러 가기</button>
+    </div>
+
+    <!-- 목록 -->
+    <ul v-else class="card divide-y divide-line">
+      <li v-for="o in orders" :key="o.id">
+        <button
+          type="button"
+          class="flex w-full flex-wrap items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-canvas focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
           @click="router.push(`/orders/${o.id}`)"
         >
-          <div class="flex-1">
-            <div class="font-medium text-slate-800">{{ summary(o) }}</div>
-            <div class="text-sm text-slate-500">{{ fmt(o.createdAt) }}</div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium text-ink-900">{{ summary(o) }}</p>
+            <p class="muted mt-1 tabular-nums">{{ shortId(o.id) }} · {{ fmt(o.createdAt) }}</p>
           </div>
-          <span class="rounded px-2 py-0.5 text-sm" :class="orderStatusClass(o.status)">{{ orderStatusText(o.status) }}</span>
-          <div class="w-24 text-right font-semibold text-slate-800">{{ priceText(o.totalPrice) }}</div>
-        </li>
-      </ul>
+          <span class="badge shrink-0" :class="orderStatusClass(o.status)">{{ orderStatusText(o.status) }}</span>
+          <span class="w-24 shrink-0 text-right text-sm font-semibold tabular-nums text-ink-900">
+            {{ priceText(o.totalPrice) }}
+          </span>
+        </button>
+      </li>
+    </ul>
 
-      <div v-if="pageInfo.totalPages > 1" class="mt-3 flex items-center justify-center gap-3 text-sm">
-        <button class="text-slate-500 disabled:text-slate-300" :disabled="pageInfo.page === 0" @click="load(pageInfo.page - 1)">이전</button>
-        <span class="text-slate-500">{{ pageInfo.page + 1 }} / {{ pageInfo.totalPages }}</span>
-        <button class="text-slate-500 disabled:text-slate-300" :disabled="pageInfo.last" @click="load(pageInfo.page + 1)">다음</button>
-      </div>
-    </template>
+    <!-- 페이지 이동 -->
+    <div v-if="!loading && pageInfo.totalPages > 1" class="mt-8 flex items-center justify-center gap-4">
+      <button type="button" class="btn btn-secondary" :disabled="pageInfo.page === 0" @click="load(pageInfo.page - 1)">
+        이전
+      </button>
+      <span class="text-sm tabular-nums text-ink-500">{{ pageInfo.page + 1 }} / {{ pageInfo.totalPages }}</span>
+      <button type="button" class="btn btn-secondary" :disabled="pageInfo.last" @click="load(pageInfo.page + 1)">
+        다음
+      </button>
+    </div>
   </section>
 </template>

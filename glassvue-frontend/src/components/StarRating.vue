@@ -42,7 +42,7 @@ const filled = computed(() => Math.round(props.modelValue));
       :key="n"
       type="button"
       class="leading-none"
-      :class="[sizeClass, n <= modelValue ? 'text-amber-400' : 'text-slate-300']"
+      :class="[sizeClass, n <= modelValue ? 'text-amber-400' : 'text-ink-400']"
       :aria-label="`${n}점`"
       :aria-checked="n === modelValue"
       role="radio"
@@ -51,17 +51,17 @@ const filled = computed(() => Math.round(props.modelValue));
   </div>
 
   <!-- 리뷰 없음 -->
-  <span v-else-if="hasNoReview" class="text-slate-400" :class="sizeClass">리뷰 없음</span>
+  <span v-else-if="hasNoReview" class="text-ink-400" :class="sizeClass">리뷰 없음</span>
 
   <!-- 평균(소수) — 별 하나 + 숫자 -->
   <span v-else-if="isFractional" class="text-amber-500" :class="sizeClass">
     <span class="font-semibold">★ {{ modelValue.toFixed(1) }}</span>
-    <span v-if="count !== null" class="ml-1 text-slate-500" :class="size === 'lg' ? 'text-sm' : 'text-xs'">({{ count }})</span>
+    <span v-if="count !== null" class="ml-1 text-ink-500" :class="size === 'lg' ? 'text-sm' : 'text-xs'">({{ count }})</span>
   </span>
 
   <!-- 개별 별점(정수) — 채운 별 -->
   <span v-else class="text-amber-400" :class="sizeClass">
-    {{ '★'.repeat(filled) }}<span class="text-slate-300">{{ '★'.repeat(5 - filled) }}</span>
-    <span v-if="count !== null" class="ml-1 text-slate-500" :class="size === 'lg' ? 'text-sm' : 'text-xs'">({{ count }})</span>
+    {{ '★'.repeat(filled) }}<span class="text-ink-400">{{ '★'.repeat(5 - filled) }}</span>
+    <span v-if="count !== null" class="ml-1 text-ink-500" :class="size === 'lg' ? 'text-sm' : 'text-xs'">({{ count }})</span>
   </span>
 </template>

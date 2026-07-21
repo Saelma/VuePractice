@@ -1,7 +1,9 @@
 <script setup>
+/**
+ * 공지 상세 — 읽는 화면이라 폭을 좁게(page-narrow) 잡고 제목 → 메타 → 본문 순으로 읽히게 한다(DESIGN.md §7).
+ */
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { DxButton } from 'devextreme-vue/button';
 import { getNotice, deleteNotice, increaseView } from '../api/notice';
 import { isLoggedIn, authState } from '../stores/auth';
 
@@ -46,29 +48,46 @@ function fmt(v) {
 </script>
 
 <template>
-  <section class="max-w-3xl p-6">
-    <div v-if="error" class="mb-4 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
-    <div v-else-if="loading" class="text-slate-500">불러오는 중…</div>
+  <section class="page-narrow">
+    <div v-if="error" class="alert-error">{{ error }}</div>
 
-    <article v-else-if="notice" class="rounded-lg border bg-white p-6">
-      <div class="mb-2 flex items-center gap-2">
-        <span v-if="notice.pinned" title="상단 고정">📌</span>
-        <h2 class="text-2xl font-bold text-slate-800">{{ notice.title }}</h2>
+    <!-- 로딩: 텍스트 대신 스켈레톤으로 읽는 레이아웃을 미리 잡는다 (DESIGN.md §5) -->
+    <div v-else-if="loading" class="card p-6">
+      <div class="skeleton h-7 w-2/3"></div>
+      <div class="mt-3 flex gap-3 border-b border-line pb-4">
+        <div class="skeleton h-3 w-20"></div>
+        <div class="skeleton h-3 w-16"></div>
+        <div class="skeleton h-3 w-28"></div>
       </div>
-      <div class="mb-4 flex flex-wrap gap-4 border-b pb-3 text-sm text-slate-500">
-        <span>작성자 <b class="text-slate-700">{{ notice.author }}</b></span>
-        <span>조회 {{ notice.viewCount }}</span>
-        <span>작성 {{ fmt(notice.createdAt) }}</span>
-        <span v-if="notice.updatedAt !== notice.createdAt">수정 {{ fmt(notice.updatedAt) }}</span>
+      <div class="mt-4 space-y-2">
+        <div class="skeleton h-4 w-full"></div>
+        <div class="skeleton h-4 w-11/12"></div>
+        <div class="skeleton h-4 w-3/4"></div>
+      </div>
+    </div>
+
+    <article v-else-if="notice" class="card p-6">
+      <div class="flex items-start gap-2">
+        <span v-if="notice.pinned" class="shrink-0 text-lg" title="상단 고정">📌</span>
+        <h1 class="page-title">{{ notice.title }}</h1>
       </div>
 
-      <p class="min-h-[8rem] whitespace-pre-wrap text-slate-700">{{ notice.content }}</p>
+      <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-b border-line pb-4">
+        <span class="muted">작성자 <b class="font-medium text-ink-700">{{ notice.author }}</b></span>
+        <span class="muted tabular-nums">조회 {{ notice.viewCount }}</span>
+        <span class="muted tabular-nums">작성 {{ fmt(notice.createdAt) }}</span>
+        <span v-if="notice.updatedAt !== notice.createdAt" class="muted tabular-nums">
+          수정 {{ fmt(notice.updatedAt) }}
+        </span>
+      </div>
 
-      <div class="mt-6 flex gap-2">
-        <DxButton text="목록" styling-mode="outlined" @click="router.push('/')" />
+      <p class="mt-5 min-h-[8rem] whitespace-pre-wrap text-sm leading-relaxed text-ink-700">{{ notice.content }}</p>
+
+      <div class="mt-8 flex items-center gap-2 border-t border-line pt-5">
+        <button type="button" class="btn btn-secondary" @click="router.push('/')">목록</button>
         <template v-if="isOwner">
-          <DxButton text="수정" type="default" styling-mode="contained" @click="router.push(`/notices/${id}/edit`)" />
-          <DxButton text="삭제" type="danger" styling-mode="contained" @click="onDelete" />
+          <button type="button" class="btn btn-primary" @click="router.push(`/notices/${id}/edit`)">수정</button>
+          <button type="button" class="btn btn-danger ml-auto" @click="onDelete">삭제</button>
         </template>
       </div>
     </article>

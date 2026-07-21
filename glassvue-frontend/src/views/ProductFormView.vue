@@ -5,7 +5,6 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { DxSelectBox } from 'devextreme-vue/select-box';
-import { DxButton } from 'devextreme-vue/button';
 import { getProduct, createProduct, updateProduct, STATUS_OPTIONS } from '../api/product';
 import { fetchCategories } from '../api/category';
 import ImageUploader from '../components/ImageUploader.vue';
@@ -67,48 +66,52 @@ async function onSave() {
 </script>
 
 <template>
-  <section class="max-w-2xl p-6">
-    <h2 class="mb-4 text-xl font-semibold text-slate-800">{{ isEdit ? '상품 수정' : '상품 등록' }}</h2>
-    <div v-if="error" class="mb-4 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
+  <section class="page-narrow">
+    <h1 class="page-title mb-5">{{ isEdit ? '상품 수정' : '상품 등록' }}</h1>
 
-    <div class="flex flex-col gap-4 rounded-lg border bg-white p-6">
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">상품명</span>
+    <!-- 전역/서버 에러는 상단 박스, 필드 단위 검증은 필드 아래(DESIGN.md §5) -->
+    <div v-if="error" class="alert-error mb-4">{{ error }}</div>
+
+    <div class="card flex flex-col gap-4 p-5">
+      <label class="field">
+        <span class="field-label">상품명</span>
         <DxTextBox v-model:value="form.name" />
       </label>
       <div class="flex gap-4">
-        <label class="flex flex-1 flex-col gap-1">
-          <span class="text-sm text-slate-600">카테고리</span>
+        <label class="field flex-1">
+          <span class="field-label">카테고리</span>
           <DxSelectBox v-model:value="form.categoryId" :items="categories" value-expr="id" display-expr="name" placeholder="선택" />
         </label>
-        <label class="flex flex-1 flex-col gap-1">
-          <span class="text-sm text-slate-600">상태</span>
+        <label class="field flex-1">
+          <span class="field-label">상태</span>
           <DxSelectBox v-model:value="form.status" :items="STATUS_OPTIONS" value-expr="value" display-expr="text" />
         </label>
       </div>
       <div class="flex gap-4">
-        <label class="flex flex-1 flex-col gap-1">
-          <span class="text-sm text-slate-600">가격(원)</span>
+        <label class="field flex-1">
+          <span class="field-label">가격(원)</span>
           <DxNumberBox v-model:value="form.price" :min="0" format="#,##0" />
         </label>
-        <label class="flex flex-1 flex-col gap-1">
-          <span class="text-sm text-slate-600">재고</span>
+        <label class="field flex-1">
+          <span class="field-label">재고</span>
           <DxNumberBox v-model:value="form.stock" :min="0" format="#,##0" />
         </label>
       </div>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">설명</span>
+      <label class="field">
+        <span class="field-label">설명</span>
         <DxTextArea v-model:value="form.description" :height="160" />
       </label>
 
-      <div class="flex flex-col gap-2">
-        <span class="text-sm text-slate-600">이미지</span>
+      <div class="field">
+        <span class="field-label">이미지</span>
         <ImageUploader v-model="form.images" @error="error = $event" />
       </div>
 
       <div class="mt-2 flex gap-2">
-        <DxButton :text="saving ? '저장 중…' : '저장'" type="default" styling-mode="contained" :disabled="saving" @click="onSave" />
-        <DxButton text="취소" styling-mode="outlined" @click="router.back()" />
+        <button type="button" class="btn btn-primary" :disabled="saving" @click="onSave">
+          {{ saving ? '저장 중…' : '저장' }}
+        </button>
+        <button type="button" class="btn btn-secondary" @click="router.back()">취소</button>
       </div>
     </div>
   </section>

@@ -1,6 +1,5 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { DxButton } from 'devextreme-vue/button';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { fetchProductReviews, createReview, updateReview, deleteReview, REVIEW_IMAGE_MAX } from '../api/review';
 import { authState, isLoggedIn } from '../stores/auth';
@@ -106,78 +105,96 @@ onMounted(() => load(0));
 
 <template>
   <section class="mt-8">
-    <header class="mb-3 flex items-center gap-3 border-b pb-2">
-      <h3 class="text-lg font-bold text-slate-800">상품 리뷰</h3>
+    <header class="mb-4 flex items-center gap-3">
+      <h2 class="section-title">상품 리뷰</h2>
       <StarRating :model-value="summary.averageRating" :count="summary.reviewCount" />
     </header>
 
-    <div v-if="error" class="mb-3 rounded bg-red-50 p-2 text-sm text-red-600">{{ error }}</div>
+    <div v-if="error" class="alert-error mb-3">{{ error }}</div>
 
     <!-- 작성 폼 (로그인 시) -->
-    <div v-if="isLoggedIn" class="mb-5 rounded-lg border bg-slate-50 p-4">
-      <div class="mb-2 flex items-center gap-2">
-        <span class="text-sm text-slate-600">별점</span>
+    <div v-if="isLoggedIn" class="card mb-6 flex flex-col gap-4 p-5">
+      <div class="field">
+        <span class="field-label">별점</span>
         <StarRating v-model="form.rating" editable size="lg" />
       </div>
-      <DxTextArea v-model:value="form.content" :height="70" placeholder="이 상품은 어떠셨나요?" />
-      <div class="mt-2 flex flex-col gap-1">
-        <span class="text-sm text-slate-600">사진 첨부 <span class="text-xs text-slate-400">(최대 {{ REVIEW_IMAGE_MAX }}장)</span></span>
+      <label class="field">
+        <span class="field-label">내용</span>
+        <DxTextArea v-model:value="form.content" :height="70" placeholder="이 상품은 어떠셨나요?" />
+      </label>
+      <div class="field">
+        <span class="field-label">사진 첨부 (최대 {{ REVIEW_IMAGE_MAX }}장)</span>
         <ImageUploader v-model="form.images" :max="REVIEW_IMAGE_MAX" thumb-class="h-16 w-16" @error="formError = $event" />
       </div>
-      <div class="mt-2 flex items-center gap-2">
-        <DxButton text="리뷰 등록" type="success" styling-mode="contained" :disabled="submitting" @click="submit" />
-        <span v-if="formError" class="text-sm text-red-600">{{ formError }}</span>
+      <p v-if="formError" class="field-error">{{ formError }}</p>
+      <div class="flex items-center justify-between gap-3">
+        <p class="muted">※ 구매하신 상품만 리뷰를 작성할 수 있어요.</p>
+        <button type="button" class="btn btn-primary" :disabled="submitting" @click="submit">리뷰 등록</button>
       </div>
-      <p class="mt-1 text-xs text-slate-400">※ 구매하신 상품만 리뷰를 작성할 수 있어요.</p>
     </div>
-    <p v-else class="mb-5 text-sm text-slate-500">리뷰 작성은 로그인 후 가능합니다.</p>
+    <p v-else class="mb-6 text-sm text-ink-500">리뷰 작성은 로그인 후 가능합니다.</p>
+
+    <!-- 로딩: 텍스트 대신 스켈레톤 (DESIGN.md §5) -->
+    <div v-if="loading" class="card divide-y divide-line">
+      <div v-for="n in 3" :key="n" class="space-y-2 px-5 py-4">
+        <div class="skeleton h-3 w-32"></div>
+        <div class="skeleton h-4 w-3/4"></div>
+      </div>
+    </div>
+
+    <!-- 빈 상태 -->
+    <div v-else-if="!page.content.length" class="flex flex-col items-center gap-3 py-12 text-center">
+      <span class="text-4xl">💬</span>
+      <p class="text-sm text-ink-500">아직 리뷰가 없어요.</p>
+      <p v-if="isLoggedIn" class="muted">이 상품을 구매하셨다면 첫 리뷰를 남겨보세요.</p>
+    </div>
 
     <!-- 목록 -->
-    <div v-if="loading" class="text-slate-500">불러오는 중…</div>
-    <div v-else-if="!page.content.length" class="text-slate-400">아직 리뷰가 없어요.</div>
-    <ul v-else class="space-y-3">
-      <li v-for="r in page.content" :key="r.id" class="rounded-lg border bg-white p-4">
-        <div class="mb-1 flex items-center justify-between">
+    <ul v-else class="card divide-y divide-line">
+      <li v-for="r in page.content" :key="r.id" class="px-5 py-4">
+        <div class="mb-2 flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
             <StarRating :model-value="r.rating" size="sm" />
-            <span class="text-sm font-medium text-slate-700">{{ r.author }}</span>
+            <span class="text-sm font-medium text-ink-900">{{ r.author }}</span>
           </div>
-          <span class="text-xs text-slate-400">{{ fmtDate(r.createdAt) }}</span>
+          <span class="muted shrink-0">{{ fmtDate(r.createdAt) }}</span>
         </div>
 
         <template v-if="editingId === r.id">
-          <div class="mb-2">
+          <div class="flex flex-col gap-3">
             <StarRating v-model="editForm.rating" editable size="lg" />
-          </div>
-          <DxTextArea v-model:value="editForm.content" :height="60" />
-          <div class="mt-2">
+            <DxTextArea v-model:value="editForm.content" :height="60" />
             <ImageUploader v-model="editForm.images" :max="REVIEW_IMAGE_MAX" thumb-class="h-16 w-16" @error="error = $event" />
-          </div>
-          <div class="mt-2 flex gap-2">
-            <DxButton text="저장" type="default" styling-mode="contained" @click="saveEdit(r)" />
-            <DxButton text="취소" styling-mode="outlined" @click="cancelEdit" />
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-secondary" @click="saveEdit(r)">저장</button>
+              <button type="button" class="btn btn-ghost" @click="cancelEdit">취소</button>
+            </div>
           </div>
         </template>
         <template v-else>
-          <p class="whitespace-pre-wrap text-slate-700">{{ r.content }}</p>
-          <div v-if="r.images?.length" class="mt-2 flex flex-wrap gap-2">
+          <p class="whitespace-pre-wrap text-sm text-ink-700">{{ r.content }}</p>
+          <div v-if="r.images?.length" class="mt-3 flex flex-wrap gap-2">
             <a v-for="img in r.images" :key="img.id" :href="img.url" target="_blank" rel="noopener">
-              <img :src="img.thumbUrl" :alt="`${r.author}님의 리뷰 사진`" class="h-20 w-20 rounded border object-cover" />
+              <img
+                :src="img.thumbUrl"
+                :alt="`${r.author}님의 리뷰 사진`"
+                class="h-20 w-20 rounded-control border border-line object-cover"
+              />
             </a>
           </div>
-          <div v-if="canManage(r)" class="mt-2 flex gap-2">
-            <button class="text-xs text-slate-500 hover:underline" @click="startEdit(r)">수정</button>
-            <button class="text-xs text-red-500 hover:underline" @click="remove(r)">삭제</button>
+          <div v-if="canManage(r)" class="mt-3 flex gap-1">
+            <button type="button" class="btn btn-ghost" @click="startEdit(r)">수정</button>
+            <button type="button" class="btn btn-danger" @click="remove(r)">삭제</button>
           </div>
         </template>
       </li>
     </ul>
 
     <!-- 페이지 이동 -->
-    <div v-if="page.totalPages > 1" class="mt-3 flex items-center justify-center gap-3 text-sm">
-      <button class="text-slate-500 disabled:text-slate-300" :disabled="page.page === 0" @click="load(page.page - 1)">이전</button>
-      <span class="text-slate-500">{{ page.page + 1 }} / {{ page.totalPages }}</span>
-      <button class="text-slate-500 disabled:text-slate-300" :disabled="page.last" @click="load(page.page + 1)">다음</button>
+    <div v-if="page.totalPages > 1" class="mt-6 flex items-center justify-center gap-4">
+      <button type="button" class="btn btn-secondary" :disabled="page.page === 0" @click="load(page.page - 1)">이전</button>
+      <span class="text-sm tabular-nums text-ink-500">{{ page.page + 1 }} / {{ page.totalPages }}</span>
+      <button type="button" class="btn btn-secondary" :disabled="page.last" @click="load(page.page + 1)">다음</button>
     </div>
   </section>
 </template>

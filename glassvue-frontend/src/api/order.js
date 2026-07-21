@@ -49,13 +49,15 @@ export function orderStatusText(status) {
   return ORDER_STATUS_TEXT[status] || status;
 }
 
-// 상태별 배지 색상(Tailwind)
+// 상태별 배지 변형(DESIGN.md §5). 색을 직접 쓰지 않고 공용 `badge-*` 클래스를 돌려준다
+// — 화면마다 매핑을 따로 두면 목록/상세/관리자에서 같은 상태가 다른 색으로 보인다(실제로 그랬다).
+// 쓰는 쪽: <span class="badge" :class="orderStatusClass(status)">
 const STATUS_CLASS = {
-  ORDERED: 'bg-amber-50 text-amber-700',
-  PAID: 'bg-blue-50 text-blue-600',
-  SHIPPED: 'bg-green-100 text-green-700',
-  CANCELLED: 'bg-slate-100 text-slate-500',
+  ORDERED: 'badge-warning', // 결제대기 — 할 일이 남았다
+  PAID: 'badge-success', // 결제완료
+  SHIPPED: 'badge-neutral', // 발송완료 — 더 할 일 없음
+  CANCELLED: 'badge-danger', // 취소됨
 };
 export function orderStatusClass(status) {
-  return STATUS_CLASS[status] || 'bg-slate-100 text-slate-500';
+  return STATUS_CLASS[status] || 'badge-neutral';
 }

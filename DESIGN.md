@@ -26,9 +26,11 @@
 
 ## 2. 지향점
 
-**절제된 커머스.** 화려한 장식 대신, 여백과 타이포로 위계를 만든다.
+**절제된 커머스 (잘크·미니멀).** 화려한 장식 대신, 여백과 타이포로 위계를 만든다.
 
-- **거의 무채색 UI + 강조색은 행동(CTA)에만.** 링크마다 파란색을 칠하지 않는다.
+- **강조색은 "거의 검정"** — 채도 있는 브랜드 컬러를 쓰지 않는다. 색을 빼면 남는 건 이미지·타이포·여백이고,
+  그게 프로토타입 티를 지우는 가장 확실한 방법이다. 초록/주황/빨강은 **상태 표시에만** 쓴다.
+- **거의 무채색 UI + 강조는 행동(CTA)에만.** 링크마다 파란색을 칠하지 않는다.
 - **콘텐츠가 주인공.** 상품 이미지·이름·가격이 가장 먼저 읽히게.
 - **얇은 경계, 옅은 그림자.** 두꺼운 보더나 진한 그림자는 낡아 보인다.
 - **움직임은 거들 뿐.** 150~200ms 정도의 hover/focus 전환까지만.
@@ -49,21 +51,21 @@ Tailwind 4의 CSS-first 설정(`@theme`)에 정의한다. **화면에서 임의 
 ```css
 /* src/index.css */
 @theme {
-  /* 브랜드 — 강조색 하나. CTA·활성 상태·포커스에만 */
-  --color-brand-50:  #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;   /* 기본 CTA */
-  --color-brand-700: #4338ca;   /* hover */
+  /* 강조 — 거의 검정. CTA·활성 상태·포커스에만 */
+  --color-brand-50:  #f5f5f5;
+  --color-brand-100: #e5e5e5;
+  --color-brand-500: #1f2937;
+  --color-brand-600: #111827;   /* 기본 CTA */
+  --color-brand-700: #374151;   /* hover — 검정 버튼은 밝아지는 쪽이 자연스럽다 */
 
-  /* 중립 — 대부분의 UI는 여기서 나온다 */
-  --color-ink-900: #0f172a;     /* 제목 */
-  --color-ink-700: #334155;     /* 본문 */
-  --color-ink-500: #64748b;     /* 보조 설명 */
-  --color-ink-400: #94a3b8;     /* 비활성·플레이스홀더 */
-  --color-line:    #e2e8f0;     /* 경계선 */
+  /* 중립 — 대부분의 UI는 여기서 나온다 (순수 회색) */
+  --color-ink-900: #0a0a0a;     /* 제목 */
+  --color-ink-700: #404040;     /* 본문 */
+  --color-ink-500: #737373;     /* 보조 설명 */
+  --color-ink-400: #a3a3a3;     /* 비활성·플레이스홀더 */
+  --color-line:    #e5e5e5;     /* 경계선 */
   --color-surface: #ffffff;     /* 카드 */
-  --color-canvas:  #f8fafc;     /* 페이지 배경 */
+  --color-canvas:  #fafafa;     /* 페이지 배경 */
 
   /* 의미색 — 상태 표시 전용(장식으로 쓰지 않는다) */
   --color-success: #059669;
@@ -122,6 +124,12 @@ Tailwind 4의 CSS-first 설정(`@theme`)에 정의한다. **화면에서 임의 
 ---
 
 ## 5. 컴포넌트 패턴
+
+> **공용 클래스로 정의돼 있다** (`src/index.css`). 화면마다 유틸리티를 즉흥 조합하지 말고 이걸 쓴다:
+> `page`·`page-narrow`·`page-title`·`section-title`·`muted` / `card`·`card-pad`·`card-link` /
+> `btn`+`btn-primary|btn-secondary|btn-ghost|btn-danger` / `badge`+`badge-neutral|success|warning|danger` /
+> `field`·`field-label`·`field-error` / `alert-error`·`alert-success` / `skeleton`
+> (버튼·배지는 **베이스와 변형을 함께** 쓴다: `class="btn btn-primary"`)
 
 ### 버튼
 | 종류 | 스타일 | 언제 |

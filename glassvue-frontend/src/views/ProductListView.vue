@@ -9,7 +9,6 @@ import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { DxSelectBox } from 'devextreme-vue/select-box';
-import { DxButton } from 'devextreme-vue/button';
 import { fetchProducts, STATUS_OPTIONS, statusText, priceText } from '../api/product';
 import { fetchCategories } from '../api/category';
 import { authState } from '../stores/auth';
@@ -82,59 +81,59 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
 </script>
 
 <template>
-  <section class="px-4 py-6 sm:px-6">
+  <section class="page">
     <!-- 머리: 제목 + 관리자 액션 -->
     <div class="mb-5 flex items-end justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-bold tracking-tight text-ink-900">상품</h1>
-        <p v-if="!loading" class="mt-1 text-xs text-ink-500">{{ totalElements }}개</p>
+        <h1 class="page-title">상품</h1>
+        <p v-if="!loading" class="muted mt-1">{{ totalElements }}개</p>
       </div>
       <div v-if="isAdmin" class="flex gap-2">
-        <DxButton text="카테고리 관리" styling-mode="outlined" @click="router.push('/admin/categories')" />
-        <DxButton text="+ 상품 등록" type="default" styling-mode="contained" @click="router.push('/products/new')" />
+        <button type="button" class="btn btn-secondary" @click="router.push('/admin/categories')">카테고리 관리</button>
+        <button type="button" class="btn btn-primary" @click="router.push('/products/new')">상품 등록</button>
       </div>
     </div>
 
     <!-- 필터 -->
-    <div class="mb-6 flex flex-wrap items-end gap-3 rounded-card border border-line bg-surface p-4 shadow-card">
-      <label class="flex flex-col gap-1">
-        <span class="text-xs text-ink-500">상품명</span>
+    <div class="card mb-6 flex flex-wrap items-end gap-3 p-4">
+      <label class="field">
+        <span class="field-label">상품명</span>
         <DxTextBox v-model:value="form.name" :width="160" @enter-key="search" />
       </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-xs text-ink-500">카테고리</span>
+      <label class="field">
+        <span class="field-label">카테고리</span>
         <DxSelectBox v-model:value="form.categoryId" :items="categories" value-expr="id" display-expr="name"
           :show-clear-button="true" placeholder="전체" :width="140" />
       </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-xs text-ink-500">상태</span>
+      <label class="field">
+        <span class="field-label">상태</span>
         <DxSelectBox v-model:value="form.status" :items="STATUS_OPTIONS" value-expr="value" display-expr="text"
           :show-clear-button="true" placeholder="전체" :width="110" />
       </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-xs text-ink-500">최소가</span>
+      <label class="field">
+        <span class="field-label">최소가</span>
         <DxNumberBox v-model:value="form.minPrice" :min="0" :show-clear-button="true" :width="110" format="#,##0" />
       </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-xs text-ink-500">최대가</span>
+      <label class="field">
+        <span class="field-label">최대가</span>
         <DxNumberBox v-model:value="form.maxPrice" :min="0" :show-clear-button="true" :width="110" format="#,##0" />
       </label>
       <div class="flex gap-2">
-        <DxButton text="검색" type="default" styling-mode="contained" @click="search" />
-        <DxButton text="초기화" styling-mode="outlined" @click="reset" />
+        <button type="button" class="btn btn-primary" @click="search">검색</button>
+        <button type="button" class="btn btn-secondary" @click="reset">초기화</button>
       </div>
     </div>
 
-    <div v-if="error" class="rounded-card border border-line bg-red-50 p-4 text-sm text-danger">{{ error }}</div>
+    <div v-if="error" class="alert-error">{{ error }}</div>
 
     <!-- 로딩: 텍스트 대신 스켈레톤으로 레이아웃을 미리 잡는다 (DESIGN.md §5) -->
     <div v-else-if="loading" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       <div v-for="n in 8" :key="n" class="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-        <div class="aspect-square animate-pulse bg-slate-100"></div>
+        <div class="skeleton aspect-square rounded-none"></div>
         <div class="space-y-2 p-4">
-          <div class="h-3 w-16 animate-pulse rounded bg-slate-100"></div>
-          <div class="h-4 w-3/4 animate-pulse rounded bg-slate-100"></div>
-          <div class="h-5 w-24 animate-pulse rounded bg-slate-100"></div>
+          <div class="skeleton h-3 w-16"></div>
+          <div class="skeleton h-4 w-3/4"></div>
+          <div class="skeleton h-5 w-24"></div>
         </div>
       </div>
     </div>
@@ -145,9 +144,10 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
       <p class="text-sm text-ink-500">
         {{ hasFilter ? '조건에 맞는 상품이 없어요.' : '아직 등록된 상품이 없어요.' }}
       </p>
-      <DxButton v-if="hasFilter" text="필터 초기화" styling-mode="outlined" @click="reset" />
-      <DxButton v-else-if="isAdmin" text="+ 상품 등록" type="default" styling-mode="contained"
-        @click="router.push('/products/new')" />
+      <button v-if="hasFilter" type="button" class="btn btn-secondary" @click="reset">필터 초기화</button>
+      <button v-else-if="isAdmin" type="button" class="btn btn-primary" @click="router.push('/products/new')">
+        상품 등록
+      </button>
     </div>
 
     <!-- 카드 그리드 -->
@@ -181,8 +181,8 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
           <!-- 정상 판매중이면 배지를 달지 않는다(노이즈 감소) -->
           <span
             v-if="p.status !== 'SELLING'"
-            class="mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium"
-            :class="p.status === 'SOLD_OUT' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-ink-500'"
+            class="badge mt-2"
+            :class="p.status === 'SOLD_OUT' ? 'badge-warning' : 'badge-neutral'"
           >{{ statusText(p.status) }}</span>
         </div>
       </button>
@@ -190,16 +190,12 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
 
     <!-- 페이지 이동 -->
     <div v-if="!loading && totalPages > 1" class="mt-8 flex items-center justify-center gap-4">
-      <button
-        type="button"
-        class="rounded-control border border-line px-3 py-1.5 text-sm text-ink-700 transition-colors hover:bg-surface disabled:opacity-40 disabled:hover:bg-transparent"
+      <button type="button" class="btn btn-secondary"
         :disabled="page === 0"
         @click="load(page - 1)"
       >이전</button>
       <span class="text-sm tabular-nums text-ink-500">{{ page + 1 }} / {{ totalPages }}</span>
-      <button
-        type="button"
-        class="rounded-control border border-line px-3 py-1.5 text-sm text-ink-700 transition-colors hover:bg-surface disabled:opacity-40 disabled:hover:bg-transparent"
+      <button type="button" class="btn btn-secondary"
         :disabled="page + 1 >= totalPages"
         @click="load(page + 1)"
       >다음</button>

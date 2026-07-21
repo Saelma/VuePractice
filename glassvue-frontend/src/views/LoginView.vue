@@ -2,7 +2,6 @@
 import { reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
-import { DxButton } from 'devextreme-vue/button';
 import { login } from '../api/auth';
 
 const route = useRoute();
@@ -30,29 +29,33 @@ async function onSubmit() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-sm p-6">
-    <h2 class="mb-4 text-xl font-semibold text-slate-800">로그인</h2>
-    <div v-if="error" class="mb-4 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
+  <section class="page-narrow">
+    <div class="mx-auto max-w-sm">
+      <div class="card p-6">
+        <h1 class="page-title">로그인</h1>
+        <p class="muted mt-1">아이디와 비밀번호를 입력해 주세요.</p>
 
-    <div class="flex flex-col gap-4 rounded-lg border bg-white p-6">
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">아이디</span>
-        <DxTextBox v-model:value="form.loginId" @enter-key="onSubmit" />
-      </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">비밀번호</span>
-        <DxTextBox v-model:value="form.password" mode="password" @enter-key="onSubmit" />
-      </label>
-      <DxButton
-        :text="loading ? '로그인 중…' : '로그인'"
-        type="default"
-        styling-mode="contained"
-        :disabled="loading"
-        @click="onSubmit"
-      />
-      <p class="text-center text-sm text-slate-500">
+        <div v-if="error" class="alert-error mt-5">{{ error }}</div>
+
+        <div class="mt-5 flex flex-col gap-4">
+          <label class="field">
+            <span class="field-label">아이디</span>
+            <DxTextBox v-model:value="form.loginId" @enter-key="onSubmit" />
+          </label>
+          <label class="field">
+            <span class="field-label">비밀번호</span>
+            <DxTextBox v-model:value="form.password" mode="password" @enter-key="onSubmit" />
+          </label>
+
+          <button type="button" class="btn btn-primary w-full" :disabled="loading" @click="onSubmit">
+            {{ loading ? '로그인 중…' : '로그인' }}
+          </button>
+        </div>
+      </div>
+
+      <p class="mt-4 text-center text-sm text-ink-500">
         계정이 없나요?
-        <RouterLink to="/signup" class="text-blue-600 hover:underline">회원가입</RouterLink>
+        <RouterLink to="/signup" class="font-medium text-ink-900 underline underline-offset-2">회원가입</RouterLink>
       </p>
     </div>
   </section>

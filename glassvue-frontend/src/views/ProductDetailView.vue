@@ -1,7 +1,10 @@
 <script setup>
+/**
+ * 상품 상세 — 좌: 이미지 갤러리 / 우: 상품 정보의 2단 구성(DESIGN.md §7).
+ * 정보를 한 줄에 늘어놓지 않고 카테고리 → 이름 → 가격 → 별점 → 재고 → 구매 순으로 읽히게 한다.
+ */
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { DxButton } from 'devextreme-vue/button';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText } from '../api/product';
 import { addToCart } from '../api/cart';
@@ -19,6 +22,11 @@ const loading = ref(true);
 const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 const qty = ref(1);
 const cartMsg = ref('');
+
+/** 갤러리 표시용 로컬 상태 — 썸네일을 누르면 대표 이미지가 바뀐다(서버 데이터는 건드리지 않는다). */
+const images = computed(() => product.value?.images ?? []);
+const selected = ref(0);
+const mainImage = computed(() => images.value[selected.value] ?? images.value[0] ?? null);
 
 async function onAddToCart() {
   cartMsg.value = '';
@@ -52,45 +60,106 @@ async function onDelete() {
 </script>
 
 <template>
-  <section class="max-w-2xl p-6">
-    <div v-if="error" class="mb-4 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
-    <div v-else-if="loading" class="text-slate-500">불러오는 중…</div>
+  <section class="page">
+    <div v-if="error" class="alert-error mb-6">{{ error }}</div>
+
+    <!-- 로딩: 텍스트 대신 스켈레톤으로 2단 레이아웃을 미리 잡는다 (DESIGN.md §5) -->
+    <div v-if="loading" class="grid gap-8 lg:grid-cols-2">
+      <div class="skeleton aspect-square w-full rounded-card"></div>
+      <div class="space-y-4">
+        <div class="skeleton h-3 w-20"></div>
+        <div class="skeleton h-7 w-2/3"></div>
+        <div class="skeleton h-9 w-40"></div>
+        <div class="skeleton h-4 w-28"></div>
+        <div class="skeleton h-24 w-full rounded-card"></div>
+      </div>
+    </div>
 
     <template v-else-if="product">
-    <article class="rounded-lg border bg-white p-6">
-      <div class="mb-2 flex items-center gap-2">
-        <h2 class="text-2xl font-bold text-slate-800">{{ product.name }}</h2>
-        <span class="rounded bg-slate-100 px-2 py-0.5 text-sm text-slate-600">{{ statusText(product.status) }}</span>
-      </div>
-      <div class="mb-4 flex flex-wrap items-center gap-4 border-b pb-3 text-sm text-slate-500">
-        <span>카테고리 <b class="text-slate-700">{{ product.categoryName }}</b></span>
-        <span class="text-lg font-semibold text-slate-800">{{ priceText(product.price) }}</span>
-        <span>재고 {{ product.stock }}</span>
-        <StarRating :model-value="product.averageRating" :count="product.reviewCount" />
-      </div>
-      <div v-if="product.images && product.images.length" class="mb-4 flex flex-wrap gap-2">
-        <img v-for="img in product.images" :key="img.id" :src="img.mediumUrl" class="h-32 w-32 rounded border object-cover" />
+      <div class="grid gap-8 lg:grid-cols-2">
+        <!-- 좌: 이미지 갤러리 -->
+        <div>
+          <div class="card aspect-square overflow-hidden bg-canvas">
+            <img
+              v-if="mainImage"
+              :src="mainImage.mediumUrl"
+              :alt="product.name"
+              class="h-full w-full object-cover"
+            />
+            <div v-else class="flex h-full items-center justify-center text-5xl text-ink-400">🖼️</div>
+          </div>
+
+          <!-- 여러 장일 때만 썸네일 줄 -->
+          <div v-if="images.length > 1" class="mt-3 flex flex-wrap gap-2">
+            <button
+              v-for="(img, i) in images"
+              :key="img.id"
+              type="button"
+              class="h-16 w-16 overflow-hidden rounded-control border bg-canvas transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              :class="i === selected ? 'border-brand-600' : 'border-line hover:border-ink-400'"
+              :aria-label="`${i + 1}번째 이미지 보기`"
+              :aria-current="i === selected"
+              @click="selected = i"
+            >
+              <img :src="img.thumbUrl" :alt="`${product.name} ${i + 1}`" class="h-full w-full object-cover" />
+            </button>
+          </div>
+        </div>
+
+        <!-- 우: 상품 정보 -->
+        <div>
+          <p class="muted">{{ product.categoryName }}</p>
+          <h1 class="page-title mt-1">{{ product.name }}</h1>
+
+          <p class="mt-4 text-3xl font-semibold tabular-nums text-ink-900">{{ priceText(product.price) }}</p>
+
+          <div class="mt-3">
+            <StarRating :model-value="product.averageRating" :count="product.reviewCount" />
+          </div>
+
+          <div class="mt-4 flex items-center gap-2">
+            <span class="text-sm text-ink-700">재고 <b class="tabular-nums">{{ product.stock }}</b></span>
+            <!-- 판매중이면 배지를 달지 않는다(노이즈 감소) -->
+            <span
+              v-if="product.status !== 'SELLING'"
+              class="badge"
+              :class="product.status === 'SOLD_OUT' ? 'badge-warning' : 'badge-neutral'"
+            >{{ statusText(product.status) }}</span>
+          </div>
+
+          <!-- 구매 액션: 이 화면의 주 행동 -->
+          <div v-if="isLoggedIn" class="card mt-6 flex flex-wrap items-end gap-3 p-5">
+            <label class="field">
+              <span class="field-label">수량</span>
+              <DxNumberBox v-model:value="qty" :min="1" :width="90" />
+            </label>
+            <button type="button" class="btn btn-primary" @click="onAddToCart">장바구니 담기</button>
+            <p v-if="cartMsg" class="alert-success w-full">{{ cartMsg }}</p>
+          </div>
+
+          <!-- 보조 행동 -->
+          <div class="mt-6 flex gap-2">
+            <button type="button" class="btn btn-secondary" @click="router.push('/products')">목록</button>
+            <template v-if="isAdmin">
+              <button type="button" class="btn btn-secondary" @click="router.push(`/products/${id}/edit`)">수정</button>
+              <button type="button" class="btn btn-danger" @click="onDelete">삭제</button>
+            </template>
+          </div>
+        </div>
       </div>
 
-      <p class="min-h-[6rem] whitespace-pre-wrap text-slate-700">{{ product.description }}</p>
+      <!-- 상품 설명 -->
+      <section class="mt-10">
+        <h2 class="section-title">상품 설명</h2>
+        <p class="card-pad mt-3 min-h-[6rem] whitespace-pre-wrap text-sm text-ink-700">{{ product.description }}</p>
+      </section>
 
-      <div v-if="isLoggedIn" class="mt-4 flex items-center gap-2">
-        <DxNumberBox v-model:value="qty" :min="1" :width="90" />
-        <DxButton text="장바구니 담기" type="success" styling-mode="contained" @click="onAddToCart" />
-        <span v-if="cartMsg" class="text-sm text-green-600">{{ cartMsg }}</span>
+      <div class="mt-10">
+        <ProductReviews :product-id="id" />
       </div>
-
-      <div class="mt-6 flex gap-2">
-        <DxButton text="목록" styling-mode="outlined" @click="router.push('/products')" />
-        <template v-if="isAdmin">
-          <DxButton text="수정" type="default" styling-mode="contained" @click="router.push(`/products/${id}/edit`)" />
-          <DxButton text="삭제" type="danger" styling-mode="contained" @click="onDelete" />
-        </template>
+      <div class="mt-10">
+        <ProductInquiries :product-id="id" />
       </div>
-    </article>
-
-    <ProductReviews :product-id="id" />
-    <ProductInquiries :product-id="id" />
     </template>
   </section>
 </template>

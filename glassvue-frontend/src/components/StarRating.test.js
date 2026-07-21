@@ -44,7 +44,7 @@ describe('StarRating', () => {
     const stars = w.findAll('button[role="radio"]');
     expect(stars[0].classes()).toContain('text-amber-400'); // 1 <= 2
     expect(stars[1].classes()).toContain('text-amber-400'); // 2 <= 2
-    expect(stars[2].classes()).toContain('text-slate-300'); // 3 > 2
+    expect(stars[2].classes()).toContain('text-ink-400'); // 3 > 2
     expect(stars[1].attributes('aria-checked')).toBe('true');
   });
 });

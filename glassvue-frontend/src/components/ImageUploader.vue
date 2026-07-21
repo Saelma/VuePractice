@@ -73,15 +73,15 @@ function removeAt(idx) {
       :disabled="uploading || isFull"
       @change="onFilesSelected"
     />
-    <span v-if="uploading" class="text-sm text-slate-400">업로드 중…</span>
-    <span v-else-if="isFull" class="text-sm text-slate-400">최대 {{ max }}장까지 첨부했어요.</span>
+    <span v-if="uploading" class="text-sm text-ink-500">업로드 중…</span>
+    <span v-else-if="isFull" class="text-sm text-ink-500">최대 {{ max }}장까지 첨부했어요.</span>
 
     <div v-if="modelValue.length" class="flex flex-wrap gap-2">
       <div v-for="(img, idx) in modelValue" :key="img.id" class="relative">
         <img :src="img.thumbUrl" class="rounded border object-cover" :class="thumbClass" />
         <button
           type="button"
-          class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-xs text-white"
+          class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-xs text-white"
           :aria-label="`${idx + 1}번째 이미지 삭제`"
           @click="removeAt(idx)"
         >×</button>

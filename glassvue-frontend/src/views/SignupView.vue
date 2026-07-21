@@ -2,7 +2,6 @@
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
-import { DxButton } from 'devextreme-vue/button';
 import { signup, login } from '../api/auth';
 
 const router = useRouter();
@@ -38,30 +37,40 @@ async function onSubmit() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-sm p-6">
-    <h2 class="mb-4 text-xl font-semibold text-slate-800">회원가입</h2>
-    <div v-if="error" class="mb-4 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
+  <section class="page-narrow">
+    <div class="mx-auto max-w-sm">
+      <div class="card p-6">
+        <h1 class="page-title">회원가입</h1>
+        <p class="muted mt-1">가입이 끝나면 자동으로 로그인됩니다.</p>
 
-    <div class="flex flex-col gap-4 rounded-lg border bg-white p-6">
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">아이디 (4자 이상)</span>
-        <DxTextBox v-model:value="form.loginId" />
-      </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">비밀번호 (8자 이상)</span>
-        <DxTextBox v-model:value="form.password" mode="password" />
-      </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">닉네임</span>
-        <DxTextBox v-model:value="form.nickname" @enter-key="onSubmit" />
-      </label>
-      <DxButton
-        :text="loading ? '처리 중…' : '가입하기'"
-        type="default"
-        styling-mode="contained"
-        :disabled="loading"
-        @click="onSubmit"
-      />
+        <div v-if="error" class="alert-error mt-5">{{ error }}</div>
+
+        <div class="mt-5 flex flex-col gap-4">
+          <label class="field">
+            <span class="field-label">아이디</span>
+            <DxTextBox v-model:value="form.loginId" />
+            <span class="muted">4자 이상</span>
+          </label>
+          <label class="field">
+            <span class="field-label">비밀번호</span>
+            <DxTextBox v-model:value="form.password" mode="password" />
+            <span class="muted">8자 이상</span>
+          </label>
+          <label class="field">
+            <span class="field-label">닉네임</span>
+            <DxTextBox v-model:value="form.nickname" @enter-key="onSubmit" />
+          </label>
+
+          <button type="button" class="btn btn-primary w-full" :disabled="loading" @click="onSubmit">
+            {{ loading ? '처리 중…' : '가입하기' }}
+          </button>
+        </div>
+      </div>
+
+      <p class="mt-4 text-center text-sm text-ink-500">
+        이미 계정이 있나요?
+        <RouterLink to="/login" class="font-medium text-ink-900 underline underline-offset-2">로그인</RouterLink>
+      </p>
     </div>
   </section>
 </template>

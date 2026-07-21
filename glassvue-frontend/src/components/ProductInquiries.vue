@@ -1,6 +1,5 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { DxButton } from 'devextreme-vue/button';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxCheckBox } from 'devextreme-vue/check-box';
@@ -122,88 +121,114 @@ onMounted(() => load(0));
 
 <template>
   <section class="mt-10">
-    <header class="mb-3 border-b pb-2">
-      <h3 class="text-lg font-bold text-slate-800">상품 문의</h3>
+    <header class="mb-4">
+      <h2 class="section-title">상품 문의</h2>
     </header>
 
-    <div v-if="error" class="mb-3 rounded bg-red-50 p-2 text-sm text-red-600">{{ error }}</div>
+    <div v-if="error" class="alert-error mb-3">{{ error }}</div>
 
     <!-- 작성 폼 (로그인 시) -->
-    <div v-if="isLoggedIn" class="mb-5 flex flex-col gap-2 rounded-lg border bg-slate-50 p-4">
-      <DxTextBox v-model:value="form.title" placeholder="문의 제목" />
-      <DxTextArea v-model:value="form.content" :height="70" placeholder="궁금한 점을 남겨주세요." />
-      <ImageUploader v-model="form.images" :max="INQUIRY_IMAGE_MAX" thumb-class="h-16 w-16" @error="formError = $event" />
-      <div class="flex items-center gap-3">
+    <div v-if="isLoggedIn" class="card mb-6 flex flex-col gap-4 p-5">
+      <label class="field">
+        <span class="field-label">제목</span>
+        <DxTextBox v-model:value="form.title" placeholder="문의 제목" />
+      </label>
+      <label class="field">
+        <span class="field-label">내용</span>
+        <DxTextArea v-model:value="form.content" :height="70" placeholder="궁금한 점을 남겨주세요." />
+      </label>
+      <div class="field">
+        <span class="field-label">사진 첨부 (최대 {{ INQUIRY_IMAGE_MAX }}장)</span>
+        <ImageUploader v-model="form.images" :max="INQUIRY_IMAGE_MAX" thumb-class="h-16 w-16" @error="formError = $event" />
+      </div>
+      <p v-if="formError" class="field-error">{{ formError }}</p>
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <DxCheckBox v-model:value="form.secret" text="비밀글 (작성자·판매자만 열람)" />
-        <DxButton text="문의 등록" type="default" styling-mode="contained" :disabled="submitting" @click="submit" />
-        <span v-if="formError" class="text-sm text-red-600">{{ formError }}</span>
+        <button type="button" class="btn btn-primary" :disabled="submitting" @click="submit">문의 등록</button>
       </div>
     </div>
-    <p v-else class="mb-5 text-sm text-slate-500">문의 작성은 로그인 후 가능합니다.</p>
+    <p v-else class="mb-6 text-sm text-ink-500">문의 작성은 로그인 후 가능합니다.</p>
+
+    <!-- 로딩: 텍스트 대신 스켈레톤 (DESIGN.md §5) -->
+    <div v-if="loading" class="card divide-y divide-line">
+      <div v-for="n in 3" :key="n" class="space-y-2 px-5 py-4">
+        <div class="skeleton h-4 w-1/2"></div>
+        <div class="skeleton h-3 w-3/4"></div>
+      </div>
+    </div>
+
+    <!-- 빈 상태 -->
+    <div v-else-if="!page.content.length" class="flex flex-col items-center gap-3 py-12 text-center">
+      <span class="text-4xl">💭</span>
+      <p class="text-sm text-ink-500">등록된 문의가 없어요.</p>
+      <p v-if="isLoggedIn" class="muted">궁금한 점이 있다면 위에서 문의를 남겨보세요.</p>
+    </div>
 
     <!-- 목록 -->
-    <div v-if="loading" class="text-slate-500">불러오는 중…</div>
-    <div v-else-if="!page.content.length" class="text-slate-400">등록된 문의가 없어요.</div>
-    <ul v-else class="space-y-3">
-      <li v-for="q in page.content" :key="q.id" class="rounded-lg border bg-white p-4">
-        <div class="mb-1 flex items-center justify-between">
-          <div class="flex items-center gap-2">
+    <ul v-else class="card divide-y divide-line">
+      <li v-for="q in page.content" :key="q.id" class="px-5 py-4">
+        <div class="mb-2 flex items-start justify-between gap-3">
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
             <span v-if="q.secret" title="비밀글">🔒</span>
-            <span class="font-medium text-slate-800">{{ q.title }}</span>
-            <span
-              class="rounded px-2 py-0.5 text-xs"
-              :class="q.status === 'ANSWERED' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'"
-            >{{ inquiryStatusText(q.status) }}</span>
+            <span class="text-sm font-medium text-ink-900">{{ q.title }}</span>
+            <span class="badge" :class="q.status === 'ANSWERED' ? 'badge-success' : 'badge-neutral'">
+              {{ inquiryStatusText(q.status) }}
+            </span>
           </div>
-          <span class="text-xs text-slate-400">{{ q.author }} · {{ fmtDate(q.createdAt) }}</span>
+          <span class="muted shrink-0">{{ q.author }} · {{ fmtDate(q.createdAt) }}</span>
         </div>
 
         <!-- 수정 모드 -->
         <template v-if="editingId === q.id">
-          <div class="flex flex-col gap-2">
+          <div class="flex flex-col gap-3">
             <DxTextBox v-model:value="editForm.title" />
             <DxTextArea v-model:value="editForm.content" :height="60" />
             <ImageUploader v-model="editForm.images" :max="INQUIRY_IMAGE_MAX" thumb-class="h-16 w-16" @error="error = $event" />
-            <div class="flex items-center gap-3">
+            <div class="flex flex-wrap items-center gap-3">
               <DxCheckBox v-model:value="editForm.secret" text="비밀글" />
-              <DxButton text="저장" type="default" styling-mode="contained" @click="saveEdit(q)" />
-              <DxButton text="취소" styling-mode="outlined" @click="editingId = null" />
+              <div class="flex gap-2">
+                <button type="button" class="btn btn-secondary" @click="saveEdit(q)">저장</button>
+                <button type="button" class="btn btn-ghost" @click="editingId = null">취소</button>
+              </div>
             </div>
           </div>
         </template>
 
         <!-- 보기 모드 -->
         <template v-else>
-          <p class="whitespace-pre-wrap text-slate-700" :class="{ 'italic text-slate-400': q.masked }">{{ q.content }}</p>
+          <p class="whitespace-pre-wrap text-sm text-ink-700" :class="{ 'italic text-ink-400': q.masked }">{{ q.content }}</p>
 
           <!-- 첨부 이미지 (비밀글 마스킹 시 서버가 images를 비워 보내 자연히 숨겨진다) -->
-          <div v-if="q.images?.length" class="mt-2 flex flex-wrap gap-2">
+          <div v-if="q.images?.length" class="mt-3 flex flex-wrap gap-2">
             <a v-for="img in q.images" :key="img.id" :href="img.url" target="_blank" rel="noopener">
-              <img :src="img.thumbUrl" alt="문의 이미지" class="h-16 w-16 rounded border object-cover" />
+              <img :src="img.thumbUrl" alt="문의 이미지" class="h-16 w-16 rounded-control border border-line object-cover" />
             </a>
           </div>
 
-          <!-- 판매자 답변 -->
-          <div v-if="q.answer" class="mt-3 rounded border-l-4 border-green-400 bg-green-50 p-3">
-            <div class="mb-1 text-xs font-semibold text-green-700">판매자 답변 · {{ fmtDate(q.answeredAt) }}</div>
-            <p class="whitespace-pre-wrap text-sm text-slate-700">{{ q.answer }}</p>
+          <!-- 판매자 답변 — 좌측 보더로 계속 강조하되 색은 의미색(success) 토큰으로 -->
+          <div v-if="q.answer" class="mt-3 rounded-control border-l-4 border-success bg-canvas p-3">
+            <div class="mb-1 text-xs font-semibold text-success">판매자 답변 · {{ fmtDate(q.answeredAt) }}</div>
+            <p class="whitespace-pre-wrap text-sm text-ink-700">{{ q.answer }}</p>
           </div>
 
           <!-- 액션 -->
-          <div class="mt-2 flex gap-3">
-            <button v-if="canEdit(q)" class="text-xs text-slate-500 hover:underline" @click="startEdit(q)">수정</button>
-            <button v-if="canDelete(q)" class="text-xs text-red-500 hover:underline" @click="remove(q)">삭제</button>
-            <button v-if="isAdmin && q.authorId !== myId" class="text-xs text-green-600 hover:underline" @click="startAnswer(q)">
-              {{ q.answer ? '답변 수정' : '답변하기' }}
-            </button>
+          <div class="mt-3 flex gap-1">
+            <button v-if="canEdit(q)" type="button" class="btn btn-ghost" @click="startEdit(q)">수정</button>
+            <button v-if="canDelete(q)" type="button" class="btn btn-danger" @click="remove(q)">삭제</button>
+            <button
+              v-if="isAdmin && q.authorId !== myId"
+              type="button"
+              class="btn btn-ghost"
+              @click="startAnswer(q)"
+            >{{ q.answer ? '답변 수정' : '답변하기' }}</button>
           </div>
 
           <!-- 관리자 답변 폼 -->
-          <div v-if="answeringId === q.id" class="mt-2 rounded bg-slate-50 p-3">
+          <div v-if="answeringId === q.id" class="mt-3 rounded-control bg-canvas p-3">
             <DxTextArea v-model:value="answerText" :height="60" placeholder="답변 내용" />
             <div class="mt-2 flex gap-2">
-              <DxButton text="답변 등록" type="success" styling-mode="contained" @click="saveAnswer(q)" />
-              <DxButton text="취소" styling-mode="outlined" @click="answeringId = null" />
+              <button type="button" class="btn btn-secondary" @click="saveAnswer(q)">답변 등록</button>
+              <button type="button" class="btn btn-ghost" @click="answeringId = null">취소</button>
             </div>
           </div>
         </template>
@@ -211,10 +236,10 @@ onMounted(() => load(0));
     </ul>
 
     <!-- 페이지 이동 -->
-    <div v-if="page.totalPages > 1" class="mt-3 flex items-center justify-center gap-3 text-sm">
-      <button class="text-slate-500 disabled:text-slate-300" :disabled="page.page === 0" @click="load(page.page - 1)">이전</button>
-      <span class="text-slate-500">{{ page.page + 1 }} / {{ page.totalPages }}</span>
-      <button class="text-slate-500 disabled:text-slate-300" :disabled="page.last" @click="load(page.page + 1)">다음</button>
+    <div v-if="page.totalPages > 1" class="mt-6 flex items-center justify-center gap-4">
+      <button type="button" class="btn btn-secondary" :disabled="page.page === 0" @click="load(page.page - 1)">이전</button>
+      <span class="text-sm tabular-nums text-ink-500">{{ page.page + 1 }} / {{ page.totalPages }}</span>
+      <button type="button" class="btn btn-secondary" :disabled="page.last" @click="load(page.page + 1)">다음</button>
     </div>
   </section>
 </template>

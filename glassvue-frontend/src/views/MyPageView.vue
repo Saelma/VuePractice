@@ -2,7 +2,6 @@
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
-import { DxButton } from 'devextreme-vue/button';
 import { authState } from '../stores/auth';
 import { changeNickname, changePassword, withdraw } from '../api/member';
 
@@ -53,39 +52,46 @@ async function onWithdraw() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-md p-6">
-    <h2 class="mb-4 text-xl font-semibold text-slate-800">내 정보</h2>
+  <section class="page-narrow">
+    <h1 class="page-title mb-5">내 정보</h1>
 
     <!-- 닉네임 변경 -->
-    <div class="mb-6 flex flex-col gap-3 rounded-lg border bg-white p-6">
-      <h3 class="font-medium text-slate-700">닉네임 변경</h3>
-      <p v-if="nick.err" class="text-sm text-red-600">{{ nick.err }}</p>
-      <p v-if="nick.msg" class="text-sm text-green-600">{{ nick.msg }}</p>
-      <DxTextBox v-model:value="nick.value" @enter-key="onNickname" />
-      <DxButton :text="nick.loading ? '변경 중…' : '닉네임 변경'" type="default" styling-mode="contained" :disabled="nick.loading" @click="onNickname" />
+    <div class="card flex flex-col gap-3 p-5">
+      <h2 class="section-title">닉네임 변경</h2>
+      <p v-if="nick.err" class="alert-error">{{ nick.err }}</p>
+      <p v-if="nick.msg" class="alert-success">{{ nick.msg }}</p>
+      <label class="field">
+        <span class="field-label">닉네임</span>
+        <DxTextBox v-model:value="nick.value" @enter-key="onNickname" />
+      </label>
+      <button type="button" class="btn btn-secondary self-start" :disabled="nick.loading" @click="onNickname">
+        {{ nick.loading ? '변경 중…' : '닉네임 변경' }}
+      </button>
     </div>
 
     <!-- 비밀번호 변경 -->
-    <div class="mb-6 flex flex-col gap-3 rounded-lg border bg-white p-6">
-      <h3 class="font-medium text-slate-700">비밀번호 변경</h3>
-      <p v-if="pw.err" class="text-sm text-red-600">{{ pw.err }}</p>
-      <p v-if="pw.msg" class="text-sm text-green-600">{{ pw.msg }}</p>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">현재 비밀번호</span>
+    <div class="card mt-8 flex flex-col gap-3 p-5">
+      <h2 class="section-title">비밀번호 변경</h2>
+      <p v-if="pw.err" class="alert-error">{{ pw.err }}</p>
+      <p v-if="pw.msg" class="alert-success">{{ pw.msg }}</p>
+      <label class="field">
+        <span class="field-label">현재 비밀번호</span>
         <DxTextBox v-model:value="pw.current" mode="password" />
       </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">새 비밀번호 (8자 이상)</span>
+      <label class="field">
+        <span class="field-label">새 비밀번호 (8자 이상)</span>
         <DxTextBox v-model:value="pw.next" mode="password" @enter-key="onPassword" />
       </label>
-      <DxButton :text="pw.loading ? '변경 중…' : '비밀번호 변경'" type="default" styling-mode="contained" :disabled="pw.loading" @click="onPassword" />
+      <button type="button" class="btn btn-secondary self-start" :disabled="pw.loading" @click="onPassword">
+        {{ pw.loading ? '변경 중…' : '비밀번호 변경' }}
+      </button>
     </div>
 
-    <!-- 회원 탈퇴 -->
-    <div class="flex flex-col gap-3 rounded-lg border border-red-200 bg-white p-6">
-      <h3 class="font-medium text-red-600">회원 탈퇴</h3>
-      <p class="text-sm text-slate-500">탈퇴하면 계정이 삭제되고 되돌릴 수 없습니다. (작성한 글은 남습니다)</p>
-      <DxButton text="회원 탈퇴" type="danger" styling-mode="contained" @click="onWithdraw" />
+    <!-- 회원 탈퇴 — 되돌릴 수 없는 행동이라 맨 아래에 따로 둔다 -->
+    <div class="card mt-8 flex flex-col gap-3 p-5">
+      <h2 class="section-title">회원 탈퇴</h2>
+      <p class="text-sm text-ink-700">탈퇴하면 계정이 삭제되고 되돌릴 수 없습니다. (작성한 글은 남습니다)</p>
+      <button type="button" class="btn btn-danger self-start" @click="onWithdraw">회원 탈퇴</button>
     </div>
   </section>
 </template>

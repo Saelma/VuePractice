@@ -1,7 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { DxTextBox } from 'devextreme-vue/text-box';
-import { DxButton } from 'devextreme-vue/button';
 import { fetchCategories, createCategory, deleteCategory } from '../api/category';
 
 const categories = ref([]);
@@ -52,26 +51,34 @@ async function onDelete(c) {
 </script>
 
 <template>
-  <section class="mx-auto max-w-md p-6">
-    <h2 class="mb-4 text-xl font-semibold text-slate-800">카테고리 관리</h2>
-    <div v-if="error" class="mb-3 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
-    <div v-if="msg" class="mb-3 rounded bg-green-50 p-3 text-green-600">{{ msg }}</div>
+  <section class="page-narrow">
+    <h1 class="page-title mb-5">카테고리 관리</h1>
 
-    <div class="mb-6 flex gap-2 rounded-lg border bg-white p-4">
-      <DxTextBox v-model:value="name" placeholder="새 카테고리" :width="200" @enter-key="onAdd" />
-      <DxButton text="추가" type="default" styling-mode="contained" @click="onAdd" />
+    <div v-if="error" class="alert-error mb-3">{{ error }}</div>
+    <div v-if="msg" class="alert-success mb-3">{{ msg }}</div>
+
+    <!-- 추가 폼 -->
+    <div class="card mb-6 flex flex-wrap items-end gap-3 p-4">
+      <label class="field">
+        <span class="field-label">카테고리 이름</span>
+        <DxTextBox v-model:value="name" placeholder="새 카테고리" :width="200" @enter-key="onAdd" />
+      </label>
+      <button type="button" class="btn btn-primary" @click="onAdd">추가</button>
     </div>
 
-    <ul class="divide-y rounded-lg border bg-white">
-      <li v-for="c in categories" :key="c.id" class="flex items-center justify-between px-4 py-3 text-slate-700">
-        <span>{{ c.name }}</span>
-        <button
-          class="rounded px-2 py-1 text-sm text-red-600 hover:bg-red-50"
-          type="button"
-          @click="onDelete(c)"
-        >삭제</button>
+    <!-- 목록 -->
+    <ul v-if="categories.length" class="card divide-y divide-line">
+      <li v-for="c in categories" :key="c.id" class="flex items-center justify-between gap-3 px-5 py-3">
+        <span class="text-sm text-ink-900">{{ c.name }}</span>
+        <button type="button" class="btn btn-danger" @click="onDelete(c)">삭제</button>
       </li>
-      <li v-if="!categories.length" class="px-4 py-3 text-slate-400">등록된 카테고리가 없습니다.</li>
     </ul>
+
+    <!-- 빈 상태 -->
+    <div v-else class="flex flex-col items-center gap-3 py-16 text-center">
+      <span class="text-4xl">🗂️</span>
+      <p class="text-sm text-ink-500">아직 등록된 카테고리가 없어요.</p>
+      <p class="muted">위 입력란에 이름을 적고 “추가”를 누르세요.</p>
+    </div>
   </section>
 </template>

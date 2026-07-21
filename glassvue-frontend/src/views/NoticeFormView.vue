@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxCheckBox } from 'devextreme-vue/check-box';
-import { DxButton } from 'devextreme-vue/button';
 import { getNotice, createNotice, updateNotice } from '../api/notice';
 import { authState } from '../stores/auth';
 
@@ -61,35 +60,32 @@ async function onSave() {
 </script>
 
 <template>
-  <section class="max-w-2xl p-6">
-    <h2 class="mb-4 text-xl font-semibold text-slate-800">
-      {{ isEdit ? '공지 수정' : '새 공지 작성' }}
-    </h2>
+  <section class="page-narrow">
+    <div class="mb-5">
+      <h1 class="page-title">{{ isEdit ? '공지 수정' : '새 공지 작성' }}</h1>
+      <p class="muted mt-1">제목과 본문은 필수입니다. 작성자는 로그인 계정으로 기록됩니다.</p>
+    </div>
 
-    <div v-if="error" class="mb-4 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
+    <div v-if="error" class="alert-error mb-4">{{ error }}</div>
 
-    <div class="flex flex-col gap-4 rounded-lg border bg-white p-6">
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">제목</span>
+    <div class="card flex flex-col gap-4 p-5">
+      <label class="field">
+        <span class="field-label">제목</span>
         <DxTextBox v-model:value="form.title" placeholder="제목" />
       </label>
 
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">본문</span>
+      <label class="field">
+        <span class="field-label">본문</span>
         <DxTextArea v-model:value="form.content" :height="220" placeholder="본문" />
       </label>
 
       <DxCheckBox v-model:value="form.pinned" text="상단 고정" />
 
-      <div class="mt-2 flex gap-2">
-        <DxButton
-          :text="saving ? '저장 중…' : '저장'"
-          type="default"
-          styling-mode="contained"
-          :disabled="saving || blocked"
-          @click="onSave"
-        />
-        <DxButton text="취소" styling-mode="outlined" @click="router.back()" />
+      <div class="mt-2 flex gap-2 border-t border-line pt-4">
+        <button type="button" class="btn btn-primary" :disabled="saving || blocked" @click="onSave">
+          {{ saving ? '저장 중…' : '저장' }}
+        </button>
+        <button type="button" class="btn btn-secondary" @click="router.back()">취소</button>
       </div>
     </div>
   </section>

@@ -14,11 +14,12 @@ describe('order status 헬퍼', () => {
     expect(orderStatusText('WEIRD')).toBe('WEIRD');
   });
 
-  it('상태별 배지 색상이 다르고, 모르는 값은 slate 기본', () => {
-    expect(orderStatusClass('ORDERED')).toContain('amber');
-    expect(orderStatusClass('PAID')).toContain('blue');
-    expect(orderStatusClass('SHIPPED')).toContain('green');
-    expect(orderStatusClass('CANCELLED')).toContain('slate');
-    expect(orderStatusClass('XXX')).toContain('slate');
+  // 색을 직접 쓰지 않고 공용 badge 변형을 돌려준다(DESIGN.md §5) — 화면마다 매핑이 갈리지 않게.
+  it('상태별 배지 변형이 다르고, 모르는 값은 neutral 기본', () => {
+    expect(orderStatusClass('ORDERED')).toBe('badge-warning');
+    expect(orderStatusClass('PAID')).toBe('badge-success');
+    expect(orderStatusClass('SHIPPED')).toBe('badge-neutral');
+    expect(orderStatusClass('CANCELLED')).toBe('badge-danger');
+    expect(orderStatusClass('XXX')).toBe('badge-neutral');
   });
 });

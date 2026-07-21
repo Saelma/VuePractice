@@ -12,7 +12,6 @@ import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { DxSelectBox } from 'devextreme-vue/select-box';
 import { DxTextBox } from 'devextreme-vue/text-box';
-import { DxButton } from 'devextreme-vue/button';
 import { fetchAdminOrders, shipOrder, orderStatusText, orderStatusClass, ORDER_STATUS_OPTIONS } from '../api/order';
 import { priceText } from '../api/product';
 
@@ -72,17 +71,18 @@ function fmt(v) {
 </script>
 
 <template>
-  <section class="p-6">
-    <div class="mb-4 flex items-center gap-3">
-      <h2 class="text-xl font-semibold text-slate-800">주문 관리</h2>
-      <span class="text-sm text-slate-500">발송할 주문을 찾아 처리합니다.</span>
+  <section class="page">
+    <!-- 셸(제목·필터·버튼)만 토큰/공용 클래스로. 표는 운영 화면이라 DataGrid 그대로 (DESIGN.md §7) -->
+    <div class="mb-5">
+      <h1 class="page-title">주문 관리</h1>
+      <p class="muted mt-1">발송할 주문을 찾아 처리합니다.</p>
     </div>
 
-    <div v-if="error" class="mb-4 rounded bg-red-50 p-3 text-red-600">{{ error }}</div>
+    <div v-if="error" class="alert-error mb-4">{{ error }}</div>
 
-    <div class="mb-4 flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4">
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">상태</span>
+    <div class="card mb-4 flex flex-wrap items-end gap-3 p-4">
+      <label class="field">
+        <span class="field-label">상태</span>
         <DxSelectBox
           v-model:value="form.status"
           :items="ORDER_STATUS_OPTIONS"
@@ -91,12 +91,14 @@ function fmt(v) {
           :width="140"
         />
       </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-slate-600">구매자</span>
+      <label class="field">
+        <span class="field-label">구매자</span>
         <DxTextBox v-model:value="form.buyer" placeholder="닉네임" :width="180" @enter-key="search" />
       </label>
-      <DxButton text="검색" type="default" styling-mode="contained" @click="search" />
-      <DxButton text="초기화" styling-mode="outlined" @click="reset" />
+      <div class="flex gap-2">
+        <button type="button" class="btn btn-primary" @click="search">검색</button>
+        <button type="button" class="btn btn-secondary" @click="reset">초기화</button>
+      </div>
     </div>
 
     <DxDataGrid
@@ -119,18 +121,20 @@ function fmt(v) {
       <DxPager :show-page-size-selector="true" :allowed-page-sizes="[10, 20, 50]" :show-info="true" info-text="{2}건 중 {0}-{1}" />
 
       <template #statusCell="{ data }">
-        <span class="rounded px-2 py-0.5 text-sm" :class="orderStatusClass(data.data.status)">
+        <span class="badge" :class="orderStatusClass(data.data.status)">
           {{ orderStatusText(data.data.status) }}
         </span>
       </template>
 
       <template #actionCell="{ data }">
         <div class="flex justify-center gap-1">
-          <DxButton
+          <button
             v-if="data.data.status === 'PAID'"
-            text="발송" type="default" styling-mode="contained" @click="onShip(data.data)"
-          />
-          <DxButton text="상세" styling-mode="outlined" @click="router.push(`/orders/${data.data.id}`)" />
+            type="button"
+            class="btn btn-secondary btn-sm"
+            @click="onShip(data.data)"
+          >발송</button>
+          <button type="button" class="btn btn-ghost btn-sm" @click="router.push(`/orders/${data.data.id}`)">상세</button>
         </div>
       </template>
     </DxDataGrid>

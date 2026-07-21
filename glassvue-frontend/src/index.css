@@ -8,21 +8,21 @@
    화면에서 임의 색/간격을 쓰지 말고 여기 정의한 토큰만 쓴다.
    ============================================================================ */
 @theme {
-  /* 브랜드 — 강조색 하나. CTA·활성 상태·포커스에만 쓴다 */
-  --color-brand-50: #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
+  /* 강조 — 거의 검정. CTA·활성 상태·포커스에만 쓴다(색으로 장식하지 않는다) */
+  --color-brand-50: #f5f5f5;
+  --color-brand-100: #e5e5e5;
+  --color-brand-500: #1f2937;
+  --color-brand-600: #111827; /* 기본 CTA */
+  --color-brand-700: #374151; /* hover — 검정 버튼은 밝아지는 쪽이 자연스럽다 */
 
-  /* 중립 — 대부분의 UI는 여기서 나온다 */
-  --color-ink-900: #0f172a;
-  --color-ink-700: #334155;
-  --color-ink-500: #64748b;
-  --color-ink-400: #94a3b8;
-  --color-line: #e2e8f0;
+  /* 중립 — 대부분의 UI는 여기서 나온다 (순수 회색 계열) */
+  --color-ink-900: #0a0a0a;
+  --color-ink-700: #404040;
+  --color-ink-500: #737373;
+  --color-ink-400: #a3a3a3;
+  --color-line: #e5e5e5;
   --color-surface: #ffffff;
-  --color-canvas: #f8fafc;
+  --color-canvas: #fafafa;
 
   /* 의미색 — 상태 표시 전용(장식으로 쓰지 않는다) */
   --color-success: #059669;
@@ -48,6 +48,103 @@ body {
   color: var(--color-ink-700);
   background: var(--color-canvas);
   -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================================
+   공용 클래스 (DESIGN.md §5)
+   화면마다 유틸리티를 즉흥 조합하면 또 제각각이 된다. 반복되는 패턴은 여기서 한 번만 정의한다.
+   ============================================================================ */
+
+/* --- 페이지 뼈대 --- */
+.page {
+  @apply px-4 py-6 sm:px-6;
+}
+.page-narrow {
+  @apply mx-auto max-w-3xl px-4 py-6 sm:px-6;
+}
+.page-title {
+  @apply text-2xl font-bold tracking-tight text-ink-900;
+}
+.section-title {
+  @apply text-lg font-semibold text-ink-900;
+}
+.muted {
+  @apply text-xs text-ink-500;
+}
+
+/* --- 카드 --- */
+.card {
+  @apply rounded-card border border-line bg-surface shadow-card;
+}
+.card-pad {
+  @apply rounded-card border border-line bg-surface p-5 shadow-card;
+}
+.card-link {
+  @apply transition duration-200 hover:-translate-y-0.5 hover:shadow-lift;
+}
+
+/* --- 버튼 --- 마크업에서 `class="btn btn-primary"`처럼 베이스와 변형을 함께 쓴다 --- */
+.btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-control px-3 py-2 text-sm font-medium
+         transition-colors focus-visible:outline-2 focus-visible:outline-offset-2
+         focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-40;
+}
+.btn-primary {
+  @apply bg-brand-600 text-white hover:bg-brand-700;
+}
+.btn-secondary {
+  @apply border border-line bg-surface text-ink-700 hover:bg-canvas;
+}
+.btn-ghost {
+  @apply px-2 text-ink-500 hover:bg-canvas hover:text-ink-900;
+}
+.btn-danger {
+  @apply text-danger hover:bg-red-50;
+}
+/* 조밀한 자리(표 행 안 등)용 축소 변형 — .btn이 언레이어드라 py-1 유틸리티로는 안 줄어든다 */
+.btn-sm {
+  @apply px-2 py-1 text-xs;
+}
+
+/* --- 상태 배지: 연한 배경 + 진한 글자(채도 높은 단색 금지). `class="badge badge-success"` --- */
+.badge {
+  @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+}
+.badge-neutral {
+  @apply bg-brand-50 text-ink-700;
+}
+.badge-success {
+  @apply bg-emerald-50 text-emerald-700;
+}
+.badge-warning {
+  @apply bg-amber-50 text-amber-700;
+}
+.badge-danger {
+  @apply bg-red-50 text-red-700;
+}
+
+/* --- 폼 --- */
+.field {
+  @apply flex flex-col gap-1;
+}
+.field-label {
+  @apply text-xs font-medium text-ink-500;
+}
+.field-error {
+  @apply text-xs text-danger;
+}
+
+/* --- 알림 박스(전역/서버 에러) --- */
+.alert-error {
+  @apply rounded-card border border-red-100 bg-red-50 p-3 text-sm text-danger;
+}
+.alert-success {
+  @apply rounded-card border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-700;
+}
+
+/* --- 스켈레톤 --- */
+.skeleton {
+  @apply animate-pulse rounded bg-neutral-100;
 }
 
 /* 내비게이션 링크 — 현재 위치를 색이 아니라 굵기·농도로 알린다(강조색은 CTA 전용) */
@@ -77,6 +174,7 @@ body {
   border-radius: var(--radius-control);
 }
 
+/* 기본(주요) 버튼 = 거의 검정 */
 .dx-button-mode-contained.dx-button-default {
   background-color: var(--color-brand-600);
   border-color: var(--color-brand-600);
@@ -84,6 +182,23 @@ body {
 .dx-button-mode-contained.dx-button-default.dx-state-hover {
   background-color: var(--color-brand-700);
   border-color: var(--color-brand-700);
+}
+/* 성공(success) 버튼도 무채색 계열로 — 색은 상태 표시에만 쓴다(DESIGN.md §2) */
+.dx-button-mode-contained.dx-button-success {
+  background-color: var(--color-brand-600);
+  border-color: var(--color-brand-600);
+}
+.dx-button-mode-contained.dx-button-success.dx-state-hover {
+  background-color: var(--color-brand-700);
+  border-color: var(--color-brand-700);
+}
+/* 외곽선 버튼 */
+.dx-button-mode-outlined {
+  border-color: var(--color-line);
+  color: var(--color-ink-700);
+}
+.dx-button-mode-outlined.dx-state-hover {
+  background-color: var(--color-canvas);
 }
 
 .dx-texteditor {
