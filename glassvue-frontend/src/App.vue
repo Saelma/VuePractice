@@ -18,31 +18,47 @@ async function onLogout() {
 </script>
 
 <template>
-  <main class="min-h-screen bg-slate-50">
-    <header class="flex items-center justify-between border-b bg-white px-6 py-4">
-      <div class="flex items-center gap-6">
-        <RouterLink to="/" class="text-2xl font-bold text-slate-800 hover:text-blue-600">Glassvue</RouterLink>
-        <nav class="flex gap-4 text-sm text-slate-600">
-          <RouterLink to="/" class="hover:text-blue-600">공지</RouterLink>
-          <RouterLink to="/products" class="hover:text-blue-600">상품</RouterLink>
-          <RouterLink v-if="isAdmin" to="/admin/orders" class="font-medium text-slate-700 hover:text-blue-600">주문 관리</RouterLink>
-        </nav>
-      </div>
-      <div class="flex items-center gap-3 text-sm">
-        <template v-if="isLoggedIn">
-          <span class="text-slate-600"><b>{{ authState.user?.nickname }}</b>님</span>
-          <RouterLink to="/cart" class="text-slate-600 hover:underline">장바구니</RouterLink>
-          <RouterLink to="/orders" class="text-slate-600 hover:underline">주문내역</RouterLink>
-          <RouterLink to="/settings" class="text-slate-600 hover:underline">내 정보</RouterLink>
-          <button class="rounded border px-3 py-1 hover:bg-slate-50" @click="onLogout">로그아웃</button>
-        </template>
-        <template v-else>
-          <RouterLink to="/login" class="text-blue-600 hover:underline">로그인</RouterLink>
-          <RouterLink to="/signup" class="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-700">회원가입</RouterLink>
-        </template>
+  <div class="min-h-screen bg-canvas">
+    <!-- sticky 헤더: 목록을 스크롤해도 이동이 항상 닿는다 (DESIGN.md §4) -->
+    <header class="sticky top-0 z-40 border-b border-line bg-surface/85 backdrop-blur">
+      <div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+        <div class="flex items-center gap-7">
+          <RouterLink to="/" class="text-lg font-bold tracking-tight text-ink-900">Glassvue</RouterLink>
+          <nav class="flex items-center gap-5 text-sm">
+            <!-- "/"는 모든 경로의 접두사라 기본 active가 항상 켜진다 → 정확 매칭만 쓴다 -->
+            <RouterLink to="/" class="nav-link" active-class="" exact-active-class="router-link-active">공지</RouterLink>
+            <RouterLink to="/products" class="nav-link">상품</RouterLink>
+            <RouterLink v-if="isAdmin" to="/admin/orders" class="nav-link">주문 관리</RouterLink>
+          </nav>
+        </div>
+
+        <div class="flex items-center gap-4 text-sm">
+          <template v-if="isLoggedIn">
+            <RouterLink to="/cart" class="nav-link">장바구니</RouterLink>
+            <RouterLink to="/orders" class="nav-link">주문내역</RouterLink>
+            <span class="hidden h-4 w-px bg-line sm:block"></span>
+            <RouterLink to="/settings" class="hidden text-ink-700 hover:text-ink-900 sm:block">
+              <b class="font-medium">{{ authState.user?.nickname }}</b>
+            </RouterLink>
+            <button
+              type="button"
+              class="rounded-control border border-line px-3 py-1.5 text-ink-700 transition-colors hover:bg-canvas"
+              @click="onLogout"
+            >로그아웃</button>
+          </template>
+          <template v-else>
+            <RouterLink to="/login" class="nav-link">로그인</RouterLink>
+            <RouterLink
+              to="/signup"
+              class="rounded-control bg-brand-600 px-3 py-1.5 font-medium text-white transition-colors hover:bg-brand-700"
+            >회원가입</RouterLink>
+          </template>
+        </div>
       </div>
     </header>
 
-    <RouterView />
-  </main>
+    <main class="mx-auto max-w-6xl">
+      <RouterView />
+    </main>
+  </div>
 </template>
