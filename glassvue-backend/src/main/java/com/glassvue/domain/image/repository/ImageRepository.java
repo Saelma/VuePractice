@@ -19,4 +19,7 @@ public interface ImageRepository extends JpaRepository<Image, UUID> {
      * {@code createdAt} 기준으로 유예 시간을 두어, 작성 중인 폼의 이미지를 뺏지 않는다.
      */
     List<Image> findByImageGroupIsNullAndCreatedAtBefore(Instant createdAt);
+
+    /** 파생본(medium·thumb)이 아직 없는 이미지 — V8 이전 업로드분 백필 대상. */
+    List<Image> findByMediumUrlIsNullOrThumbUrlIsNull();
 }

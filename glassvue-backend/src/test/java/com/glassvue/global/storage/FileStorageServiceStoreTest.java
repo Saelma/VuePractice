@@ -69,4 +69,37 @@ class FileStorageServiceStoreTest {
         assertThat(Files.size(thumb)).isLessThan(Files.size(medium));
         assertThat(Files.size(medium)).isLessThan((long) png.length);
     }
+
+    @Test
+    @DisplayName("백필: 이미 저장된 원본에서 파생본을 만든다")
+    void generateDerivatives_fromExistingOriginal(@TempDir Path dir) throws Exception {
+        Files.write(dir.resolve("abc.png"), bigPng()); // 파생본 도입 전에 올라온 원본이라고 가정
+
+        FileStorageService.Derivatives d = service(dir).generateDerivatives("/uploads/abc.png");
+
+        assertThat(d.none()).isFalse();
+        assertThat(d.mediumUrl()).isEqualTo("/uploads/abc_m.webp");
+        assertThat(d.thumbUrl()).isEqualTo("/uploads/abc_t.webp");
+        assertThat(dir.resolve("abc_m.webp")).exists();
+        assertThat(dir.resolve("abc_t.webp")).exists();
+    }
+
+    @Test
+    @DisplayName("백필: 원본 파일이 없으면 건너뛴다(예외 없이 빈 결과)")
+    void generateDerivatives_missingOriginal(@TempDir Path dir) {
+        FileStorageService.Derivatives d = service(dir).generateDerivatives("/uploads/nope.png");
+
+        assertThat(d.none()).isTrue();
+    }
+
+    @Test
+    @DisplayName("백필: 업로드 디렉토리 밖 경로는 거부한다")
+    void generateDerivatives_rejectsTraversal(@TempDir Path parent) throws Exception {
+        Path dir = Files.createDirectory(parent.resolve("uploads"));
+        Files.write(parent.resolve("outside.png"), bigPng());
+
+        FileStorageService.Derivatives d = service(dir).generateDerivatives("/uploads/../outside.png");
+
+        assertThat(d.none()).isTrue();
+    }
 }

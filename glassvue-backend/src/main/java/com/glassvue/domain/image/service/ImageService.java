@@ -51,6 +51,33 @@ public class ImageService {
         return ImageResponse.from(image);
     }
 
+    /** 파생본 백필 결과. */
+    public record BackfillResult(int targets, int updated, int skipped) {
+    }
+
+    /**
+     * 파생본이 없는 기존 이미지에 medium·thumb를 생성해 채운다(V8 이전 업로드분).
+     *
+     * <p>"앞으로 안 생기게" 고치는 것과 "이미 쌓인 걸 치우는" 건 별개 작업이라 따로 돌린다
+     * (WORKING-AGREEMENTS §2-5). 업로드와 같은 생성 코드를 타므로 결과가 어긋나지 않고,
+     * 이미 채워진 값은 덮어쓰지 않아 <b>여러 번 실행해도 안전</b>하다.
+     * 원본 파일이 없거나 디코딩이 안 되는 건은 건너뛴다(skipped).
+     */
+    public BackfillResult backfillDerivatives() {
+        List<Image> targets = imageRepository.findByMediumUrlIsNullOrThumbUrlIsNull();
+        int updated = 0;
+        for (Image image : targets) {
+            FileStorageService.Derivatives d = fileStorageService.generateDerivatives(image.getUrl());
+            if (d.none()) {
+                continue;
+            }
+            image.applyDerivatives(d.mediumUrl(), d.thumbUrl());
+            updated++;
+        }
+        log.info("이미지 파생본 백필: 대상={} 갱신={} 건너뜀={}", targets.size(), updated, targets.size() - updated);
+        return new BackfillResult(targets.size(), updated, targets.size() - updated);
+    }
+
     /** imageIds로 새 그룹 생성·연결(순서 유지). 비어 있으면 null 반환. */
     public UUID createGroup(List<UUID> imageIds) {
         if (imageIds == null || imageIds.isEmpty()) {

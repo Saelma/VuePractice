@@ -111,6 +111,56 @@ public class FileStorageService {
         Files.setPosixFilePermissions(target, PosixFilePermissions.fromString("rw-r--r--")); // nginx 읽기
     }
 
+    /** 파생본 백필 결과. 만들지 못했으면 각 필드가 null이다. */
+    public record Derivatives(String mediumUrl, String thumbUrl) {
+        public boolean none() {
+            return mediumUrl == null && thumbUrl == null;
+        }
+    }
+
+    /**
+     * <b>이미 저장된 원본</b>에서 파생본(medium·thumb)을 만든다 — 파생본 도입(V8) 이전에 올라온 이미지 백필용.
+     *
+     * <p>업로드 경로와 같은 {@link #makeDerivative} 를 써서 결과가 어긋나지 않게 한다.
+     * 원본 파일이 없거나 디코딩이 안 되면 각 URL이 null (호출부가 건너뛴다).
+     */
+    public Derivatives generateDerivatives(String url) {
+        Path original = resolveInsideDir(url);
+        if (original == null || !Files.isRegularFile(original)) {
+            log.warn("파생본 백필 건너뜀 — 원본 파일 없음: {}", url);
+            return new Derivatives(null, null);
+        }
+        byte[] bytes;
+        try {
+            bytes = Files.readAllBytes(original);
+        } catch (IOException e) {
+            log.warn("파생본 백필 건너뜀 — 원본 읽기 실패({}): {}", url, e.toString());
+            return new Derivatives(null, null);
+        }
+        String filename = original.getFileName().toString();
+        int dot = filename.lastIndexOf('.');
+        String base = dot < 0 ? filename : filename.substring(0, dot);
+        return new Derivatives(
+                makeDerivative(base, "_m", bytes, MEDIUM_PX),
+                makeDerivative(base, "_t", bytes, THUMB_PX));
+    }
+
+    /**
+     * url의 마지막 조각만 파일명으로 삼아 업로드 디렉토리 안의 경로로 바꾼다.
+     * 디렉토리 밖으로 나가거나 형태가 이상하면 null (url이 DB에서 오므로 경로 조작 여지를 남기지 않는다).
+     */
+    private Path resolveInsideDir(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        String filename = url.substring(url.lastIndexOf('/') + 1);
+        if (filename.isBlank() || filename.contains("..")) {
+            return null;
+        }
+        Path target = dir.resolve(filename).normalize();
+        return target.startsWith(dir) ? target : null;
+    }
+
     /**
      * 저장된 파일을 지운다. 없으면 조용히 넘어간다(이미 지워진 경우 = 목표 상태 달성).
      *
@@ -121,16 +171,9 @@ public class FileStorageService {
      * @return 실제로 지웠으면 true
      */
     public boolean delete(String url) {
-        if (url == null || url.isBlank()) {
+        Path target = resolveInsideDir(url);
+        if (target == null) {
             return false;
-        }
-        String filename = url.substring(url.lastIndexOf('/') + 1);
-        if (filename.isBlank() || filename.contains("..")) {
-            return false;
-        }
-        Path target = dir.resolve(filename).normalize();
-        if (!target.startsWith(dir)) {
-            return false; // 업로드 디렉토리 밖 → 건드리지 않는다
         }
         try {
             return Files.deleteIfExists(target);

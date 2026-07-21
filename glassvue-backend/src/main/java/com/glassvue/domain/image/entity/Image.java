@@ -60,4 +60,14 @@ public class Image extends BaseTimeEntity {
         this.imageGroup = group;
         this.sortOrder = sortOrder;
     }
+
+    /** 파생본 백필 — 이미 값이 있으면 덮어쓰지 않는다(재실행해도 안전). */
+    public void applyDerivatives(String mediumUrl, String thumbUrl) {
+        if (this.mediumUrl == null && mediumUrl != null) {
+            this.mediumUrl = mediumUrl;
+        }
+        if (this.thumbUrl == null && thumbUrl != null) {
+            this.thumbUrl = thumbUrl;
+        }
+    }
 }
