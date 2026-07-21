@@ -135,6 +135,20 @@
       > **사고**: `@Transactional`은 DB만 롤백하고 파일 쓰기는 되돌리지 않는다.
       > 업로드 테스트가 8바이트 파일 5개를 흘렸고, DB row가 없어 정리 스위퍼도 못 잡았다.
 - [ ] 검증 후 **운영(:8080)이 정상인지** 확인한다.
+- [ ] **`gradle test`는 `.env`를 소싱하고 돌린다. `BUILD SUCCESSFUL`만 보고 통과라고 하지 않는다.**
+      > **사고 (2026-07-21)**: 환경변수 없이 돌린 `./gradlew test`가 `BUILD SUCCESSFUL`로 끝났는데,
+      > 실제로는 **DB를 쓰는 통합 테스트 58건이 전부 skip**됐다. `Order.create(...)` 시그니처를 바꾸며
+      > 손댄 통합 테스트가 한 번도 안 돌아간 채 "전체 통과"로 핸드오프·커밋 메시지에 적혔고,
+      > 배포 직전에 제대로 돌리고서야 실패 1건이 나왔다.
+      ```bash
+      set -a; . /home/ecstel/work/.env; set +a
+      ./gradlew test
+      # 그리고 skipped 수를 확인한다 (0이어야 한다)
+      python3 -c "import glob,xml.etree.ElementTree as ET;
+      print(sum(int(ET.parse(p).getroot().get('skipped')) for p in glob.glob('build/test-results/test/*.xml')))"
+      ```
+- [ ] **HTTP 계약을 바꿨으면 `Order.create` 같은 코드 호출부만 찾지 말고 E2E의 요청도 고친다.**
+      > 컴파일러가 안 잡아주는 호출부다 — `mockMvc.perform(post("/api/orders"))`는 grep에도 안 걸린다.
 
 ---
 
