@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router';
 import { getOrder, payOrder, shipOrder, cancelOrder, orderStatusText, orderStatusClass } from '../api/order';
 import { priceText } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
+import { addressText } from '../api/shipping';
 import { authState } from '../stores/auth';
 
 const props = defineProps({ id: { type: String, required: true } });
@@ -140,6 +141,25 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
       <div v-if="isAdmin && !isMine" class="card flex items-center justify-between gap-4 p-5">
         <span class="muted">구매자</span>
         <span class="text-sm font-medium text-ink-900">{{ order.buyerNickname }}</span>
+      </div>
+
+      <!-- 배송지(주문 시점 스냅샷). V11 이전 주문은 값이 없어 아예 감춘다 — 빈 칸을 보여주느니. -->
+      <div v-if="order.shipAddress1" class="card mt-6 p-5">
+        <h2 class="section-title">배송지</h2>
+        <dl class="mt-3 space-y-2 text-sm">
+          <div class="flex gap-4">
+            <dt class="w-20 shrink-0 text-ink-500">수령인</dt>
+            <dd class="text-ink-900">{{ order.shipRecipient }}</dd>
+          </div>
+          <div class="flex gap-4">
+            <dt class="w-20 shrink-0 text-ink-500">연락처</dt>
+            <dd class="tabular-nums text-ink-900">{{ order.shipPhone }}</dd>
+          </div>
+          <div class="flex gap-4">
+            <dt class="w-20 shrink-0 text-ink-500">주소</dt>
+            <dd class="text-ink-900">{{ addressText(order) }}</dd>
+          </div>
+        </dl>
       </div>
 
       <!-- 품목 + 합계 -->

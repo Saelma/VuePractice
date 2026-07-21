@@ -27,7 +27,13 @@ public record OrderResponse(
         Instant createdAt,
         Instant paidAt,
         Instant shippedAt,
-        Instant cancelledAt
+        Instant cancelledAt,
+        // 배송지 스냅샷(주문 시점). 배송지 도입(V11) 이전 주문은 전부 null이다.
+        String shipRecipient,
+        String shipPhone,
+        String shipZipcode,
+        String shipAddress1,
+        String shipAddress2
 ) {
     public static OrderResponse from(Order o) {
         return new OrderResponse(
@@ -40,6 +46,11 @@ public record OrderResponse(
                 o.getCreatedAt(),
                 o.getPaidAt(),
                 o.getShippedAt(),
-                o.getCancelledAt());
+                o.getCancelledAt(),
+                o.getShipRecipient(),
+                o.getShipPhone(),
+                o.getShipZipcode(),
+                o.getShipAddress1(),
+                o.getShipAddress2());
     }
 }

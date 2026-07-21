@@ -50,6 +50,20 @@
 
 → 검증 전용 계정 **`esptest`를 상시 유지**한다. 절차는 `glassvue-backend/src/main/resources/db/migration/README.md`.
 
+### 2-2-1. Oracle `VARCHAR2(n)`은 **바이트**다 — 항상 `n CHAR`로 쓴다
+
+이 DB의 `NLS_LENGTH_SEMANTICS`는 `BYTE`다. `VARCHAR2(50)`은 한글 약 16자밖에 못 담는다.
+
+> **사고**(2026-07-21 발견): `V1__init.sql`은 전부 `VARCHAR2(n CHAR)`로 썼는데 **V5·V9가 `CHAR`를 빠뜨렸다.**
+> 그래서 `member.nickname`은 50자인데 그걸 복사해 넣는 `orders.buyer_nickname`은 50**바이트**였다 —
+> 닉네임이 한글 17자 이상인 회원은 **주문 자체가 ORA-12899로 실패**한다. 그런 회원이 아직 없어 안 터졌을 뿐이다.
+> (V12에서 보정. 넓히는 방향이라 온라인으로 적용됐다.)
+
+→ 마이그레이션에 `VARCHAR2`를 쓸 때는 예외 없이 `CHAR`를 붙인다.
+→ **스냅샷 컬럼은 원본 컬럼과 길이·semantics가 같아야 한다.** 원본에서 통과한 값이 복사할 때 터진다.
+→ 확인: `select column_name, char_used, char_length from user_tab_columns where table_name='X'`
+(`char_used='B'`면 바이트 — 잘못된 것이다).
+
 ### 2-3. 권한·소유 판단은 프론트와 백엔드 기준을 일치시킨다
 
 > **사고**: 백엔드 `pay`/`cancel`은 `findByIdAndMemberId`로 **소유 기준**인데, 프론트는

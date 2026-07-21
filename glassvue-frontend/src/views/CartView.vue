@@ -6,7 +6,6 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getCart, updateCartItem, removeCartItem, clearCart } from '../api/cart';
-import { checkout as apiCheckout } from '../api/order';
 import { priceText } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
 import EmptyState from '../components/EmptyState.vue';
@@ -59,20 +58,16 @@ async function onClear() {
   }
 }
 
-async function checkout() {
+// 여기서 바로 주문하지 않고 주문서로 넘긴다 — 배송지를 받아야 하기 때문(커머스 표준 흐름).
+// 살 수 없는 항목 검사는 넘어가기 전에 해서, 주문서까지 갔다가 되돌아오는 일이 없게 한다.
+function goCheckout() {
   error.value = '';
   if (!cart.value.items.length) return;
   if (cart.value.items.some((i) => !i.available)) {
     error.value = '구매할 수 없는 상품이 있어요. (품절/판매중지) 해당 항목을 빼주세요.';
     return;
   }
-  if (!window.confirm('주문하시겠어요?')) return;
-  try {
-    const orderId = await apiCheckout();
-    router.push(`/orders/${orderId}`);
-  } catch (e) {
-    error.value = e.message;
-  }
+  router.push('/checkout');
 }
 </script>
 
@@ -166,7 +161,7 @@ async function checkout() {
           <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(cart.totalPrice) }}</span>
         </div>
 
-        <button type="button" class="btn btn-primary mt-5 w-full" @click="checkout">주문하기</button>
+        <button type="button" class="btn btn-primary mt-5 w-full" @click="goCheckout">주문하기</button>
         <button type="button" class="btn btn-secondary mt-2 w-full" @click="onClear">장바구니 비우기</button>
       </aside>
     </div>

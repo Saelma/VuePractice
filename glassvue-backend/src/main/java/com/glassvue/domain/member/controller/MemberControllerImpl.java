@@ -3,6 +3,7 @@ package com.glassvue.domain.member.controller;
 import com.glassvue.domain.auth.dto.MemberResponse;
 import com.glassvue.domain.member.dto.NicknameUpdateRequest;
 import com.glassvue.domain.member.dto.PasswordUpdateRequest;
+import com.glassvue.domain.member.dto.ShippingAddressRequest;
 import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
@@ -30,6 +31,14 @@ public class MemberControllerImpl implements MemberController {
             @LoginUser AuthUser user,
             @Valid @RequestBody NicknameUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(memberService.changeNickname(user.id(), request.nickname())));
+    }
+
+    @Override
+    @PatchMapping("/me/shipping-address")
+    public ResponseEntity<ApiResponse<MemberResponse>> updateShippingAddress(
+            @LoginUser AuthUser user,
+            @Valid @RequestBody ShippingAddressRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(memberService.updateShippingAddress(user.id(), request)));
     }
 
     @Override

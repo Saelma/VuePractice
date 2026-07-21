@@ -4,6 +4,7 @@ import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.domain.order.service.OrderService;
+import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.security.LoginUser;
@@ -11,10 +12,12 @@ import java.net.URI;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,8 +30,9 @@ public class OrderControllerImpl implements OrderController {
 
     @Override
     @PostMapping
-    public ResponseEntity<ApiResponse<UUID>> checkout(@LoginUser AuthUser user) {
-        UUID id = orderService.checkout(user);
+    public ResponseEntity<ApiResponse<UUID>> checkout(@LoginUser AuthUser user,
+                                                      @Valid @RequestBody OrderCreateRequest request) {
+        UUID id = orderService.checkout(user, request);
         return ResponseEntity.created(URI.create("/api/orders/" + id)).body(ApiResponse.ok(id));
     }
 

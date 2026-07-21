@@ -6,6 +6,7 @@ import com.glassvue.domain.cart.service.CartService;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.dto.AdminOrderResponse;
+import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.domain.order.entity.Order;
@@ -48,7 +49,7 @@ public class OrderService {
      * (탈퇴하면 회원 row가 사라지므로 조회 방식으로는 과거 주문의 구매자를 알 수 없다).
      */
     @Transactional
-    public UUID checkout(AuthUser user) {
+    public UUID checkout(AuthUser user, OrderCreateRequest req) {
         UUID memberId = user.id();
         CartResponse cart = cartService.getCart(memberId);
         if (cart.items().isEmpty()) {
@@ -64,7 +65,8 @@ public class OrderService {
             orderItems.add(OrderItem.of(i.productId(), i.name(), i.thumbUrl(), i.price(), i.quantity()));
         }
 
-        Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems));
+        Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems,
+                req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2()));
         cartService.clear(memberId);
         // 도메인 이벤트 발행 — 구독자(알림·포인트 등)는 order가 모른다. AFTER_COMMIT 리스너가 커밋된 주문에만 반응.
         eventPublisher.publishEvent(OrderPlacedEvent.from(order));

@@ -3,12 +3,32 @@ import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { authState } from '../stores/auth';
-import { changeNickname, changePassword, withdraw } from '../api/member';
+import { changeNickname, changePassword, withdraw, updateShippingAddress } from '../api/member';
+import { addressFromUser, validateAddress, trimAddress } from '../api/shipping';
+import ShippingAddressFields from '../components/ShippingAddressFields.vue';
 
 const router = useRouter();
 
 const nick = reactive({ value: authState.user?.nickname || '', msg: '', err: '', loading: false });
 const pw = reactive({ current: '', next: '', msg: '', err: '', loading: false });
+// 기본 배송지 — 주문서에 자동으로 채워 넣기 위한 값. 과거 주문의 배송지는 여기 값과 무관하다(스냅샷).
+const addr = reactive(addressFromUser(authState.user));
+const addrState = reactive({ msg: '', err: '', loading: false });
+
+async function onAddress() {
+  addrState.msg = ''; addrState.err = '';
+  const invalid = validateAddress(addr);
+  if (invalid) { addrState.err = invalid; return; }
+  addrState.loading = true;
+  try {
+    await updateShippingAddress(trimAddress(addr));
+    addrState.msg = '기본 배송지가 저장되었습니다. (이미 넣은 주문의 배송지는 바뀌지 않습니다)';
+  } catch (e) {
+    addrState.err = e.message;
+  } finally {
+    addrState.loading = false;
+  }
+}
 
 async function onNickname() {
   nick.msg = ''; nick.err = '';
@@ -66,6 +86,18 @@ async function onWithdraw() {
       </label>
       <button type="button" class="btn btn-secondary self-start" :disabled="nick.loading" @click="onNickname">
         {{ nick.loading ? '변경 중…' : '닉네임 변경' }}
+      </button>
+    </div>
+
+    <!-- 기본 배송지 -->
+    <div class="card mt-8 flex flex-col gap-3 p-5">
+      <h2 class="section-title">기본 배송지</h2>
+      <p class="text-sm text-ink-700">주문서에 자동으로 채워집니다. 이미 넣은 주문의 배송지는 바뀌지 않습니다.</p>
+      <p v-if="addrState.err" class="alert-error">{{ addrState.err }}</p>
+      <p v-if="addrState.msg" class="alert-success">{{ addrState.msg }}</p>
+      <ShippingAddressFields :form="addr" />
+      <button type="button" class="btn btn-secondary self-start" :disabled="addrState.loading" @click="onAddress">
+        {{ addrState.loading ? '저장 중…' : '기본 배송지 저장' }}
       </button>
     </div>
 

@@ -3,6 +3,7 @@ package com.glassvue.domain.order.controller;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,7 +18,8 @@ import org.springframework.http.ResponseEntity;
 public interface OrderController {
 
     @Operation(summary = "주문 생성 (장바구니 결제)")
-    ResponseEntity<ApiResponse<UUID>> checkout(@Parameter(hidden = true) AuthUser user);
+    ResponseEntity<ApiResponse<UUID>> checkout(@Parameter(hidden = true) AuthUser user,
+            OrderCreateRequest request);
 
     @Operation(summary = "내 주문 목록 (상태 필터·페이징)")
     ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> myOrders(

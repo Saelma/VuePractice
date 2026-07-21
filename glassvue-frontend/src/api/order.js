@@ -1,7 +1,9 @@
 import { apiGet, apiPost } from './client';
 
-export function checkout() {
-  return apiPost('/api/orders'); // 생성된 order id 반환
+// 배송지는 주문 시점 스냅샷이라 요청 본문으로 받는다(서버가 회원 기본 배송지를 읽지 않는다).
+// 품목은 장바구니에서 서버가 읽으므로 본문에 없다 — 가격 위변조 방지.
+export function checkout(address) {
+  return apiPost('/api/orders', address); // 생성된 order id 반환
 }
 
 // 내 주문 목록(페이징). 응답: PageResponse<OrderResponse> { content, page, size, totalElements, ... }

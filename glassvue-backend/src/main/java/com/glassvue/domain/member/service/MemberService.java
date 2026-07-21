@@ -1,6 +1,7 @@
 package com.glassvue.domain.member.service;
 
 import com.glassvue.domain.auth.dto.MemberResponse;
+import com.glassvue.domain.member.dto.ShippingAddressRequest;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.glassvue.global.exception.BusinessException;
@@ -37,6 +38,13 @@ public class MemberService {
         }
         member.updateNickname(nickname);
         // 주의: 토큰의 nickname claim은 다음 로그인/refresh 때 갱신됨(과거 글의 작성자명은 그대로).
+        return MemberResponse.from(member);
+    }
+
+    /** 기본 배송지 저장 — 주문서에 자동으로 채워 넣기 위한 값. 주문에는 복사(스냅샷)된다. */
+    public MemberResponse updateShippingAddress(UUID memberId, ShippingAddressRequest req) {
+        Member member = find(memberId);
+        member.updateShippingAddress(req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2());
         return MemberResponse.from(member);
     }
 

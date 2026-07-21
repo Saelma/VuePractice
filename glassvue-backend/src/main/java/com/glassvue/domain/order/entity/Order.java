@@ -52,6 +52,25 @@ public class Order extends BaseTimeEntity {
 
     private Instant shippedAt;
 
+    // --- 배송지 스냅샷 ---
+    // 회원의 현재 배송지를 참조하지 않고 주문 시점 값을 복사한다 — 구매자 닉네임·상품 이미지와 같은 이유로,
+    // 회원이 나중에 주소를 바꿔도 과거 주문은 "그때 보낸 곳"이어야 CS·배송 이력이 맞다.
+    // 기존 주문은 배송지를 알 방법이 없어 nullable(백필 불가). 신규 주문은 요청 검증(@NotBlank)이 보장한다.
+    @Column(name = "ship_recipient", length = 50)
+    private String shipRecipient;
+
+    @Column(name = "ship_phone", length = 20)
+    private String shipPhone;
+
+    @Column(name = "ship_zipcode", length = 10)
+    private String shipZipcode;
+
+    @Column(name = "ship_address1", length = 200)
+    private String shipAddress1;
+
+    @Column(name = "ship_address2", length = 200)
+    private String shipAddress2;
+
     // 취소 시각. 결제·발송과 마찬가지로 "언제 그렇게 됐는지"가 CS·정산에서 필요하다.
     // updated_at으로는 대체할 수 없다 — 다른 변경에도 갱신되므로 취소 시각이라 단정할 수 없다.
     private Instant cancelledAt;
@@ -69,8 +88,16 @@ public class Order extends BaseTimeEntity {
         this.totalPrice = 0L;
     }
 
-    public static Order create(UUID memberId, String buyerNickname, List<OrderItem> orderItems) {
+    /** 배송지는 주문 시점 스냅샷으로 받는다(회원 주소를 참조하지 않는다). */
+    public static Order create(UUID memberId, String buyerNickname, List<OrderItem> orderItems,
+                               String shipRecipient, String shipPhone,
+                               String shipZipcode, String shipAddress1, String shipAddress2) {
         Order order = new Order(memberId, buyerNickname);
+        order.shipRecipient = shipRecipient;
+        order.shipPhone = shipPhone;
+        order.shipZipcode = shipZipcode;
+        order.shipAddress1 = shipAddress1;
+        order.shipAddress2 = shipAddress2;
         orderItems.forEach(order::addItem);
         return order;
     }

@@ -12,7 +12,8 @@ class OrderTest {
 
     private Order newOrder() {
         return Order.create(UUID.randomUUID(), "구매자닉",
-                List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 10_000, 2)));
+                List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 10_000, 2)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층");
     }
 
     @Test
@@ -65,7 +66,8 @@ class OrderTest {
     @DisplayName("소유권 판별")
     void ownership() {
         UUID me = UUID.randomUUID();
-        Order o = Order.create(me, "구매자닉", List.of(OrderItem.of(UUID.randomUUID(), "x", null, 1000, 1)));
+        Order o = Order.create(me, "구매자닉", List.of(OrderItem.of(UUID.randomUUID(), "x", null, 1000, 1)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층");
         assertThat(o.isOwnedBy(me)).isTrue();
         assertThat(o.isOwnedBy(UUID.randomUUID())).isFalse();
     }

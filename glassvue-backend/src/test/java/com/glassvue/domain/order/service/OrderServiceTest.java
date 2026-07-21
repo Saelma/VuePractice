@@ -15,6 +15,7 @@ import com.glassvue.domain.cart.service.CartService;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.entity.OrderStatus;
@@ -49,8 +50,11 @@ class OrderServiceTest {
     private final AuthUser buyer = new AuthUser(memberId, Role.USER, "구매자닉");
     private final UUID orderId = UUID.randomUUID();
 
+    private static final OrderCreateRequest SHIP = new OrderCreateRequest(
+            "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층");
+
     private Order orderWith(OrderItem... items) {
-        return Order.create(memberId, "구매자닉", List.of(items));
+        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층");
     }
     private Order sampleOrder() {
         return orderWith(OrderItem.of(UUID.randomUUID(), "지바", "/uploads/z_t.webp", 10_000, 2));
@@ -175,11 +179,30 @@ class OrderServiceTest {
         when(cartService.getCart(memberId)).thenReturn(cartWith(availableItem(pid, 2)));
         when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        orderService.checkout(buyer);
+        orderService.checkout(buyer, SHIP);
 
         verify(productCommandService).decreaseStock(pid, 2);
         verify(cartService).clear(memberId);
         verify(eventPublisher).publishEvent(any(OrderPlacedEvent.class));
+    }
+
+    @Test
+    @DisplayName("결제: 배송지를 주문에 **스냅샷**한다 (회원 기본 배송지를 참조하지 않는다)")
+    void checkout_snapshotsShippingAddress() {
+        UUID pid = UUID.randomUUID();
+        when(cartService.getCart(memberId)).thenReturn(cartWith(availableItem(pid, 1)));
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        when(orderRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.checkout(buyer, SHIP);
+
+        // 회원이 나중에 기본 배송지를 바꿔도 과거 주문은 "그때 보낸 곳"이어야 한다.
+        Order saved = captor.getValue();
+        assertThat(saved.getShipRecipient()).isEqualTo("수령인");
+        assertThat(saved.getShipPhone()).isEqualTo("010-1234-5678");
+        assertThat(saved.getShipZipcode()).isEqualTo("06134");
+        assertThat(saved.getShipAddress1()).isEqualTo("서울시 강남구 테헤란로 1");
+        assertThat(saved.getShipAddress2()).isEqualTo("3층");
     }
 
     @Test
@@ -190,7 +213,7 @@ class OrderServiceTest {
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
         when(orderRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
 
-        orderService.checkout(buyer);
+        orderService.checkout(buyer, SHIP);
 
         // 상품이 바뀌거나 삭제돼도 주문 이력은 "그때 모습"이어야 하므로 참조가 아니라 스냅샷이다.
         assertThat(captor.getValue().getItems()).singleElement()
@@ -204,7 +227,7 @@ class OrderServiceTest {
     @DisplayName("결제: 빈 장바구니 → CART_EMPTY, 이벤트/저장 없음")
     void checkout_emptyCart() {
         when(cartService.getCart(memberId)).thenReturn(cartWith());
-        assertErrorCode(() -> orderService.checkout(buyer), ErrorCode.CART_EMPTY);
+        assertErrorCode(() -> orderService.checkout(buyer, SHIP), ErrorCode.CART_EMPTY);
         verify(orderRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -215,7 +238,7 @@ class OrderServiceTest {
         UUID pid = UUID.randomUUID();
         CartItemResponse soldOut = new CartItemResponse(pid, "품절품", 10_000, ProductStatus.SOLD_OUT, 1, 10_000, false, null);
         when(cartService.getCart(memberId)).thenReturn(cartWith(soldOut));
-        assertErrorCode(() -> orderService.checkout(buyer), ErrorCode.UNAVAILABLE_ITEM);
+        assertErrorCode(() -> orderService.checkout(buyer, SHIP), ErrorCode.UNAVAILABLE_ITEM);
         verify(eventPublisher, never()).publishEvent(any());
     }
 }
