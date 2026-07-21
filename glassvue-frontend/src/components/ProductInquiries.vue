@@ -9,6 +9,8 @@ import {
 } from '../api/inquiry';
 import { authState, isLoggedIn } from '../stores/auth';
 import ImageUploader from './ImageUploader.vue';
+import EmptyState from './EmptyState.vue';
+import SkeletonList from './SkeletonList.vue';
 
 const props = defineProps({ productId: { type: String, required: true } });
 
@@ -150,19 +152,16 @@ onMounted(() => load(0));
     <p v-else class="mb-6 text-sm text-ink-500">문의 작성은 로그인 후 가능합니다.</p>
 
     <!-- 로딩: 텍스트 대신 스켈레톤 (DESIGN.md §5) -->
-    <div v-if="loading" class="card divide-y divide-line">
-      <div v-for="n in 3" :key="n" class="space-y-2 px-5 py-4">
-        <div class="skeleton h-4 w-1/2"></div>
-        <div class="skeleton h-3 w-3/4"></div>
-      </div>
-    </div>
+    <SkeletonList v-if="loading" />
 
     <!-- 빈 상태 -->
-    <div v-else-if="!page.content.length" class="flex flex-col items-center gap-3 py-12 text-center">
-      <span class="text-4xl">💭</span>
-      <p class="text-sm text-ink-500">등록된 문의가 없어요.</p>
-      <p v-if="isLoggedIn" class="muted">궁금한 점이 있다면 위에서 문의를 남겨보세요.</p>
-    </div>
+    <EmptyState
+      v-else-if="!page.content.length"
+      density="section"
+      icon="💭"
+      message="등록된 문의가 없어요."
+      :hint="isLoggedIn ? '궁금한 점이 있다면 위에서 문의를 남겨보세요.' : null"
+    />
 
     <!-- 목록 -->
     <ul v-else class="card divide-y divide-line">

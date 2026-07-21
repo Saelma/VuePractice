@@ -13,6 +13,7 @@ import { fetchProducts, SORT_OPTIONS, STATUS_OPTIONS, statusText, priceText } fr
 import { fetchCategories } from '../api/category';
 import { authState } from '../stores/auth';
 import StarRating from '../components/StarRating.vue';
+import EmptyState from '../components/EmptyState.vue';
 
 const router = useRouter();
 const categories = ref([]);
@@ -242,16 +243,16 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
         </div>
 
         <!-- 빈 상태: 필터 때문에 빈 것과 정말 없는 것을 구분한다 -->
-        <div v-else-if="!items.length" class="flex flex-col items-center gap-3 py-16 text-center">
-          <span class="text-4xl">{{ chips.length ? '🔍' : '🗂️' }}</span>
-          <p class="text-sm text-ink-500">
-            {{ chips.length ? '조건에 맞는 상품이 없어요.' : '아직 등록된 상품이 없어요.' }}
-          </p>
+        <EmptyState
+          v-else-if="!items.length"
+          :icon="chips.length ? '🔍' : '🗂️'"
+          :message="chips.length ? '조건에 맞는 상품이 없어요.' : '아직 등록된 상품이 없어요.'"
+        >
           <button v-if="chips.length" type="button" class="btn btn-secondary" @click="resetAll">필터 초기화</button>
           <button v-else-if="isAdmin" type="button" class="btn btn-primary" @click="router.push('/products/new')">
             상품 등록
           </button>
-        </div>
+        </EmptyState>
 
         <!-- 카드 그리드 -->
         <div v-else class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">

@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { fetchCategories, createCategory, deleteCategory } from '../api/category';
+import EmptyState from '../components/EmptyState.vue';
 
 const categories = ref([]);
 const name = ref('');
@@ -75,10 +76,11 @@ async function onDelete(c) {
     </ul>
 
     <!-- 빈 상태 -->
-    <div v-else class="flex flex-col items-center gap-3 py-16 text-center">
-      <span class="text-4xl">🗂️</span>
-      <p class="text-sm text-ink-500">아직 등록된 카테고리가 없어요.</p>
-      <p class="muted">위 입력란에 이름을 적고 “추가”를 누르세요.</p>
-    </div>
+    <EmptyState
+      v-else
+      icon="🗂️"
+      message="아직 등록된 카테고리가 없어요."
+      hint="위 입력란에 이름을 적고 “추가”를 누르세요."
+    />
   </section>
 </template>

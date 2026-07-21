@@ -9,6 +9,8 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxDateBox } from 'devextreme-vue/date-box';
 import { fetchNotices } from '../api/notice';
 import { isLoggedIn } from '../stores/auth';
+import EmptyState from '../components/EmptyState.vue';
+import SkeletonList from '../components/SkeletonList.vue';
 
 const router = useRouter();
 
@@ -111,27 +113,19 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
     <div v-if="error" class="alert-error">{{ error }}</div>
 
     <!-- 로딩 스켈레톤 -->
-    <div v-else-if="loading" class="card divide-y divide-line">
-      <div v-for="n in 6" :key="n" class="flex items-center justify-between gap-4 px-5 py-4">
-        <div class="flex-1 space-y-2">
-          <div class="skeleton h-4 w-2/3"></div>
-          <div class="skeleton h-3 w-32"></div>
-        </div>
-        <div class="skeleton h-3 w-16"></div>
-      </div>
-    </div>
+    <SkeletonList v-else-if="loading" :rows="6" trailing />
 
-    <!-- 빈 상태 -->
-    <div v-else-if="!items.length" class="flex flex-col items-center gap-3 py-16 text-center">
-      <span class="text-4xl">{{ hasFilter ? '🔍' : '📭' }}</span>
-      <p class="text-sm text-ink-500">
-        {{ hasFilter ? '조건에 맞는 공지가 없어요.' : '아직 등록된 공지가 없어요.' }}
-      </p>
+    <!-- 빈 상태: 필터 때문에 빈 것과 정말 없는 것을 구분한다 -->
+    <EmptyState
+      v-else-if="!items.length"
+      :icon="hasFilter ? '🔍' : '📭'"
+      :message="hasFilter ? '조건에 맞는 공지가 없어요.' : '아직 등록된 공지가 없어요.'"
+    >
       <button v-if="hasFilter" type="button" class="btn btn-secondary" @click="reset">필터 초기화</button>
       <button v-else-if="isLoggedIn" type="button" class="btn btn-primary" @click="router.push('/notices/new')">
         새 공지 작성
       </button>
-    </div>
+    </EmptyState>
 
     <!-- 목록 -->
     <ul v-else class="card divide-y divide-line">

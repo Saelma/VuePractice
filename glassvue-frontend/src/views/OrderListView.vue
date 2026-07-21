@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router';
 import { fetchOrders, orderStatusText, orderStatusClass, ORDER_STATUS_TEXT } from '../api/order';
 import { priceText } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
+import EmptyState from '../components/EmptyState.vue';
 
 const router = useRouter();
 const orders = ref([]);
@@ -83,14 +84,14 @@ const shortId = (id) => (id ? `#${String(id).slice(0, 8)}` : '');
     </div>
 
     <!-- 빈 상태: 탭 때문에 빈 것과 정말 없는 것을 구분 -->
-    <div v-else-if="!orders.length" class="flex flex-col items-center gap-3 py-16 text-center">
-      <span class="text-4xl">🧾</span>
-      <p class="text-sm text-ink-500">
-        {{ status ? `‘${orderStatusText(status)}’ 상태인 주문이 없어요.` : '아직 주문 내역이 없어요.' }}
-      </p>
+    <EmptyState
+      v-else-if="!orders.length"
+      icon="🧾"
+      :message="status ? `‘${orderStatusText(status)}’ 상태인 주문이 없어요.` : '아직 주문 내역이 없어요.'"
+    >
       <button v-if="status" type="button" class="btn btn-secondary" @click="pickTab(null)">전체 보기</button>
       <button v-else type="button" class="btn btn-primary" @click="router.push('/products')">상품 보러 가기</button>
-    </div>
+    </EmptyState>
 
     <!-- 주문 카드 -->
     <ul v-else class="space-y-4">

@@ -9,6 +9,7 @@ import { getCart, updateCartItem, removeCartItem, clearCart } from '../api/cart'
 import { checkout as apiCheckout } from '../api/order';
 import { priceText } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
+import EmptyState from '../components/EmptyState.vue';
 
 const router = useRouter();
 const cart = ref({ items: [], totalQuantity: 0, totalPrice: 0 });
@@ -106,11 +107,9 @@ async function checkout() {
     </div>
 
     <!-- 빈 상태: 회색 한 줄로 끝내지 않고 다음 행동을 준다 (DESIGN.md §5) -->
-    <div v-else-if="!cart.items.length" class="flex flex-col items-center gap-3 py-16 text-center">
-      <span class="text-4xl">🛒</span>
-      <p class="text-sm text-ink-500">장바구니가 비어 있어요.</p>
+    <EmptyState v-else-if="!cart.items.length" icon="🛒" message="장바구니가 비어 있어요.">
       <button type="button" class="btn btn-primary" @click="router.push('/products')">상품 보러 가기</button>
-    </div>
+    </EmptyState>
 
     <div v-else class="grid items-start gap-6 lg:grid-cols-3">
       <!-- 항목 -->
