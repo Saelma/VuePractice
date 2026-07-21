@@ -57,9 +57,19 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("회원가입: 닉네임 중복 → DUPLICATE_NICKNAME, 저장 안 함")
+    void signup_duplicateNickname() {
+        when(memberRepository.existsByLoginId("kim")).thenReturn(false);
+        when(memberRepository.existsByNickname("닉")).thenReturn(true);
+        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉")), ErrorCode.DUPLICATE_NICKNAME);
+        verify(memberRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("회원가입: 새 아이디 → 저장 + 응답")
     void signup_ok() {
         when(memberRepository.existsByLoginId("kim")).thenReturn(false);
+        when(memberRepository.existsByNickname("닉")).thenReturn(false);
         when(passwordEncoder.encode("pw")).thenReturn("ENC");
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
         var res = service.signup(new SignupRequest("kim", "pw", "닉"));

@@ -71,9 +71,23 @@ class MemberServiceTest {
     void changeNickname() {
         Member m = member();
         when(memberRepository.findById(memberId)).thenReturn(Optional.of(m));
+        when(memberRepository.existsByNicknameAndIdNot("새닉네임", memberId)).thenReturn(false);
         var res = service.changeNickname(memberId, "새닉네임");
         assertThat(m.getNickname()).isEqualTo("새닉네임");
         assertThat(res.nickname()).isEqualTo("새닉네임");
+    }
+
+    @Test
+    @DisplayName("닉네임 변경: 남이 쓰는 닉네임 → DUPLICATE_NICKNAME, 반영 안 함")
+    void changeNickname_duplicate() {
+        Member m = member();
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(m));
+        when(memberRepository.existsByNicknameAndIdNot("중복닉", memberId)).thenReturn(true);
+        assertThatThrownBy(() -> service.changeNickname(memberId, "중복닉"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.DUPLICATE_NICKNAME);
+        assertThat(m.getNickname()).isEqualTo("김철수");
     }
 
     @Test

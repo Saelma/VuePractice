@@ -38,6 +38,9 @@ public class AuthService {
         if (memberRepository.existsByLoginId(req.loginId())) {
             throw new BusinessException(ErrorCode.DUPLICATE_LOGIN_ID);
         }
+        if (memberRepository.existsByNickname(req.nickname())) {
+            throw new BusinessException(ErrorCode.DUPLICATE_NICKNAME);
+        }
         Member member = Member.builder()
                 .loginId(req.loginId())
                 .password(passwordEncoder.encode(req.password()))

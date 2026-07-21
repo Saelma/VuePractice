@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxButton } from 'devextreme-vue/button';
-import { fetchCategories, createCategory } from '../api/category';
+import { fetchCategories, createCategory, deleteCategory } from '../api/category';
 
 const categories = ref([]);
 const name = ref('');
@@ -34,6 +34,21 @@ async function onAdd() {
     error.value = e.message;
   }
 }
+
+async function onDelete(c) {
+  error.value = '';
+  msg.value = '';
+  // eslint-disable-next-line no-alert
+  if (!window.confirm(`'${c.name}' 카테고리를 삭제할까요?`)) return;
+  try {
+    await deleteCategory(c.id);
+    msg.value = '삭제되었습니다.';
+    await load();
+  } catch (e) {
+    // 소속 상품이 있으면 서버가 막는다 — 메시지를 그대로 노출("소속 상품이 있어 삭제할 수 없습니다.").
+    error.value = e.message;
+  }
+}
 </script>
 
 <template>
@@ -48,7 +63,14 @@ async function onAdd() {
     </div>
 
     <ul class="divide-y rounded-lg border bg-white">
-      <li v-for="c in categories" :key="c.id" class="px-4 py-3 text-slate-700">{{ c.name }}</li>
+      <li v-for="c in categories" :key="c.id" class="flex items-center justify-between px-4 py-3 text-slate-700">
+        <span>{{ c.name }}</span>
+        <button
+          class="rounded px-2 py-1 text-sm text-red-600 hover:bg-red-50"
+          type="button"
+          @click="onDelete(c)"
+        >삭제</button>
+      </li>
       <li v-if="!categories.length" class="px-4 py-3 text-slate-400">등록된 카테고리가 없습니다.</li>
     </ul>
   </section>

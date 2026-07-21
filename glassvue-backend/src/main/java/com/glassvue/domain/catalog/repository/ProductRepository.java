@@ -10,6 +10,9 @@ import org.springframework.data.repository.query.Param;
 
 public interface ProductRepository extends JpaRepository<Product, UUID>, ProductRepositoryCustom {
 
+    /** 카테고리 삭제 가능 여부 판단용 — 해당 카테고리에 속한 상품이 하나라도 있는지. */
+    boolean existsByCategoryId(UUID categoryId);
+
     /** 재고가 충분할 때만 원자적으로 차감(오버셀 방지). 반영된 행 수 반환(0=재고 부족). */
     @Modifying
     @Query("update Product p set p.stock = p.stock - :qty where p.id = :id and p.stock >= :qty")

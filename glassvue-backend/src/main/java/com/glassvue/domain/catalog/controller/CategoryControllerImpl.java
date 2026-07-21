@@ -6,10 +6,13 @@ import com.glassvue.domain.catalog.service.CategoryService;
 import com.glassvue.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,5 +35,12 @@ public class CategoryControllerImpl implements CategoryController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<CategoryResponse>>> list() {
         return ResponseEntity.ok(ApiResponse.ok(categoryService.list()));
+    }
+
+    @Override
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
+        categoryService.delete(id);
+        return ResponseEntity.ok(ApiResponse.ok());
     }
 }

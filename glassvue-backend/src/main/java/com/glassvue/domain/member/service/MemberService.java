@@ -31,6 +31,10 @@ public class MemberService {
 
     public MemberResponse changeNickname(UUID memberId, String nickname) {
         Member member = find(memberId);
+        // 닉네임은 유니크. 본인은 제외해 같은 값 재저장은 허용하고, 남이 쓰는 값이면 막는다.
+        if (memberRepository.existsByNicknameAndIdNot(nickname, memberId)) {
+            throw new BusinessException(ErrorCode.DUPLICATE_NICKNAME);
+        }
         member.updateNickname(nickname);
         // 주의: 토큰의 nickname claim은 다음 로그인/refresh 때 갱신됨(과거 글의 작성자명은 그대로).
         return MemberResponse.from(member);

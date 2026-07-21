@@ -57,7 +57,7 @@ public class SecurityConfig {
                         // 카탈로그: 조회는 공개, 등록/수정/삭제는 관리자만
                         .requestMatchers(HttpMethod.POST, "/api/products", "/api/categories").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/products/*").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/products/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/*", "/api/categories/*").hasRole("ADMIN")
                         // 리뷰: 조회는 공개, 작성/수정/삭제는 로그인 필요(구매 인증은 서비스에서)
                         .requestMatchers(HttpMethod.POST, "/api/products/*/reviews").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/reviews/*").authenticated()
