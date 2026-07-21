@@ -51,6 +51,23 @@ function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
 }
 const shortId = computed(() => (order.value?.id ? `#${String(order.value.id).slice(0, 8)}` : ''));
+
+/**
+ * 주문 진행 스텝 — 커머스 주문 상세의 핵심 시각 요소. "지금 어디까지 왔나"를 한눈에 보여준다.
+ * 취소된 주문은 진행이 멈춘 것이라 스텝 대신 별도 안내를 띄운다.
+ */
+const STEPS = [
+  { key: 'ORDERED', label: '주문 접수', at: (o) => o.createdAt },
+  { key: 'PAID', label: '결제 완료', at: (o) => o.paidAt },
+  { key: 'SHIPPED', label: '발송 완료', at: (o) => o.shippedAt },
+];
+const currentStep = computed(() => {
+  const s = order.value?.status;
+  if (s === 'SHIPPED') return 2;
+  if (s === 'PAID') return 1;
+  return 0; // ORDERED
+});
+const isCancelled = computed(() => order.value?.status === 'CANCELLED');
 </script>
 
 <template>
@@ -88,27 +105,38 @@ const shortId = computed(() => (order.value?.id ? `#${String(order.value.id).sli
         <span class="badge shrink-0" :class="orderStatusClass(order.status)">{{ orderStatusText(order.status) }}</span>
       </div>
 
-      <!-- 주문 정보 -->
-      <div class="card p-5">
-        <dl class="grid gap-3 text-sm sm:grid-cols-2">
-          <!-- 관리자가 남의 주문을 볼 때 "누구 주문인지" 표시(주문 시점 스냅샷). 본인 주문엔 불필요. -->
-          <div v-if="isAdmin && !isMine" class="flex flex-col gap-1">
-            <dt class="muted">구매자</dt>
-            <dd class="font-medium text-ink-900">{{ order.buyerNickname }}</dd>
-          </div>
-          <div class="flex flex-col gap-1">
-            <dt class="muted">주문</dt>
-            <dd class="text-ink-700 tabular-nums">{{ fmt(order.createdAt) }}</dd>
-          </div>
-          <div v-if="order.paidAt" class="flex flex-col gap-1">
-            <dt class="muted">결제</dt>
-            <dd class="text-ink-700 tabular-nums">{{ fmt(order.paidAt) }}</dd>
-          </div>
-          <div v-if="order.shippedAt" class="flex flex-col gap-1">
-            <dt class="muted">발송</dt>
-            <dd class="text-ink-700 tabular-nums">{{ fmt(order.shippedAt) }}</dd>
-          </div>
-        </dl>
+      <!-- 주문 진행 상태: 지금 어디까지 왔는지 -->
+      <div class="card mb-6 p-5">
+        <p v-if="isCancelled" class="text-sm text-ink-500">
+          <span class="badge badge-danger mr-2">취소됨</span>이 주문은 취소되어 진행이 멈췄어요.
+        </p>
+        <ol v-else class="flex items-start">
+          <li v-for="(st, i) in STEPS" :key="st.key" class="flex flex-1 flex-col items-center text-center">
+            <!-- 연결선 + 점 -->
+            <div class="flex w-full items-center">
+              <span class="h-px flex-1" :class="i === 0 ? 'bg-transparent' : i <= currentStep ? 'bg-brand-600' : 'bg-line'"></span>
+              <span
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium"
+                :class="i <= currentStep
+                  ? 'border-brand-600 bg-brand-600 text-white'
+                  : 'border-line bg-surface text-ink-400'"
+                :aria-current="i === currentStep"
+              >{{ i < currentStep ? '✓' : i + 1 }}</span>
+              <span class="h-px flex-1" :class="i === STEPS.length - 1 ? 'bg-transparent' : i < currentStep ? 'bg-brand-600' : 'bg-line'"></span>
+            </div>
+            <span class="mt-2 text-xs font-medium" :class="i <= currentStep ? 'text-ink-900' : 'text-ink-400'">
+              {{ st.label }}
+            </span>
+            <span v-if="st.at(order)" class="muted mt-0.5 tabular-nums">{{ fmt(st.at(order)) }}</span>
+          </li>
+        </ol>
+      </div>
+
+      <!-- 관리자가 남의 주문을 볼 때만 "누구 주문인지"(주문 시점 스냅샷).
+           일시는 위 진행 스텝에 이미 있어 여기서 반복하지 않는다. -->
+      <div v-if="isAdmin && !isMine" class="card flex items-center justify-between gap-4 p-5">
+        <span class="muted">구매자</span>
+        <span class="text-sm font-medium text-ink-900">{{ order.buyerNickname }}</span>
       </div>
 
       <!-- 품목 + 합계 -->

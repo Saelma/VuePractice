@@ -49,44 +49,49 @@ function fmt(v) {
 
 <template>
   <section class="page-narrow">
+    <!-- 돌아가기: 읽는 화면에선 이탈 경로가 위에 있는 게 자연스럽다 -->
+    <button type="button" class="btn btn-ghost -ml-2 mb-4" @click="router.push('/')">← 목록</button>
+
     <div v-if="error" class="alert-error">{{ error }}</div>
 
-    <!-- 로딩: 텍스트 대신 스켈레톤으로 읽는 레이아웃을 미리 잡는다 (DESIGN.md §5) -->
-    <div v-else-if="loading" class="card p-6">
-      <div class="skeleton h-7 w-2/3"></div>
-      <div class="mt-3 flex gap-3 border-b border-line pb-4">
+    <!-- 로딩: 제목 → 메타 → 본문 순서 그대로 자리를 잡아둔다 (DESIGN.md §5) -->
+    <div v-else-if="loading">
+      <div class="skeleton h-8 w-3/4"></div>
+      <div class="mt-3 flex gap-3">
         <div class="skeleton h-3 w-20"></div>
+        <div class="skeleton h-3 w-24"></div>
         <div class="skeleton h-3 w-16"></div>
-        <div class="skeleton h-3 w-28"></div>
       </div>
-      <div class="mt-4 space-y-2">
+      <div class="mt-8 space-y-3">
         <div class="skeleton h-4 w-full"></div>
         <div class="skeleton h-4 w-11/12"></div>
-        <div class="skeleton h-4 w-3/4"></div>
+        <div class="skeleton h-4 w-4/5"></div>
       </div>
     </div>
 
-    <article v-else-if="notice" class="card p-6">
-      <div class="flex items-start gap-2">
-        <span v-if="notice.pinned" class="shrink-0 text-lg" title="상단 고정">📌</span>
-        <h1 class="page-title">{{ notice.title }}</h1>
+    <article v-else-if="notice">
+      <!-- 제목: 카드에 가두지 않고 페이지 제목으로 올려 위계를 준다(문서를 읽는 화면) -->
+      <div class="flex flex-wrap items-center gap-2">
+        <span v-if="notice.pinned" class="badge badge-neutral">📌 고정</span>
+      </div>
+      <h1 class="mt-2 text-3xl font-bold leading-snug tracking-tight text-ink-900">{{ notice.title }}</h1>
+
+      <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line pb-5 text-xs text-ink-500">
+        <span><b class="font-medium text-ink-700">{{ notice.author }}</b></span>
+        <span aria-hidden="true">·</span>
+        <span class="tabular-nums">{{ fmt(notice.createdAt) }}</span>
+        <span v-if="notice.updatedAt !== notice.createdAt" class="tabular-nums">(수정 {{ fmt(notice.updatedAt) }})</span>
+        <span aria-hidden="true">·</span>
+        <span class="tabular-nums">조회 {{ notice.viewCount }}</span>
       </div>
 
-      <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-b border-line pb-4">
-        <span class="muted">작성자 <b class="font-medium text-ink-700">{{ notice.author }}</b></span>
-        <span class="muted tabular-nums">조회 {{ notice.viewCount }}</span>
-        <span class="muted tabular-nums">작성 {{ fmt(notice.createdAt) }}</span>
-        <span v-if="notice.updatedAt !== notice.createdAt" class="muted tabular-nums">
-          수정 {{ fmt(notice.updatedAt) }}
-        </span>
-      </div>
+      <!-- 본문: 읽기 편하게 줄간격·글자를 키운다(보조 텍스트와 확실히 구분) -->
+      <div class="whitespace-pre-wrap py-8 text-[15px] leading-7 text-ink-700">{{ notice.content }}</div>
 
-      <p class="mt-5 min-h-[8rem] whitespace-pre-wrap text-sm leading-relaxed text-ink-700">{{ notice.content }}</p>
-
-      <div class="mt-8 flex items-center gap-2 border-t border-line pt-5">
+      <div class="flex items-center gap-2 border-t border-line pt-5">
         <button type="button" class="btn btn-secondary" @click="router.push('/')">목록</button>
         <template v-if="isOwner">
-          <button type="button" class="btn btn-primary" @click="router.push(`/notices/${id}/edit`)">수정</button>
+          <button type="button" class="btn btn-secondary" @click="router.push(`/notices/${id}/edit`)">수정</button>
           <button type="button" class="btn btn-danger ml-auto" @click="onDelete">삭제</button>
         </template>
       </div>
