@@ -58,14 +58,21 @@ public class Inquiry extends BaseTimeEntity {
     @Column
     private Instant answeredAt;
 
+    // 첨부 이미지 그룹(느슨한 UUID 참조, 없으면 null). Review와 동일하게 ImageService 공개 API로만 다룬다.
+    @JdbcTypeCode(SqlTypes.BINARY)
+    @Column(name = "image_group_id", columnDefinition = "RAW(16)")
+    private UUID imageGroupId;
+
     @Builder
-    private Inquiry(UUID productId, UUID authorId, String author, String title, String content, boolean secret) {
+    private Inquiry(UUID productId, UUID authorId, String author, String title, String content,
+                    boolean secret, UUID imageGroupId) {
         this.productId = productId;
         this.authorId = authorId;
         this.author = author;
         this.title = title;
         this.content = content;
         this.secret = secret;
+        this.imageGroupId = imageGroupId;
         this.status = InquiryStatus.WAITING;
     }
 
@@ -77,10 +84,11 @@ public class Inquiry extends BaseTimeEntity {
         return status == InquiryStatus.ANSWERED;
     }
 
-    public void update(String title, String content, boolean secret) {
+    public void update(String title, String content, boolean secret, UUID imageGroupId) {
         this.title = title;
         this.content = content;
         this.secret = secret;
+        this.imageGroupId = imageGroupId;
     }
 
     /** 관리자 답변 등록/수정. 상태를 ANSWERED로 전환한다. */

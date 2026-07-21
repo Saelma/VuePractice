@@ -6,8 +6,10 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxCheckBox } from 'devextreme-vue/check-box';
 import {
   fetchProductInquiries, createInquiry, updateInquiry, deleteInquiry, answerInquiry, inquiryStatusText,
+  INQUIRY_IMAGE_MAX,
 } from '../api/inquiry';
 import { authState, isLoggedIn } from '../stores/auth';
+import ImageUploader from './ImageUploader.vue';
 
 const props = defineProps({ productId: { type: String, required: true } });
 
@@ -24,14 +26,14 @@ function canDelete(q) {
   return isAdmin.value || q.authorId === myId.value;
 }
 
-// 작성 폼
-const form = ref({ title: '', content: '', secret: false });
+// 작성 폼 — images는 [{id,url}] (전송 시 id만 뽑는다)
+const form = ref({ title: '', content: '', secret: false, images: [] });
 const submitting = ref(false);
 const formError = ref('');
 
 // 인라인 수정 / 관리자 답변
 const editingId = ref(null);
-const editForm = ref({ title: '', content: '', secret: false });
+const editForm = ref({ title: '', content: '', secret: false, images: [] });
 const answeringId = ref(null);
 const answerText = ref('');
 
@@ -57,8 +59,9 @@ async function submit() {
   try {
     await createInquiry(props.productId, {
       title: form.value.title.trim(), content: form.value.content.trim(), secret: form.value.secret,
+      imageIds: form.value.images.map((i) => i.id),
     });
-    form.value = { title: '', content: '', secret: false };
+    form.value = { title: '', content: '', secret: false, images: [] };
     await load(0);
   } catch (e) {
     formError.value = e.message;
@@ -69,12 +72,14 @@ async function submit() {
 
 function startEdit(q) {
   editingId.value = q.id;
-  editForm.value = { title: q.title, content: q.content, secret: q.secret };
+  // 수정 폼은 기존 이미지를 들고 시작한다 — 서버가 "보낸 목록으로 통째 교체"라 빠뜨리면 사진이 삭제된다.
+  editForm.value = { title: q.title, content: q.content, secret: q.secret, images: [...(q.images || [])] };
 }
 async function saveEdit(q) {
   try {
     await updateInquiry(q.id, {
       title: editForm.value.title.trim(), content: editForm.value.content.trim(), secret: editForm.value.secret,
+      imageIds: editForm.value.images.map((i) => i.id),
     });
     editingId.value = null;
     await load(page.value.page);
@@ -127,6 +132,7 @@ onMounted(() => load(0));
     <div v-if="isLoggedIn" class="mb-5 flex flex-col gap-2 rounded-lg border bg-slate-50 p-4">
       <DxTextBox v-model:value="form.title" placeholder="문의 제목" />
       <DxTextArea v-model:value="form.content" :height="70" placeholder="궁금한 점을 남겨주세요." />
+      <ImageUploader v-model="form.images" :max="INQUIRY_IMAGE_MAX" thumb-class="h-16 w-16" @error="formError = $event" />
       <div class="flex items-center gap-3">
         <DxCheckBox v-model:value="form.secret" text="비밀글 (작성자·판매자만 열람)" />
         <DxButton text="문의 등록" type="default" styling-mode="contained" :disabled="submitting" @click="submit" />
@@ -157,6 +163,7 @@ onMounted(() => load(0));
           <div class="flex flex-col gap-2">
             <DxTextBox v-model:value="editForm.title" />
             <DxTextArea v-model:value="editForm.content" :height="60" />
+            <ImageUploader v-model="editForm.images" :max="INQUIRY_IMAGE_MAX" thumb-class="h-16 w-16" @error="error = $event" />
             <div class="flex items-center gap-3">
               <DxCheckBox v-model:value="editForm.secret" text="비밀글" />
               <DxButton text="저장" type="default" styling-mode="contained" @click="saveEdit(q)" />
@@ -168,6 +175,13 @@ onMounted(() => load(0));
         <!-- 보기 모드 -->
         <template v-else>
           <p class="whitespace-pre-wrap text-slate-700" :class="{ 'italic text-slate-400': q.masked }">{{ q.content }}</p>
+
+          <!-- 첨부 이미지 (비밀글 마스킹 시 서버가 images를 비워 보내 자연히 숨겨진다) -->
+          <div v-if="q.images?.length" class="mt-2 flex flex-wrap gap-2">
+            <a v-for="img in q.images" :key="img.id" :href="img.url" target="_blank" rel="noopener">
+              <img :src="img.url" alt="문의 이미지" class="h-16 w-16 rounded border object-cover" />
+            </a>
+          </div>
 
           <!-- 판매자 답변 -->
           <div v-if="q.answer" class="mt-3 rounded border-l-4 border-green-400 bg-green-50 p-3">

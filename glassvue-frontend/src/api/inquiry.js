@@ -6,8 +6,11 @@ export function fetchProductInquiries(productId, { page = 0, size = 5 } = {}) {
   return apiGet(`/api/products/${productId}/inquiries`, { page, size });
 }
 
+// 서버와 맞춘 첨부 이미지 최대 장수(백엔드 @Size(max=5)).
+export const INQUIRY_IMAGE_MAX = 5;
+
 export function createInquiry(productId, payload) {
-  return apiPost(`/api/products/${productId}/inquiries`, payload); // { title, content, secret }
+  return apiPost(`/api/products/${productId}/inquiries`, payload); // { title, content, secret, imageIds }
 }
 
 export function updateInquiry(id, payload) {

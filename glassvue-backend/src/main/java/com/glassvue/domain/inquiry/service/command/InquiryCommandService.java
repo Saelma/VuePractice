@@ -1,6 +1,7 @@
 package com.glassvue.domain.inquiry.service.command;
 
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
+import com.glassvue.domain.image.service.ImageService;
 import com.glassvue.domain.inquiry.dto.InquiryAnswerRequest;
 import com.glassvue.domain.inquiry.dto.InquiryCreateRequest;
 import com.glassvue.domain.inquiry.dto.InquiryUpdateRequest;
@@ -18,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 문의 조작(command) — 작성 · 수정 · 삭제 · (관리자)답변.
- * 상품 존재는 catalog 공개 서비스로 확인한다(도메인 경계).
+ * 상품 존재는 catalog 공개 서비스로 확인하고, 첨부 이미지는 image 공개 서비스로만 다룬다(도메인 경계).
  */
 @Slf4j
 @Service
@@ -28,6 +29,7 @@ public class InquiryCommandService {
 
     private final InquiryRepository inquiryRepository;
     private final ProductQueryService productQueryService;
+    private final ImageService imageService;
 
     public UUID create(UUID productId, InquiryCreateRequest req, AuthUser user) {
         productQueryService.ensureExists(productId);
@@ -38,6 +40,7 @@ public class InquiryCommandService {
                 .title(req.title())
                 .content(req.content())
                 .secret(req.secret())
+                .imageGroupId(imageService.createGroup(req.imageIds())) // 비면 null
                 .build();
         Inquiry saved = inquiryRepository.save(inquiry);
         log.info("Inquiry created: id={} product={} by={}", saved.getId(), productId, user.id());
@@ -53,7 +56,11 @@ public class InquiryCommandService {
         if (inquiry.isAnswered()) {
             throw new BusinessException(ErrorCode.INQUIRY_ALREADY_ANSWERED);
         }
-        inquiry.update(req.title(), req.content(), req.secret());
+        UUID oldGroupId = inquiry.getImageGroupId();
+        // 이미지는 새 그룹으로 통째 교체(Review.update와 동일) — 빈 목록이면 null이 되어 제거.
+        inquiry.update(req.title(), req.content(), req.secret(), imageService.createGroup(req.imageIds()));
+        // createGroup 뒤에 호출해야 유지할 이미지가 새 그룹으로 재할당된 뒤라 옛 그룹엔 뺀 이미지만 남는다.
+        imageService.deleteGroup(oldGroupId);
     }
 
     /** 삭제는 본인 또는 관리자. */
@@ -63,7 +70,9 @@ public class InquiryCommandService {
         if (!allowed) {
             throw new BusinessException(ErrorCode.INQUIRY_NOT_OWNER);
         }
+        UUID imageGroupId = inquiry.getImageGroupId();
         inquiryRepository.delete(inquiry);
+        imageService.deleteGroup(imageGroupId); // 문의가 사라지면 첨부 사진도 주인이 없다
     }
 
     /**
