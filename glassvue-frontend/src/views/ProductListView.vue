@@ -1,15 +1,15 @@
 <script setup>
 /**
- * 상품 목록 — 고객 화면이라 표(DataGrid)가 아니라 **카드 그리드**로 보여준다(DESIGN.md §7).
- * 이미지·이름·가격이 먼저 읽히는 게 목적이고, 정렬·밀도가 중요한 관리자 화면은 DataGrid를 유지한다.
- * 필터는 DX 입력 컨트롤을 그대로 쓴다(DESIGN.md §6 — 고객 화면도 입력 컨트롤 정도는 DX).
+ * 상품 목록 — 커머스 표준 구성(DESIGN.md §7):
+ *   좌: 필터 사이드바(카테고리·가격·상태) / 우: 정렬 툴바 + 카드 그리드
+ * 적용된 조건은 상단에 **칩**으로 보여주고 하나씩 뗄 수 있게 한다(필터가 걸린 줄 모르고 헤매지 않게).
+ * 정렬은 백엔드 화이트리스트(SORT_OPTIONS)와 맞춰야 400이 나지 않는다.
  */
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxNumberBox } from 'devextreme-vue/number-box';
-import { DxSelectBox } from 'devextreme-vue/select-box';
-import { fetchProducts, STATUS_OPTIONS, statusText, priceText } from '../api/product';
+import { fetchProducts, SORT_OPTIONS, STATUS_OPTIONS, statusText, priceText } from '../api/product';
 import { fetchCategories } from '../api/category';
 import { authState } from '../stores/auth';
 import StarRating from '../components/StarRating.vue';
@@ -18,23 +18,34 @@ const router = useRouter();
 const categories = ref([]);
 const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 
-const SIZE = 12; // 카드 그리드라 표(10)보다 한 페이지에 조금 더 담는다
+const SIZE = 12;
 const items = ref([]);
 const page = ref(0);
 const totalPages = ref(0);
 const totalElements = ref(0);
 const loading = ref(true);
 const error = ref('');
+const sort = ref(SORT_OPTIONS[0].value);
+const filterOpen = ref(false); // 모바일에서 필터 접기
 
+/** 화면 입력값(폼)과 실제 적용된 조건(applied)을 분리한다 — 입력 중에 목록이 흔들리지 않게. */
 const form = reactive({ name: '', categoryId: null, minPrice: null, maxPrice: null, status: null });
-let applied = {};
-const hasFilter = ref(false); // 빈 목록 문구를 상황에 맞게 고르기 위해(7/20 §8-7 교훈)
+const applied = reactive({ name: null, categoryId: null, minPrice: null, maxPrice: null, status: null });
 
 async function load(p = 0) {
   loading.value = true;
   error.value = '';
   try {
-    const res = await fetchProducts({ ...applied, page: p, size: SIZE });
+    const res = await fetchProducts({
+      name: applied.name ?? undefined,
+      categoryId: applied.categoryId ?? undefined,
+      minPrice: applied.minPrice ?? undefined,
+      maxPrice: applied.maxPrice ?? undefined,
+      status: applied.status ?? undefined,
+      sort: sort.value,
+      page: p,
+      size: SIZE,
+    });
     items.value = res.content;
     page.value = res.page;
     totalPages.value = res.totalPages;
@@ -55,150 +66,237 @@ onMounted(async () => {
   }
 });
 
-function search() {
-  applied = {
-    name: form.name?.trim() || undefined,
-    categoryId: form.categoryId || undefined,
-    minPrice: form.minPrice ?? undefined,
-    maxPrice: form.maxPrice ?? undefined,
-    status: form.status || undefined,
-  };
-  hasFilter.value = Object.values(applied).some((v) => v !== undefined);
+function apply() {
+  applied.name = form.name?.trim() || null;
+  applied.categoryId = form.categoryId;
+  applied.minPrice = form.minPrice ?? null;
+  applied.maxPrice = form.maxPrice ?? null;
+  applied.status = form.status;
+  filterOpen.value = false;
   load(0);
 }
-function reset() {
+/** 사이드바에서 카테고리를 고르면 바로 반영한다(커머스에선 즉시 적용이 자연스럽다). */
+function pickCategory(id) {
+  form.categoryId = id;
+  applied.categoryId = id;
+  load(0);
+}
+function pickStatus(v) {
+  form.status = v;
+  applied.status = v;
+  load(0);
+}
+function resetAll() {
   form.name = '';
   form.categoryId = null;
   form.minPrice = null;
   form.maxPrice = null;
   form.status = null;
-  applied = {};
-  hasFilter.value = false;
+  Object.assign(applied, { name: null, categoryId: null, minPrice: null, maxPrice: null, status: null });
   load(0);
 }
+/** 칩 하나만 떼기 */
+function clearOne(key) {
+  applied[key] = null;
+  form[key] = key === 'name' ? '' : null;
+  load(0);
+}
+
+const categoryName = (id) => categories.value.find((c) => c.id === id)?.name ?? '카테고리';
+
+/** 상단에 보여줄 활성 필터 칩 목록 */
+const chips = computed(() => {
+  const out = [];
+  if (applied.name) out.push({ key: 'name', label: `"${applied.name}"` });
+  if (applied.categoryId) out.push({ key: 'categoryId', label: categoryName(applied.categoryId) });
+  if (applied.status) out.push({ key: 'status', label: statusText(applied.status) });
+  if (applied.minPrice != null) out.push({ key: 'minPrice', label: `${priceText(applied.minPrice)} 이상` });
+  if (applied.maxPrice != null) out.push({ key: 'maxPrice', label: `${priceText(applied.maxPrice)} 이하` });
+  return out;
+});
 
 const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : null);
 </script>
 
 <template>
   <section class="page">
-    <!-- 머리: 제목 + 관리자 액션 -->
     <div class="mb-5 flex items-end justify-between gap-4">
-      <div>
-        <h1 class="page-title">상품</h1>
-        <p v-if="!loading" class="muted mt-1">{{ totalElements }}개</p>
-      </div>
+      <h1 class="page-title">상품</h1>
       <div v-if="isAdmin" class="flex gap-2">
         <button type="button" class="btn btn-secondary" @click="router.push('/admin/categories')">카테고리 관리</button>
         <button type="button" class="btn btn-primary" @click="router.push('/products/new')">상품 등록</button>
       </div>
     </div>
 
-    <!-- 필터 -->
-    <div class="card mb-6 flex flex-wrap items-end gap-3 p-4">
-      <label class="field">
-        <span class="field-label">상품명</span>
-        <DxTextBox v-model:value="form.name" :width="160" @enter-key="search" />
-      </label>
-      <label class="field">
-        <span class="field-label">카테고리</span>
-        <DxSelectBox v-model:value="form.categoryId" :items="categories" value-expr="id" display-expr="name"
-          :show-clear-button="true" placeholder="전체" :width="140" />
-      </label>
-      <label class="field">
-        <span class="field-label">상태</span>
-        <DxSelectBox v-model:value="form.status" :items="STATUS_OPTIONS" value-expr="value" display-expr="text"
-          :show-clear-button="true" placeholder="전체" :width="110" />
-      </label>
-      <label class="field">
-        <span class="field-label">최소가</span>
-        <DxNumberBox v-model:value="form.minPrice" :min="0" :show-clear-button="true" :width="110" format="#,##0" />
-      </label>
-      <label class="field">
-        <span class="field-label">최대가</span>
-        <DxNumberBox v-model:value="form.maxPrice" :min="0" :show-clear-button="true" :width="110" format="#,##0" />
-      </label>
-      <div class="flex gap-2">
-        <button type="button" class="btn btn-primary" @click="search">검색</button>
-        <button type="button" class="btn btn-secondary" @click="reset">초기화</button>
-      </div>
-    </div>
+    <div class="grid gap-6 lg:grid-cols-[220px_1fr]">
+      <!-- 좌: 필터 사이드바 (모바일에선 접힘) -->
+      <aside>
+        <button
+          type="button"
+          class="btn btn-secondary w-full lg:hidden"
+          :aria-expanded="filterOpen"
+          @click="filterOpen = !filterOpen"
+        >필터 {{ filterOpen ? '닫기' : '열기' }}</button>
 
-    <div v-if="error" class="alert-error">{{ error }}</div>
-
-    <!-- 로딩: 텍스트 대신 스켈레톤으로 레이아웃을 미리 잡는다 (DESIGN.md §5) -->
-    <div v-else-if="loading" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      <div v-for="n in 8" :key="n" class="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-        <div class="skeleton aspect-square rounded-none"></div>
-        <div class="space-y-2 p-4">
-          <div class="skeleton h-3 w-16"></div>
-          <div class="skeleton h-4 w-3/4"></div>
-          <div class="skeleton h-5 w-24"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 빈 상태: 필터 때문에 빈 것과 정말 없는 것을 구분한다 -->
-    <div v-else-if="!items.length" class="flex flex-col items-center gap-3 py-16 text-center">
-      <span class="text-4xl">{{ hasFilter ? '🔍' : '🗂️' }}</span>
-      <p class="text-sm text-ink-500">
-        {{ hasFilter ? '조건에 맞는 상품이 없어요.' : '아직 등록된 상품이 없어요.' }}
-      </p>
-      <button v-if="hasFilter" type="button" class="btn btn-secondary" @click="reset">필터 초기화</button>
-      <button v-else-if="isAdmin" type="button" class="btn btn-primary" @click="router.push('/products/new')">
-        상품 등록
-      </button>
-    </div>
-
-    <!-- 카드 그리드 -->
-    <div v-else class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      <button
-        v-for="p in items"
-        :key="p.id"
-        type="button"
-        class="group overflow-hidden rounded-card border border-line bg-surface text-left shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-        @click="router.push(`/products/${p.id}`)"
-      >
-        <div class="aspect-square overflow-hidden bg-canvas">
-          <img
-            v-if="thumbOf(p)"
-            :src="thumbOf(p)"
-            :alt="p.name"
-            class="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-          />
-          <div v-else class="flex h-full items-center justify-center text-3xl text-ink-400">🖼️</div>
-        </div>
-
-        <div class="p-4">
-          <p class="text-xs text-ink-500">{{ p.categoryName }}</p>
-          <h3 class="mt-0.5 line-clamp-1 text-sm font-medium text-ink-900">{{ p.name }}</h3>
-
-          <div class="mt-2 flex items-end justify-between gap-2">
-            <span class="text-lg font-semibold tabular-nums text-ink-900">{{ priceText(p.price) }}</span>
-            <StarRating :model-value="p.averageRating" :count="p.reviewCount" size="sm" />
+        <div :class="filterOpen ? 'mt-3 block' : 'hidden lg:block'" class="space-y-6 lg:sticky lg:top-20">
+          <!-- 카테고리: 즉시 적용 -->
+          <div>
+            <h2 class="field-label mb-2">카테고리</h2>
+            <ul class="space-y-1 text-sm">
+              <li>
+                <button type="button" class="w-full rounded-control px-2 py-1 text-left transition-colors hover:bg-surface"
+                  :class="applied.categoryId === null ? 'font-medium text-ink-900' : 'text-ink-500'"
+                  @click="pickCategory(null)">전체</button>
+              </li>
+              <li v-for="c in categories" :key="c.id">
+                <button type="button" class="w-full rounded-control px-2 py-1 text-left transition-colors hover:bg-surface"
+                  :class="applied.categoryId === c.id ? 'font-medium text-ink-900' : 'text-ink-500'"
+                  @click="pickCategory(c.id)">{{ c.name }}</button>
+              </li>
+            </ul>
           </div>
 
-          <!-- 정상 판매중이면 배지를 달지 않는다(노이즈 감소) -->
-          <span
-            v-if="p.status !== 'SELLING'"
-            class="badge mt-2"
-            :class="p.status === 'SOLD_OUT' ? 'badge-warning' : 'badge-neutral'"
-          >{{ statusText(p.status) }}</span>
-        </div>
-      </button>
-    </div>
+          <!-- 상태: 즉시 적용 -->
+          <div>
+            <h2 class="field-label mb-2">판매 상태</h2>
+            <ul class="space-y-1 text-sm">
+              <li>
+                <button type="button" class="w-full rounded-control px-2 py-1 text-left transition-colors hover:bg-surface"
+                  :class="applied.status === null ? 'font-medium text-ink-900' : 'text-ink-500'"
+                  @click="pickStatus(null)">전체</button>
+              </li>
+              <li v-for="s in STATUS_OPTIONS" :key="s.value">
+                <button type="button" class="w-full rounded-control px-2 py-1 text-left transition-colors hover:bg-surface"
+                  :class="applied.status === s.value ? 'font-medium text-ink-900' : 'text-ink-500'"
+                  @click="pickStatus(s.value)">{{ s.text }}</button>
+              </li>
+            </ul>
+          </div>
 
-    <!-- 페이지 이동 -->
-    <div v-if="!loading && totalPages > 1" class="mt-8 flex items-center justify-center gap-4">
-      <button type="button" class="btn btn-secondary"
-        :disabled="page === 0"
-        @click="load(page - 1)"
-      >이전</button>
-      <span class="text-sm tabular-nums text-ink-500">{{ page + 1 }} / {{ totalPages }}</span>
-      <button type="button" class="btn btn-secondary"
-        :disabled="page + 1 >= totalPages"
-        @click="load(page + 1)"
-      >다음</button>
+          <!-- 검색어·가격: 입력 후 적용 -->
+          <div class="space-y-3 border-t border-line pt-5">
+            <label class="field">
+              <span class="field-label">상품명</span>
+              <DxTextBox v-model:value="form.name" placeholder="검색어" @enter-key="apply" />
+            </label>
+            <label class="field">
+              <span class="field-label">최소 가격</span>
+              <DxNumberBox v-model:value="form.minPrice" :min="0" :show-clear-button="true" format="#,##0" />
+            </label>
+            <label class="field">
+              <span class="field-label">최대 가격</span>
+              <DxNumberBox v-model:value="form.maxPrice" :min="0" :show-clear-button="true" format="#,##0" />
+            </label>
+            <div class="flex gap-2 pt-1">
+              <button type="button" class="btn btn-primary flex-1" @click="apply">적용</button>
+              <button type="button" class="btn btn-secondary" @click="resetAll">초기화</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 우: 툴바 + 그리드 -->
+      <div>
+        <!-- 툴바: 결과 수 + 정렬 -->
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
+          <p class="text-sm text-ink-500">
+            총 <b class="tabular-nums text-ink-900">{{ totalElements }}</b>개
+          </p>
+          <label class="flex items-center gap-2">
+            <span class="field-label">정렬</span>
+            <select
+              v-model="sort"
+              class="rounded-control border border-line bg-surface px-2 py-1.5 text-sm text-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              @change="load(0)"
+            >
+              <option v-for="o in SORT_OPTIONS" :key="o.value" :value="o.value">{{ o.text }}</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- 활성 필터 칩 -->
+        <div v-if="chips.length" class="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            v-for="c in chips"
+            :key="c.key"
+            type="button"
+            class="badge badge-neutral gap-1 hover:bg-brand-100"
+            :aria-label="`${c.label} 필터 제거`"
+            @click="clearOne(c.key)"
+          >{{ c.label }} <span aria-hidden="true">×</span></button>
+          <button type="button" class="btn btn-ghost btn-sm" @click="resetAll">전체 해제</button>
+        </div>
+
+        <div v-if="error" class="alert-error">{{ error }}</div>
+
+        <!-- 로딩 스켈레톤 -->
+        <div v-else-if="loading" class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div v-for="n in 6" :key="n" class="overflow-hidden rounded-card border border-line bg-surface shadow-card">
+            <div class="skeleton aspect-square rounded-none"></div>
+            <div class="space-y-2 p-4">
+              <div class="skeleton h-3 w-16"></div>
+              <div class="skeleton h-4 w-3/4"></div>
+              <div class="skeleton h-5 w-24"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 빈 상태: 필터 때문에 빈 것과 정말 없는 것을 구분한다 -->
+        <div v-else-if="!items.length" class="flex flex-col items-center gap-3 py-16 text-center">
+          <span class="text-4xl">{{ chips.length ? '🔍' : '🗂️' }}</span>
+          <p class="text-sm text-ink-500">
+            {{ chips.length ? '조건에 맞는 상품이 없어요.' : '아직 등록된 상품이 없어요.' }}
+          </p>
+          <button v-if="chips.length" type="button" class="btn btn-secondary" @click="resetAll">필터 초기화</button>
+          <button v-else-if="isAdmin" type="button" class="btn btn-primary" @click="router.push('/products/new')">
+            상품 등록
+          </button>
+        </div>
+
+        <!-- 카드 그리드 -->
+        <div v-else class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <button
+            v-for="p in items"
+            :key="p.id"
+            type="button"
+            class="group overflow-hidden rounded-card border border-line bg-surface text-left shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            @click="router.push(`/products/${p.id}`)"
+          >
+            <div class="aspect-square overflow-hidden bg-canvas">
+              <img
+                v-if="thumbOf(p)"
+                :src="thumbOf(p)"
+                :alt="p.name"
+                class="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+              />
+              <div v-else class="flex h-full items-center justify-center text-3xl text-ink-400">🖼️</div>
+            </div>
+
+            <div class="p-4">
+              <p class="text-xs text-ink-500">{{ p.categoryName }}</p>
+              <h3 class="mt-0.5 line-clamp-1 text-sm font-medium text-ink-900">{{ p.name }}</h3>
+              <div class="mt-2 flex items-end justify-between gap-2">
+                <span class="text-lg font-semibold tabular-nums text-ink-900">{{ priceText(p.price) }}</span>
+                <StarRating :model-value="p.averageRating" :count="p.reviewCount" size="sm" />
+              </div>
+              <span
+                v-if="p.status !== 'SELLING'"
+                class="badge mt-2"
+                :class="p.status === 'SOLD_OUT' ? 'badge-warning' : 'badge-neutral'"
+              >{{ statusText(p.status) }}</span>
+            </div>
+          </button>
+        </div>
+
+        <!-- 페이지 이동 -->
+        <div v-if="!loading && totalPages > 1" class="mt-8 flex items-center justify-center gap-4">
+          <button type="button" class="btn btn-secondary" :disabled="page === 0" @click="load(page - 1)">이전</button>
+          <span class="text-sm tabular-nums text-ink-500">{{ page + 1 }} / {{ totalPages }}</span>
+          <button type="button" class="btn btn-secondary" :disabled="page + 1 >= totalPages" @click="load(page + 1)">
+            다음
+          </button>
+        </div>
+      </div>
     </div>
   </section>
 </template>

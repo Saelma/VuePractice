@@ -1,12 +1,14 @@
 package com.glassvue.domain.catalog.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.glassvue.domain.catalog.dto.ProductSearchCondition;
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.global.config.JpaAuditingConfig;
+import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.config.QuerydslConfig;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,6 +60,30 @@ class ProductRepositoryIntegrationTest {
     }
     private static PageRequest firstPage() {
         return PageRequest.of(0, 20, Sort.unsorted());
+    }
+
+    @Test
+    @DisplayName("정렬: 가격 오름차순 — 화이트리스트 필드는 실제로 정렬된다")
+    void sortByPriceAsc() {
+        var r = productRepository.search(cond(MARK, null, null, null, null),
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "price")));
+        assertThat(r.getContent()).extracting(Product::getPrice).containsExactly(15_000L, 20_000L, 30_000L);
+    }
+
+    @Test
+    @DisplayName("정렬: avgRating — 커머스 기본인 평점순을 허용한다(V4 비정규화 컬럼이라 조인 불필요)")
+    void sortByAvgRating() {
+        var r = productRepository.search(cond(MARK, null, null, null, null),
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "avgRating")));
+        assertThat(r.getContent()).hasSize(3); // 값이 모두 0이라 순서가 아니라 "거부되지 않음"을 본다
+    }
+
+    @Test
+    @DisplayName("정렬: 화이트리스트 밖 필드는 거부한다(임의 컬럼 정렬 차단)")
+    void sortByNotAllowedField() {
+        assertThatThrownBy(() -> productRepository.search(cond(MARK, null, null, null, null),
+                PageRequest.of(0, 20, Sort.by("description"))))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
