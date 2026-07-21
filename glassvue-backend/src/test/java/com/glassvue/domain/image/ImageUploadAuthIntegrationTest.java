@@ -95,7 +95,11 @@ class ImageUploadAuthIntegrationTest {
                 .andExpect(jsonPath("$.data.id").isNotEmpty())
                 .andExpect(jsonPath("$.data.url").isNotEmpty())
                 .andReturn().getResponse().getContentAsString();
-        uploadedUrls.add(JsonPath.read(body, "$.data.url")); // @AfterEach가 파일 삭제
+        // 원본 + 파생본(medium·thumb) 파일을 모두 정리 대상으로 잡는다. 트랜잭션 롤백은 파일을 안 지우고,
+        // 파생본이 생기면(실제 이미지 업로드 시) 원본만 지워선 누수가 난다(WORKING-AGREEMENTS §3).
+        uploadedUrls.add(JsonPath.read(body, "$.data.url"));
+        uploadedUrls.add(JsonPath.read(body, "$.data.mediumUrl"));
+        uploadedUrls.add(JsonPath.read(body, "$.data.thumbUrl"));
     }
 
     @Test

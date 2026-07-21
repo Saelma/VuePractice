@@ -24,7 +24,14 @@ public class Image extends BaseTimeEntity {
     private ImageGroup imageGroup;
 
     @Column(nullable = false, length = 500)
-    private String url;
+    private String url; // 원본
+
+    // 표시용 파생본(WebP). 생성 실패 시 null → 응답이 원본(url)으로 폴백.
+    @Column(name = "medium_url", length = 500)
+    private String mediumUrl; // 상세용 800px
+
+    @Column(name = "thumb_url", length = 500)
+    private String thumbUrl; // 목록용 200px
 
     @Column(length = 255)
     private String originalName;
@@ -39,8 +46,11 @@ public class Image extends BaseTimeEntity {
     private int sortOrder;
 
     @Builder
-    private Image(String url, String originalName, String contentType, long size) {
+    private Image(String url, String mediumUrl, String thumbUrl,
+                  String originalName, String contentType, long size) {
         this.url = url;
+        this.mediumUrl = mediumUrl;
+        this.thumbUrl = thumbUrl;
         this.originalName = originalName;
         this.contentType = contentType;
         this.size = size;

@@ -78,7 +78,7 @@ function removeAt(idx) {
 
     <div v-if="modelValue.length" class="flex flex-wrap gap-2">
       <div v-for="(img, idx) in modelValue" :key="img.id" class="relative">
-        <img :src="img.url" class="rounded border object-cover" :class="thumbClass" />
+        <img :src="img.thumbUrl" class="rounded border object-cover" :class="thumbClass" />
         <button
           type="button"
           class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-xs text-white"

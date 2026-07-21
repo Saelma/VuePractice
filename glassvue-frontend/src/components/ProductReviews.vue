@@ -162,7 +162,7 @@ onMounted(() => load(0));
           <p class="whitespace-pre-wrap text-slate-700">{{ r.content }}</p>
           <div v-if="r.images?.length" class="mt-2 flex flex-wrap gap-2">
             <a v-for="img in r.images" :key="img.id" :href="img.url" target="_blank" rel="noopener">
-              <img :src="img.url" :alt="`${r.author}님의 리뷰 사진`" class="h-20 w-20 rounded border object-cover" />
+              <img :src="img.thumbUrl" :alt="`${r.author}님의 리뷰 사진`" class="h-20 w-20 rounded border object-cover" />
             </a>
           </div>
           <div v-if="canManage(r)" class="mt-2 flex gap-2">

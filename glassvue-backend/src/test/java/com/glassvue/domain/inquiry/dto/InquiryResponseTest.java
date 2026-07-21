@@ -16,7 +16,8 @@ class InquiryResponseTest {
 
     private static final String BODY = "주소 변경돼요?";
     private static final List<ImageResponse> IMAGES =
-            List.of(new ImageResponse(UUID.randomUUID(), "/uploads/inq.png"));
+            List.of(new ImageResponse(UUID.randomUUID(),
+                    "/uploads/inq.png", "/uploads/inq_m.webp", "/uploads/inq_t.webp"));
     private final UUID ownerId = UUID.randomUUID();
 
     private Inquiry secretInquiry() {

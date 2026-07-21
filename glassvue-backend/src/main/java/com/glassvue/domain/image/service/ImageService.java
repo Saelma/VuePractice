@@ -11,8 +11,10 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -40,6 +42,8 @@ public class ImageService {
         FileStorageService.Stored stored = fileStorageService.store(file);
         Image image = imageRepository.save(Image.builder()
                 .url(stored.url())
+                .mediumUrl(stored.mediumUrl())
+                .thumbUrl(stored.thumbUrl())
                 .originalName(stored.originalName())
                 .contentType(stored.contentType())
                 .size(stored.size())
@@ -114,7 +118,11 @@ public class ImageService {
         if (images.isEmpty()) {
             return;
         }
-        List<String> urls = images.stream().map(Image::getUrl).toList();
+        // 원본 + 파생본(medium·thumb) 파일을 모두 지워야 한다(파생본이 남으면 고아 파일).
+        List<String> urls = images.stream()
+                .flatMap(i -> Stream.of(i.getUrl(), i.getMediumUrl(), i.getThumbUrl()))
+                .filter(Objects::nonNull)
+                .toList();
         imageRepository.deleteAll(images);
         eventPublisher.publishEvent(new ImageFilesReleasedEvent(urls));
     }

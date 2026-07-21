@@ -44,7 +44,7 @@ class CacheSerializationTest {
                 "카테고리",
                 List.of(new ImageResponse(
                         UUID.fromString("019f7d1c-e0b4-7000-8000-000000000003"),
-                        "/uploads/a.png")),
+                        "/uploads/a.png", "/uploads/a_m.webp", "/uploads/a_t.webp")),
                 4.5,
                 2L,
                 Instant.parse("2026-07-20T12:34:56Z"),

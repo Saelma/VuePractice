@@ -179,7 +179,7 @@ onMounted(() => load(0));
           <!-- 첨부 이미지 (비밀글 마스킹 시 서버가 images를 비워 보내 자연히 숨겨진다) -->
           <div v-if="q.images?.length" class="mt-2 flex flex-wrap gap-2">
             <a v-for="img in q.images" :key="img.id" :href="img.url" target="_blank" rel="noopener">
-              <img :src="img.url" alt="문의 이미지" class="h-16 w-16 rounded border object-cover" />
+              <img :src="img.thumbUrl" alt="문의 이미지" class="h-16 w-16 rounded border object-cover" />
             </a>
           </div>
 

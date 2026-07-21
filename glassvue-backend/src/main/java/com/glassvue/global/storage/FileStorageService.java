@@ -2,6 +2,8 @@ package com.glassvue.global.storage;
 
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.sksamuel.scrimage.ImmutableImage;
+import com.sksamuel.scrimage.webp.WebpWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -9,6 +11,7 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,11 +20,19 @@ import org.springframework.web.multipart.MultipartFile;
  * 이미지 파일을 디스크에 저장하고 서빙 URL을 돌려준다. (nginx가 url-prefix를 dir로 서빙)
  * 검증: ① 원본 확장자 화이트리스트 + ② 매직바이트(파일 시그니처)로 실제 내용 확인.
  * (content-type·확장자는 위조 가능하므로 시그니처가 최종 판정)
+ *
+ * <p><b>파생 이미지</b>: 원본은 그대로 보관(다운로드·확대용)하고, 표시용으로 medium(800px)·thumb(200px)
+ * WebP를 함께 만든다(목록은 thumb, 상세는 medium). 원본 풀사이즈를 목록에서 그대로 내려받던 문제를 없앤다.
+ * 파생본 생성이 실패해도(예: 읽을 수 없는 포맷) 원본은 살리고 파생 URL만 null로 둔다 — 응답/프론트가 원본으로 폴백.
  */
+@Slf4j
 @Service
 public class FileStorageService {
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
+    private static final int MEDIUM_PX = 800; // 상세 화면용
+    private static final int THUMB_PX = 200;  // 목록·그리드용
+    private static final WebpWriter WEBP = WebpWriter.DEFAULT; // 손실 q=80
 
     private final Path dir;
     private final String urlPrefix;
@@ -38,7 +49,8 @@ public class FileStorageService {
         }
     }
 
-    public record Stored(String url, String originalName, String contentType, long size) {
+    public record Stored(String url, String mediumUrl, String thumbUrl,
+                         String originalName, String contentType, long size) {
     }
 
     public Stored store(MultipartFile file) {
@@ -64,15 +76,39 @@ public class FileStorageService {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "유효한 이미지 파일이 아닙니다. (jpg/png/gif/webp)");
         }
 
-        String filename = UUID.randomUUID() + ext;
+        String base = UUID.randomUUID().toString();
         try {
-            Path target = dir.resolve(filename);
-            Files.write(target, bytes);
-            Files.setPosixFilePermissions(target, PosixFilePermissions.fromString("rw-r--r--")); // nginx 읽기
-            return new Stored(urlPrefix + "/" + filename, originalName, file.getContentType(), (long) bytes.length);
+            writeFile(base + ext, bytes); // 원본
         } catch (IOException e) {
             throw new IllegalStateException("파일 저장 실패", e);
         }
+
+        // 파생본(medium·thumb WebP) — 실패해도 원본은 유지하고 파생 URL만 비운다.
+        String mediumUrl = makeDerivative(base, "_m", bytes, MEDIUM_PX);
+        String thumbUrl = makeDerivative(base, "_t", bytes, THUMB_PX);
+
+        return new Stored(urlPrefix + "/" + base + ext, mediumUrl, thumbUrl,
+                originalName, file.getContentType(), (long) bytes.length);
+    }
+
+    /** 원본 바이트를 maxPx 박스에 맞춰 축소(확대 안 함)한 WebP를 저장하고 URL을 돌려준다. 실패 시 null. */
+    private String makeDerivative(String base, String suffix, byte[] source, int maxPx) {
+        String filename = base + suffix + ".webp";
+        try {
+            byte[] webp = ImmutableImage.loader().fromBytes(source).bound(maxPx, maxPx).bytes(WEBP);
+            writeFile(filename, webp);
+            return urlPrefix + "/" + filename;
+        } catch (Exception e) {
+            // 파생본은 최적화용이라 없으면 원본으로 폴백하면 된다. 업로드 자체를 막지 않는다.
+            log.warn("파생 이미지 생성 실패(base={}, {}px) — 원본으로 폴백: {}", base, maxPx, e.toString());
+            return null;
+        }
+    }
+
+    private void writeFile(String filename, byte[] bytes) throws IOException {
+        Path target = dir.resolve(filename);
+        Files.write(target, bytes);
+        Files.setPosixFilePermissions(target, PosixFilePermissions.fromString("rw-r--r--")); // nginx 읽기
     }
 
     /**

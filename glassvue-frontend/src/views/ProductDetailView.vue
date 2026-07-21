@@ -69,7 +69,7 @@ async function onDelete() {
         <StarRating :model-value="product.averageRating" :count="product.reviewCount" />
       </div>
       <div v-if="product.images && product.images.length" class="mb-4 flex flex-wrap gap-2">
-        <img v-for="img in product.images" :key="img.id" :src="img.url" class="h-32 w-32 rounded border object-cover" />
+        <img v-for="img in product.images" :key="img.id" :src="img.mediumUrl" class="h-32 w-32 rounded border object-cover" />
       </div>
 
       <p class="min-h-[6rem] whitespace-pre-wrap text-slate-700">{{ product.description }}</p>

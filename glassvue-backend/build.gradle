@@ -41,6 +41,10 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	// UUIDv7 생성 (시간순 UUID)
 	implementation 'com.github.f4b6a3:uuid-creator:6.0.0'
+	// 이미지 리사이즈 + WebP 인코딩(파생본 썸네일/중간). scrimage-webp는 cwebp/dwebp 바이너리를 번들해
+	// 런타임에 추출·실행한다(별도 시스템 설치 불필요). 원본은 그대로 보관하고 파생본만 WebP로 만든다.
+	implementation 'com.sksamuel.scrimage:scrimage-core:4.3.0'
+	implementation 'com.sksamuel.scrimage:scrimage-webp:4.3.0'
 	// QueryDSL (동적 쿼리) — Jakarta 분류자
 	implementation 'com.querydsl:querydsl-jpa:5.1.0:jakarta'
 	annotationProcessor 'com.querydsl:querydsl-apt:5.1.0:jakarta'

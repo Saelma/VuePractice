@@ -139,7 +139,7 @@ const statusCell = (r) => statusText(r.status);
       <template #thumbCell="{ data }">
         <img
           v-if="data.data.images && data.data.images.length"
-          :src="data.data.images[0].url"
+          :src="data.data.images[0].thumbUrl"
           class="mx-auto h-10 w-10 rounded object-cover"
         />
         <span v-else class="text-slate-300">–</span>
