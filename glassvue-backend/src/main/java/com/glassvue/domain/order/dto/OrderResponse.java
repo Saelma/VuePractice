@@ -26,7 +26,8 @@ public record OrderResponse(
         List<OrderItemResponse> items,
         Instant createdAt,
         Instant paidAt,
-        Instant shippedAt
+        Instant shippedAt,
+        Instant cancelledAt
 ) {
     public static OrderResponse from(Order o) {
         return new OrderResponse(
@@ -38,6 +39,7 @@ public record OrderResponse(
                 o.getItems().stream().map(OrderItemResponse::from).toList(),
                 o.getCreatedAt(),
                 o.getPaidAt(),
-                o.getShippedAt());
+                o.getShippedAt(),
+                o.getCancelledAt());
     }
 }

@@ -113,6 +113,8 @@ class OrderServiceTest {
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
         orderService.cancel(orderId, memberId);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        // 언제 취소됐는지도 남긴다 — updated_at은 다른 변경에도 갱신돼 취소 시각이라 단정할 수 없다.
+        assertThat(order.getCancelledAt()).isNotNull();
         verify(productCommandService, times(1)).increaseStock(p1, 3);
         verify(eventPublisher).publishEvent(any(OrderCancelledEvent.class));
     }

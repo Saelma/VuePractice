@@ -107,8 +107,11 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
 
       <!-- 주문 진행 상태: 지금 어디까지 왔는지 -->
       <div class="card mb-6 p-5">
-        <p v-if="isCancelled" class="text-sm text-ink-500">
-          <span class="badge badge-danger mr-2">취소됨</span>이 주문은 취소되어 진행이 멈췄어요.
+        <p v-if="isCancelled" class="flex flex-wrap items-center gap-2 text-sm text-ink-500">
+          <span class="badge badge-danger">취소됨</span>
+          <span>이 주문은 취소되어 진행이 멈췄어요.</span>
+          <!-- 취소 시각은 V10부터 기록된다. 그 이전 주문은 값이 없어 시각을 감춘다(지어내지 않는다). -->
+          <span v-if="order.cancelledAt" class="tabular-nums">{{ fmt(order.cancelledAt) }}</span>
         </p>
         <ol v-else class="flex items-start">
           <li v-for="(st, i) in STEPS" :key="st.key" class="flex flex-1 flex-col items-center text-center">

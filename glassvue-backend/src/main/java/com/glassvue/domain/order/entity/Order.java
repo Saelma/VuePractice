@@ -52,6 +52,10 @@ public class Order extends BaseTimeEntity {
 
     private Instant shippedAt;
 
+    // 취소 시각. 결제·발송과 마찬가지로 "언제 그렇게 됐는지"가 CS·정산에서 필요하다.
+    // updated_at으로는 대체할 수 없다 — 다른 변경에도 갱신되므로 취소 시각이라 단정할 수 없다.
+    private Instant cancelledAt;
+
     // @BatchSize: 목록 조회에서 주문마다 items를 따로 읽는 N+1을 막는다(IN 쿼리 한 번으로 묶음).
     // 컬렉션 fetch join은 페이징과 같이 쓰면 전체를 메모리에 올리므로(HHH000104) 쓰지 않는다.
     @BatchSize(size = 100)
@@ -104,6 +108,7 @@ public class Order extends BaseTimeEntity {
 
     public void cancel() {
         this.status = OrderStatus.CANCELLED;
+        this.cancelledAt = Instant.now();
     }
 
     public boolean isOwnedBy(UUID memberId) {
