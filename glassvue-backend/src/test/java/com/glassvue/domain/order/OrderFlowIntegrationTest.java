@@ -96,7 +96,12 @@ class OrderFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.items[0].available").value(true));
 
         // 3) 결제(checkout) → 주문 생성
-        String coBody = mockMvc.perform(post("/api/orders").header("Authorization", buyer))
+        //    배송지는 본문으로 받는다(V11). 품목·가격은 서버가 장바구니에서 읽으므로 본문에 없다.
+        String coBody = mockMvc.perform(post("/api/orders").header("Authorization", buyer)
+                        .contentType(JSON)
+                        .content("{\"recipient\":\"ZZ수령인\",\"phone\":\"010-0000-0000\","
+                                + "\"zipcode\":\"06134\",\"address1\":\"서울시 강남구 테헤란로 1\","
+                                + "\"address2\":\"3층\"}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         String orderId = JsonPath.read(coBody, "$.data");
@@ -112,6 +117,13 @@ class OrderFlowIntegrationTest {
                 // buyerNickname은 관리자가 목록→상세로 들어와도 구매자를 잃지 않게 하는 스냅샷(V5).
                 // 상세 응답 계약으로 고정한다(빠지면 관리자 동선에 구멍이 생긴다).
                 .andExpect(jsonPath("$.data.buyerNickname").value("구매자"))
+                // 배송지도 주문 시점 스냅샷(V11) — 회원이 나중에 기본 배송지를 바꿔도 과거 주문은
+                // "그때 보낸 곳"이어야 CS·배송 이력이 맞는다. buyerNickname과 같은 이유로 계약 고정.
+                .andExpect(jsonPath("$.data.shipRecipient").value("ZZ수령인"))
+                .andExpect(jsonPath("$.data.shipPhone").value("010-0000-0000"))
+                .andExpect(jsonPath("$.data.shipZipcode").value("06134"))
+                .andExpect(jsonPath("$.data.shipAddress1").value("서울시 강남구 테헤란로 1"))
+                .andExpect(jsonPath("$.data.shipAddress2").value("3층"))
                 .andExpect(jsonPath("$.data.items[0].productName").value("ZZP-테스트상품"));
 
         // 5) 구매자는 발송 불가(관리자 전용) → 403
