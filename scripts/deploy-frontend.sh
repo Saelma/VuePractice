@@ -9,6 +9,15 @@ WEBROOT=/var/www/glassvue-frontend          # 인프라 이름 정리 시 여기
 # root면 sudo 불필요, 아니면 sudo 사용
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
+# --- infra/ 사본 드리프트 경고 ---
+# 서버 설정을 서버에서 직접 고치고 infra/ 반영을 잊으면, 저장소가 "맞는 것처럼 보이는 틀린 문서"가 된다.
+# 배포는 어차피 매번 거치는 관문이라 여기서 알린다. **막지는 않는다** — 드리프트가 배포를 막으면
+# 급할 때 스크립트를 우회하게 되어 더 나빠진다.
+DRIFT_CHECK="$(dirname "${BASH_SOURCE[0]}")/check-infra-drift.sh"
+if [ -x "$DRIFT_CHECK" ] && ! "$DRIFT_CHECK" >/dev/null 2>&1; then
+  echo "⚠ infra/ 사본이 서버 설정과 다르다 — './scripts/check-infra-drift.sh'로 확인할 것 (배포는 계속한다)"
+fi
+
 echo "▶ 빌드…"
 if [ "$(id -un)" = "root" ]; then
   runuser -l ecstel -c "pnpm -C '$FRONT_DIR' build"   # 빌드는 프로젝트 소유자(ecstel)로

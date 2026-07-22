@@ -46,7 +46,11 @@ sudo systemctl daemon-reload && sudo systemctl restart glassvue-backend
 ./scripts/check-infra-drift.sh
 ```
 
-배포 전이나 설정을 만진 뒤에 돌린다.
+**배포 스크립트가 시작할 때 자동으로 한 번 돌린다** — 배포는 어차피 매번 거치는 관문이라 여기서 알린다.
+다르면 경고만 찍고 **배포는 그대로 진행한다.** 막지 않는 게 의도다 — 드리프트가 배포를 막으면
+급할 때 스크립트를 우회하게 되어 더 나빠진다.
+
+설정을 만진 직후에는 배포를 기다리지 말고 직접 돌린다.
 
 ## TLS 인증서 재발급
 
