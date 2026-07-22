@@ -1,0 +1,47 @@
+[Unit]
+Description=Glassvue Backend (Spring Boot)
+Documentation=https://spring.io/projects/spring-boot
+# Oracle은 같은 호스트에서 동작하므로 DB가 뜬 뒤 시작해야 한다
+After=network-online.target redis.service oracledb_ESPDB-19c.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=ecstel
+Group=ecstel
+WorkingDirectory=/opt/glassvue-backend
+
+Environment=JAVA_HOME=/opt/java/jdk-25
+
+# EnvironmentFile은 쓸 수 없다: SELinux가 init_t(PID 1)의 user_home_t 읽기를 차단한다.
+# 대신 ecstel 권한으로 도는 앱 프로세스가 .env를 직접 읽는다 (비밀값 원본은 한 곳뿐).
+ExecStart=/bin/bash -c 'set -a; . /home/ecstel/work/.env; set +a; exec "$JAVA_HOME/bin/java" -XX:MaxRAMPercentage=50 -jar /opt/glassvue-backend/glassvue-backend.jar'
+
+# Spring Boot 4.1은 sd_notify를 지원하지 않아 Type=notify를 쓸 수 없다.
+# 대신 헬스체크가 통과할 때까지 기동을 붙잡아, active = 요청 처리 준비 완료가 되도록 한다.
+ExecStartPost=/bin/bash -c 'until curl -sf -m 2 http://127.0.0.1:8080/actuator/health >/dev/null; do sleep 1; done'
+
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+TimeoutStopSec=30
+SuccessExitStatus=143
+
+# 권한 최소화
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+# 업로드 저장 경로만 쓰기 허용 (나머지 FS는 read-only 유지)
+ReadWritePaths=/var/www/glassvue-uploads
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+LimitNOFILE=65535
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
