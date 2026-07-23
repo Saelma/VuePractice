@@ -7,6 +7,8 @@ public record CartItemResponse(
         UUID productId,
         String name,
         long price,
+        // 정가(할인 전). 주문 생성 시 이 값을 스냅샷하므로 장바구니 응답에도 실어야 한다.
+        Long listPrice,
         ProductStatus status,
         long quantity,
         long lineTotal,

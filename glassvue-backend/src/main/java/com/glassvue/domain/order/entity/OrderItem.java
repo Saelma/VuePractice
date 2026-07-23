@@ -45,23 +45,35 @@ public class OrderItem extends BaseTimeEntity {
     @Column(nullable = false)
     private long price;
 
+    /**
+     * 주문 시점의 정가 스냅샷. null 이면 할인 없이 샀거나 정가 도입(V16) 이전 주문이다.
+     *
+     * <p>상품의 현재 정가를 조회해 쓰면 안 된다 — 가격은 나중에 바뀌므로 "그때 얼마에서 얼마로
+     * 할인받았는지"는 주문 시점 기록이어야 한다(상품명·가격·이미지와 같은 이유).
+     */
+    @Column(name = "list_price")
+    private Long listPrice;
+
     @Column(nullable = false)
     private long quantity;
 
     @Column(nullable = false)
     private long lineTotal;
 
-    private OrderItem(UUID productId, String productName, String productImageUrl, long price, long quantity) {
+    private OrderItem(UUID productId, String productName, String productImageUrl,
+                      long price, Long listPrice, long quantity) {
         this.productId = productId;
         this.productName = productName;
         this.productImageUrl = productImageUrl;
         this.price = price;
+        this.listPrice = listPrice;
         this.quantity = quantity;
         this.lineTotal = price * quantity;
     }
 
-    public static OrderItem of(UUID productId, String productName, String productImageUrl, long price, long quantity) {
-        return new OrderItem(productId, productName, productImageUrl, price, quantity);
+    public static OrderItem of(UUID productId, String productName, String productImageUrl,
+                               long price, Long listPrice, long quantity) {
+        return new OrderItem(productId, productName, productImageUrl, price, listPrice, quantity);
     }
 
     void assignOrder(Order order) {

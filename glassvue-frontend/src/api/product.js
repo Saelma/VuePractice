@@ -45,3 +45,20 @@ export function statusText(status) {
 export function priceText(price) {
   return price != null ? Number(price).toLocaleString('ko-KR') + '원' : '';
 }
+
+/**
+ * 할인 중인가 — 정가가 있고 판매가보다 클 때만.
+ *
+ * 서버는 `listPrice`(정가)만 내려주고 할인율은 화면이 계산한다. 택배사 조회 URL과 달리
+ * 이건 **화면이 이미 가진 두 숫자의 산술**이라 서버가 완성해 줄 이유가 없다.
+ * 대신 **여기 한 곳에만** 둬서 화면마다 계산이 갈리지 않게 한다(주문 상태 색을 한 곳에 모은 것과 같은 이유).
+ */
+export function hasDiscount(item) {
+  return !!item && item.listPrice != null && item.listPrice > item.price;
+}
+
+/** 할인율(%). 표시용이라 반올림한다. 할인이 아니면 0. */
+export function discountRate(item) {
+  if (!hasDiscount(item)) return 0;
+  return Math.round(((item.listPrice - item.price) / item.listPrice) * 100);
+}

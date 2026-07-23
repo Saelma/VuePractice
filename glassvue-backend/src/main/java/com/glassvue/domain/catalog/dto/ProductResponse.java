@@ -12,6 +12,8 @@ public record ProductResponse(
         String name,
         String description,
         long price,
+        // 정가(할인 전). null이면 할인 없음 — 할인율은 화면이 두 값에서 계산한다.
+        Long listPrice,
         long stock,
         ProductStatus status,
         UUID categoryId,
@@ -29,7 +31,7 @@ public record ProductResponse(
 
     public static ProductResponse from(Product p, List<ImageResponse> images) {
         return new ProductResponse(
-                p.getId(), p.getName(), p.getDescription(), p.getPrice(), p.getStock(),
+                p.getId(), p.getName(), p.getDescription(), p.getPrice(), p.getListPrice(), p.getStock(),
                 p.getStatus(), p.getCategory().getId(), p.getCategory().getName(),
                 images, p.getAvgRating(), p.getReviewCount(), p.getCreatedAt(), p.getUpdatedAt());
     }

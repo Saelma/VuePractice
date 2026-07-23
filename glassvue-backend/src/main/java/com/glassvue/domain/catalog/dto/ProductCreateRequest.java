@@ -19,9 +19,13 @@ public record ProductCreateRequest(
         @NotBlank
         String description,
 
-        @Schema(description = "가격(원)", example = "39000")
+        @Schema(description = "가격(원) — 실제 판매가", example = "31200")
         @NotNull @PositiveOrZero
         Long price,
+
+        @Schema(description = "정가(할인 전). 비우면 할인 없음. 판매가보다 커야 의미가 있다", example = "39000")
+        @PositiveOrZero
+        Long listPrice,
 
         @Schema(description = "재고 수량", example = "100")
         @NotNull @PositiveOrZero

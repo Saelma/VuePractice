@@ -38,6 +38,7 @@ class CacheSerializationTest {
                 "지바",
                 "설명",
                 12000L,
+                39000L,   // listPrice — 정가가 있는 상태도 직렬화 왕복에 포함시킨다
                 7L,
                 ProductStatus.SELLING,
                 UUID.fromString("019f7d1c-e0b4-7000-8000-000000000002"),

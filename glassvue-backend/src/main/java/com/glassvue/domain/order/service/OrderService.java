@@ -69,7 +69,9 @@ public class OrderService {
         List<OrderItem> orderItems = new ArrayList<>();
         for (CartItemResponse i : cart.items()) {
             productCommandService.decreaseStock(i.productId(), i.quantity()); // 부족하면 OUT_OF_STOCK
-            orderItems.add(OrderItem.of(i.productId(), i.name(), i.thumbUrl(), i.price(), i.quantity()));
+            // 정가도 스냅샷한다 — 나중에 추가하면 과거 주문은 백필할 수 없다(배송지·운송장과 같은 이유).
+            orderItems.add(OrderItem.of(i.productId(), i.name(), i.thumbUrl(),
+                    i.price(), i.listPrice(), i.quantity()));
         }
 
         // 배송비는 **서버가 계산해 스냅샷**한다 — 요청 본문으로 받으면 클라이언트가 0원으로 위조할 수 있다

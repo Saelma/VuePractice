@@ -14,7 +14,7 @@ const router = useRouter();
 const isEdit = computed(() => !!props.id);
 
 const categories = ref([]);
-const form = reactive({ name: '', description: '', price: null, stock: null, status: 'SELLING', categoryId: null, images: [] });
+const form = reactive({ name: '', description: '', price: null, listPrice: null, stock: null, status: 'SELLING', categoryId: null, images: [] });
 const error = ref('');
 const saving = ref(false);
 
@@ -28,7 +28,7 @@ onMounted(async () => {
     try {
       const p = await getProduct(props.id);
       Object.assign(form, {
-        name: p.name, description: p.description, price: p.price,
+        name: p.name, description: p.description, price: p.price, listPrice: p.listPrice,
         stock: p.stock, status: p.status, categoryId: p.categoryId,
       });
       form.images = p.images || [];
@@ -43,10 +43,15 @@ async function onSave() {
   if (!form.name.trim() || !form.description.trim()) { error.value = '상품명·설명은 필수입니다.'; return; }
   if (form.price == null || form.stock == null) { error.value = '가격·재고를 입력하세요.'; return; }
   if (!form.categoryId) { error.value = '카테고리를 선택하세요.'; return; }
+  // 정가가 판매가보다 작거나 같으면 할인이 아니다 — 화면에 취소선이 이상하게 뜨는 걸 미리 막는다.
+  if (form.listPrice != null && form.listPrice <= form.price) {
+    error.value = '정가는 판매가보다 커야 합니다. 할인이 없으면 정가를 비워 두세요.';
+    return;
+  }
   saving.value = true;
   try {
     const payload = {
-      name: form.name, description: form.description, price: form.price,
+      name: form.name, description: form.description, price: form.price, listPrice: form.listPrice,
       stock: form.stock, status: form.status, categoryId: form.categoryId,
       imageIds: form.images.map((i) => i.id),
     };
@@ -89,8 +94,12 @@ async function onSave() {
       </div>
       <div class="flex gap-4">
         <label class="field flex-1">
-          <span class="field-label">가격(원)</span>
+          <span class="field-label">판매가(원)</span>
           <DxNumberBox v-model:value="form.price" :min="0" format="#,##0" />
+        </label>
+        <label class="field flex-1">
+          <span class="field-label">정가(원, 선택)</span>
+          <DxNumberBox v-model:value="form.listPrice" :min="0" format="#,##0" placeholder="할인 없으면 비움" />
         </label>
         <label class="field flex-1">
           <span class="field-label">재고</span>

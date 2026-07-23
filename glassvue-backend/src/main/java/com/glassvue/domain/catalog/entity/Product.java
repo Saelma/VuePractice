@@ -32,7 +32,17 @@ public class Product extends BaseTimeEntity {
     private String description;
 
     @Column(nullable = false)
-    private long price; // 원
+    private long price; // 원 — **실제 판매가**. 장바구니·주문·배송비 무료 기준이 전부 이 값을 쓴다.
+
+    /**
+     * 정가(할인 전 가격). null 이면 <b>할인 없음</b>이다.
+     *
+     * <p>{@code price} 를 정가로 바꾸지 않은 이유: 그 값은 실제로 청구되는 금액이라
+     * 의미를 바꾸면 합계·무료배송 기준 계산이 전부 어긋난다. 할인율은 두 값에서 계산하고 저장하지 않는다
+     * (저장하면 가격을 바꿀 때 어긋날 여지가 생긴다).
+     */
+    @Column(name = "list_price")
+    private Long listPrice;
 
     @Column(nullable = false)
     private long stock; // 재고 수량
@@ -59,22 +69,24 @@ public class Product extends BaseTimeEntity {
     private long reviewCount;
 
     @Builder
-    private Product(String name, String description, long price, long stock,
+    private Product(String name, String description, long price, Long listPrice, long stock,
                     ProductStatus status, UUID imageGroupId, Category category) {
         this.name = name;
         this.description = description;
         this.price = price;
+        this.listPrice = listPrice;
         this.stock = stock;
         this.status = (status != null) ? status : ProductStatus.SELLING;
         this.imageGroupId = imageGroupId;
         this.category = category;
     }
 
-    public void update(String name, String description, long price, long stock,
+    public void update(String name, String description, long price, Long listPrice, long stock,
                        ProductStatus status, UUID imageGroupId, Category category) {
         this.name = name;
         this.description = description;
         this.price = price;
+        this.listPrice = listPrice;
         this.stock = stock;
         this.status = status;
         this.imageGroupId = imageGroupId;

@@ -9,7 +9,7 @@ import { reactive, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxNumberBox } from 'devextreme-vue/number-box';
-import { fetchProducts, SORT_OPTIONS, STATUS_OPTIONS, statusText, priceText } from '../api/product';
+import { fetchProducts, SORT_OPTIONS, STATUS_OPTIONS, statusText, priceText, hasDiscount, discountRate } from '../api/product';
 import { fetchCategories } from '../api/category';
 import { authState } from '../stores/auth';
 import StarRating from '../components/StarRating.vue';
@@ -277,7 +277,12 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
               <p class="text-xs text-ink-500">{{ p.categoryName }}</p>
               <h3 class="mt-0.5 line-clamp-1 text-sm font-medium text-ink-900">{{ p.name }}</h3>
               <div class="mt-2 flex items-end justify-between gap-2">
-                <span class="text-lg font-semibold tabular-nums text-ink-900">{{ priceText(p.price) }}</span>
+                <div class="min-w-0">
+                  <!-- 할인 중이면 정가를 취소선으로 위에, 판매가를 아래에. 정가가 없으면 판매가만 보인다. -->
+                  <span v-if="hasDiscount(p)" class="muted block tabular-nums line-through">{{ priceText(p.listPrice) }}</span>
+                  <span class="text-lg font-semibold tabular-nums text-ink-900">{{ priceText(p.price) }}</span>
+                  <span v-if="hasDiscount(p)" class="ml-1 text-sm font-semibold text-danger">{{ discountRate(p) }}%</span>
+                </div>
                 <StarRating :model-value="p.averageRating" :count="p.reviewCount" size="sm" />
               </div>
               <span

@@ -6,7 +6,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxNumberBox } from 'devextreme-vue/number-box';
-import { getProduct, deleteProduct, statusText, priceText } from '../api/product';
+import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discountRate } from '../api/product';
 import { addToCart } from '../api/cart';
 import { authState, isLoggedIn } from '../stores/auth';
 import StarRating from '../components/StarRating.vue';
@@ -142,7 +142,12 @@ async function onDelete() {
               <StarRating :model-value="product.averageRating" :count="product.reviewCount" />
             </div>
 
-            <p class="mt-4 text-3xl font-semibold tabular-nums text-ink-900">{{ priceText(product.price) }}</p>
+            <!-- 할인 중이면 정가(취소선) + 할인율을 함께 보여준다. 아니면 판매가만. -->
+            <p v-if="hasDiscount(product)" class="muted mt-4 tabular-nums line-through">{{ priceText(product.listPrice) }}</p>
+            <p class="tabular-nums text-ink-900" :class="hasDiscount(product) ? 'text-3xl font-semibold' : 'mt-4 text-3xl font-semibold'">
+              {{ priceText(product.price) }}
+              <span v-if="hasDiscount(product)" class="ml-2 text-xl font-semibold text-danger">{{ discountRate(product) }}%</span>
+            </p>
 
             <!-- 상품 정보 요약 -->
             <dl class="mt-5 space-y-2 border-t border-line pt-5 text-sm">

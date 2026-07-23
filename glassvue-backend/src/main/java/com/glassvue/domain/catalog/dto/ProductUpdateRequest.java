@@ -20,6 +20,10 @@ public record ProductUpdateRequest(
         @NotNull @PositiveOrZero
         Long price,
 
+        /** 정가(할인 전). 비우면 할인 없음 — 판매가보다 커야 의미가 있다. */
+        @PositiveOrZero
+        Long listPrice,
+
         @NotNull @PositiveOrZero
         Long stock,
 

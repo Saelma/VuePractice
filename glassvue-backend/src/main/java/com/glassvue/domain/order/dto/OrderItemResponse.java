@@ -9,11 +9,13 @@ public record OrderItemResponse(
         String productName,
         String productImageUrl,
         long price,
+        // 주문 시점 정가 스냅샷(V16). null이면 할인 없이 샀거나 정가 도입 이전 주문이다.
+        Long listPrice,
         long quantity,
         long lineTotal
 ) {
     public static OrderItemResponse from(OrderItem i) {
         return new OrderItemResponse(i.getProductId(), i.getProductName(), i.getProductImageUrl(),
-                i.getPrice(), i.getQuantity(), i.getLineTotal());
+                i.getPrice(), i.getListPrice(), i.getQuantity(), i.getLineTotal());
     }
 }

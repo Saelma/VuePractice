@@ -8,7 +8,7 @@ import {
   getOrder, payOrder, shipOrder, deliverOrder, cancelOrder,
   orderStatusText, orderStatusClass, DELIVERY_CARRIERS,
 } from '../api/order';
-import { priceText } from '../api/product';
+import { priceText, hasDiscount, discountRate } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
 import { addressText } from '../api/shipping';
 import { authState } from '../stores/auth';
@@ -226,7 +226,12 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <ItemThumb :src="item.productImageUrl" :alt="item.productName" />
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-ink-900">{{ item.productName }}</p>
-              <p class="muted mt-1 tabular-nums">{{ priceText(item.price) }} × {{ item.quantity }}</p>
+              <p class="muted mt-1 tabular-nums">
+                <!-- 주문 시점 정가 스냅샷(V16). 없으면 할인 없이 샀거나 정가 도입 이전 주문이다. -->
+                <span v-if="hasDiscount(item)" class="line-through">{{ priceText(item.listPrice) }}</span>
+                {{ priceText(item.price) }} × {{ item.quantity }}
+                <span v-if="hasDiscount(item)" class="font-medium text-danger">{{ discountRate(item) }}%</span>
+              </p>
             </div>
             <span class="text-sm font-semibold tabular-nums text-ink-900">{{ priceText(item.lineTotal) }}</span>
           </li>

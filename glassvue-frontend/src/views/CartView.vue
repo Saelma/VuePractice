@@ -6,7 +6,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getCart, updateCartItem, removeCartItem, clearCart } from '../api/cart';
-import { priceText } from '../api/product';
+import { priceText, hasDiscount, discountRate } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
 import EmptyState from '../components/EmptyState.vue';
 
