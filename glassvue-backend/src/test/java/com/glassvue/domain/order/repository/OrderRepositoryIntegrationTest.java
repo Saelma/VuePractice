@@ -42,7 +42,7 @@ class OrderRepositoryIntegrationTest {
     /** 해당 상품을 담은 주문을 만들고 상태를 전이시킨다. */
     private void orderWithStatus(Consumer<Order> transition) {
         Order order = Order.create(memberId, "ZZ구매자",
-                List.of(OrderItem.of(productId, "ZZ-리뷰검증상품", null, 10_000, 1)), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000);
+                List.of(OrderItem.of(productId, "ZZ-리뷰검증상품", null, 10_000, 1)), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, uniqueOrderNo());
         transition.accept(order);
         orderRepository.save(order);
     }
@@ -88,4 +88,14 @@ class OrderRepositoryIntegrationTest {
         orderWithStatus(o -> {});
         assertThat(orderRepository.existsPurchase(UUID.randomUUID(), productId)).isFalse();
     }
+
+    /**
+     * 테스트용 주문번호. {@code orders.order_no} 에 유니크 제약이 있어(V15)
+     * 여러 건을 만드는 테스트가 같은 값을 쓰면 충돌한다 — 매번 다른 값을 준다.
+     * (운영 채번은 시퀀스가 하지만 여기선 엔티티를 직접 만들어 저장하므로 서비스를 안 탄다.)
+     */
+    private static String uniqueOrderNo() {
+        return "20260101-" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
 }

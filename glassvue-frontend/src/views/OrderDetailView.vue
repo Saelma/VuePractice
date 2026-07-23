@@ -79,7 +79,8 @@ async function submitShip() {
 function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
 }
-const shortId = computed(() => (order.value?.id ? `#${String(order.value.id).slice(0, 8)}` : ''));
+// 주문번호(V15) — CS에서 고객이 불러줄 수 있는 값이다(UUID 앞자리 대신).
+const orderNoText = computed(() => order.value?.orderNo || '');
 
 /**
  * 주문 진행 스텝 — 커머스 주문 상세의 핵심 시각 요소. "지금 어디까지 왔나"를 한눈에 보여준다.
@@ -131,7 +132,7 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
       <div class="mb-5 flex items-start justify-between gap-4">
         <div>
           <h1 class="page-title">주문 상세</h1>
-          <p class="muted mt-1 tabular-nums">{{ shortId }}</p>
+          <p class="muted mt-1 tabular-nums">{{ orderNoText }}</p>
         </div>
         <span class="badge shrink-0" :class="orderStatusClass(order.status)">{{ orderStatusText(order.status) }}</span>
       </div>

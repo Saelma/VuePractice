@@ -23,17 +23,21 @@ public record OrderSearchCondition(
         @Cond(path = "buyerNickname", op = Op.CONTAINS)
         String buyer,
 
+        @Schema(description = "주문번호 검색어(관리자 목록용). CS에서 고객이 불러준 번호로 찾는다")
+        @Cond(path = "orderNo", op = Op.CONTAINS)
+        String orderNo,
+
         @Schema(hidden = true) // 클라이언트가 지정하지 못한다 — 남의 주문 조회 방지
         @Cond(op = Op.EQ)
         UUID memberId
 ) {
     /** 관리자용 — 전체 주문 대상. */
     public OrderSearchCondition forAll() {
-        return new OrderSearchCondition(status, buyer, null);
+        return new OrderSearchCondition(status, buyer, orderNo, null);
     }
 
     /** 사용자용 — 본인 주문으로 범위를 좁힌다. 구매자 검색은 의미가 없으므로 버린다. */
     public OrderSearchCondition scopedTo(UUID ownerId) {
-        return new OrderSearchCondition(status, null, ownerId);
+        return new OrderSearchCondition(status, null, null, ownerId);
     }
 }

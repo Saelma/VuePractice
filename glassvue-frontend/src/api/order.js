@@ -17,8 +17,8 @@ export function fetchAdminOrderCounts() {
   return apiGet('/api/admin/orders/counts');
 }
 
-export function fetchAdminOrders({ status = null, buyer = null, page = 0, size = 10 } = {}) {
-  return apiGet('/api/admin/orders', { status, buyer, page, size });
+export function fetchAdminOrders({ status = null, buyer = null, orderNo = null, page = 0, size = 10 } = {}) {
+  return apiGet('/api/admin/orders', { status, buyer, orderNo, page, size });
 }
 
 /** 상태 필터 SelectBox용 — '전체'는 value=null로 두어 파라미터가 빠지게 한다. */

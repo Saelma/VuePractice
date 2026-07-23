@@ -17,6 +17,7 @@ import java.util.UUID;
  */
 public record AdminOrderResponse(
         UUID id,
+        String orderNo,
         UUID memberId,
         String buyerNickname,
         OrderStatus status,
@@ -36,6 +37,7 @@ public record AdminOrderResponse(
         String first = count == 0 ? "" : o.getItems().get(0).getProductName();
         return new AdminOrderResponse(
                 o.getId(),
+                o.getOrderNo(),
                 o.getMemberId(),
                 o.getBuyerNickname(),
                 o.getStatus(),

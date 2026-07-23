@@ -23,6 +23,8 @@ import com.glassvue.global.policy.ShippingPolicy;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
 import org.springframework.context.ApplicationEventPublisher;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Map;
@@ -75,7 +77,7 @@ public class OrderService {
         long shippingFee = shippingPolicy.feeFor(cart.totalPrice());
         Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems,
                 req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2(),
-                shippingFee));
+                shippingFee, nextOrderNo()));
         cartService.clear(memberId);
         // 도메인 이벤트 발행 — 구독자(알림·포인트 등)는 order가 모른다. AFTER_COMMIT 리스너가 커밋된 주문에만 반응.
         eventPublisher.publishEvent(OrderPlacedEvent.from(order));
@@ -131,6 +133,19 @@ public class OrderService {
                 : orderRepository.findByIdAndMemberId(id, user.id()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         return toResponse(order);
+    }
+
+    /**
+     * 사람이 읽는 주문번호 — {@code yyyyMMdd}(Asia/Seoul) + 전역 일련번호(V15의 시퀀스).
+     *
+     * <p>시퀀스라 동시 주문에서 같은 번호를 잡는 일이 <b>원천적으로 불가능</b>하다(재시도 로직 불필요).
+     * 날짜를 Asia/Seoul 로 뽑는 이유: {@code created_at} 은 UTC 로 저장돼서, 서버 기본 시간대를 쓰면
+     * 한국 시간 00:00~09:00 주문의 날짜가 하루 밀린다. 마이그레이션의 백필도 같은 기준을 쓴다.
+     */
+    private String nextOrderNo() {
+        String date = DateTimeFormatter.ofPattern("yyyyMMdd")
+                .format(java.time.LocalDate.now(ZoneId.of("Asia/Seoul")));
+        return date + "-" + String.format("%04d", orderRepository.nextOrderNoSequence());
     }
 
     /** 조회 링크는 설정으로 만들어 응답에 실어 준다 — 화면이 택배사별 URL 형식을 알 필요가 없게. */

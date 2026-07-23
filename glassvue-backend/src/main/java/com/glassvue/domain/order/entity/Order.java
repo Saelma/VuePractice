@@ -41,6 +41,14 @@ public class Order extends BaseTimeEntity {
     @Column(name = "buyer_nickname", nullable = false, length = 50, updatable = false)
     private String buyerNickname;
 
+    /**
+     * 사람이 읽는 주문번호(예: {@code 20260723-0026}). PK가 아니라 표시·검색용이다 —
+     * PK(UUIDv7)는 고객에게 불러주기 어렵고, 앞자리만 잘라 쓰면 중복 위험이 있다.
+     * 형식은 {@code yyyyMMdd}(Asia/Seoul) + 전역 일련번호. 생성 후 바뀌지 않는다.
+     */
+    @Column(name = "order_no", nullable = false, length = 20, updatable = false)
+    private String orderNo;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private OrderStatus status;
@@ -103,9 +111,10 @@ public class Order extends BaseTimeEntity {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
-    private Order(UUID memberId, String buyerNickname) {
+    private Order(UUID memberId, String buyerNickname, String orderNo) {
         this.memberId = memberId;
         this.buyerNickname = buyerNickname;
+        this.orderNo = orderNo;
         this.status = OrderStatus.ORDERED;
         this.totalPrice = 0L;
     }
@@ -114,8 +123,8 @@ public class Order extends BaseTimeEntity {
     public static Order create(UUID memberId, String buyerNickname, List<OrderItem> orderItems,
                                String shipRecipient, String shipPhone,
                                String shipZipcode, String shipAddress1, String shipAddress2,
-                               long shippingFee) {
-        Order order = new Order(memberId, buyerNickname);
+                               long shippingFee, String orderNo) {
+        Order order = new Order(memberId, buyerNickname, orderNo);
         order.shippingFee = shippingFee;
         order.shipRecipient = shipRecipient;
         order.shipPhone = shipPhone;

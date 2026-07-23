@@ -44,7 +44,8 @@ function pickTab(v) {
 }
 
 const fmt = (v) => (v ? new Date(v).toLocaleDateString('ko-KR') : '');
-const shortId = (id) => (id ? `#${String(id).slice(0, 8)}` : '');
+// 주문번호(V15). 예전엔 UUID 앞 8자를 잘라 썼는데 고객이 불러주기 어렵고 잘린 값이라 중복 위험도 있었다.
+const orderNoText = (o) => o?.orderNo || '';
 </script>
 
 <template>
@@ -100,7 +101,7 @@ const shortId = (id) => (id ? `#${String(id).slice(0, 8)}` : '');
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3">
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-sm font-medium tabular-nums text-ink-900">{{ fmt(o.createdAt) }}</span>
-            <span class="muted tabular-nums">{{ shortId(o.id) }}</span>
+            <span class="muted tabular-nums">{{ orderNoText(o) }}</span>
           </div>
           <span class="badge" :class="orderStatusClass(o.status)">{{ orderStatusText(o.status) }}</span>
         </div>

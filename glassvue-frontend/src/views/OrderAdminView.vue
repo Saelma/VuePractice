@@ -19,7 +19,7 @@ import { priceText } from '../api/product';
 
 const router = useRouter();
 const error = ref('');
-const form = ref({ status: 'PAID', buyer: '' }); // 발송 대기 주문이 기본
+const form = ref({ status: 'PAID', buyer: '', orderNo: '' }); // 발송 대기 주문이 기본
 const applied = ref({ ...form.value });
 const gridRef = ref(null);
 
@@ -78,7 +78,7 @@ function search() {
   gridRef.value?.instance.refresh();
 }
 function reset() {
-  form.value = { status: null, buyer: '' };
+  form.value = { status: null, buyer: '', orderNo: '' };
   search();
 }
 
@@ -160,6 +160,11 @@ function fmt(v) {
         <span class="field-label">구매자</span>
         <DxTextBox v-model:value="form.buyer" placeholder="닉네임" :width="180" @enter-key="search" />
       </label>
+      <!-- CS에서 고객이 불러준 주문번호로 바로 찾는다 — 이게 주문번호를 만든 이유다. -->
+      <label class="field">
+        <span class="field-label">주문번호</span>
+        <DxTextBox v-model:value="form.orderNo" placeholder="20260723-0026" :width="180" @enter-key="search" />
+      </label>
       <div class="flex gap-2">
         <button type="button" class="btn btn-primary" @click="search">검색</button>
         <button type="button" class="btn btn-secondary" @click="reset">초기화</button>
@@ -199,6 +204,7 @@ function fmt(v) {
       :hover-state-enabled="true"
       :no-data-text="noDataText"
     >
+      <DxColumn data-field="orderNo" caption="주문번호" :width="140" />
       <DxColumn data-field="createdAt" caption="주문일시" :width="160" :calculate-display-value="(r) => fmt(r.createdAt)" />
       <DxColumn data-field="buyerNickname" caption="구매자" :width="130" />
       <DxColumn data-field="summary" caption="상품" />

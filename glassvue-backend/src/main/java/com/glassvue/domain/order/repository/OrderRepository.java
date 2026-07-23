@@ -13,6 +13,16 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, OrderReposi
     Optional<Order> findByIdAndMemberId(UUID id, UUID memberId);
 
     /**
+     * 주문번호용 일련번호를 뽑는다(V15의 {@code seq_order_no}).
+     *
+     * <p>PK가 아니라 <b>표시·검색용</b> 번호다 — PK는 UUIDv7 그대로다(CLAUDE.md의 SEQUENCE 금지는 PK 규칙).
+     * 시퀀스를 쓰는 이유는 동시 주문에서 <b>같은 번호를 잡는 일이 원천적으로 불가능</b>하기 때문이다.
+     * 일자별로 1부터 리셋하려면 카운터 락이나 유니크 충돌 재시도가 필요해진다.
+     */
+    @Query(value = "SELECT seq_order_no.NEXTVAL FROM dual", nativeQuery = true)
+    long nextOrderNoSequence();
+
+    /**
      * 회원이 해당 상품을 실제로 주문(취소되지 않은 주문)했는지 — 리뷰 구매 인증용.
      *
      * <p>정상 흐름(ORDERED·PAID·SHIPPED)을 **명시적으로 열거**한다. {@code <> CANCELLED}로 쓰면

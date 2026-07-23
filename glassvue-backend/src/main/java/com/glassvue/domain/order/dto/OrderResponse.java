@@ -20,6 +20,8 @@ import java.util.UUID;
  */
 public record OrderResponse(
         UUID id,
+        // 사람이 읽는 주문번호(V15). 화면은 UUID 대신 이걸 보여준다.
+        String orderNo,
         UUID memberId,
         String buyerNickname,
         OrderStatus status,
@@ -53,6 +55,7 @@ public record OrderResponse(
     public static OrderResponse from(Order o, String trackingUrl) {
         return new OrderResponse(
                 o.getId(),
+                o.getOrderNo(),
                 o.getMemberId(),
                 o.getBuyerNickname(),
                 o.getStatus(),

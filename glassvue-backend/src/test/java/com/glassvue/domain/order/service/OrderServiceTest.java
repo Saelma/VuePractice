@@ -64,7 +64,7 @@ class OrderServiceTest {
             "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층");
 
     private Order orderWith(OrderItem... items) {
-        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000);
+        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001");
     }
     private Order sampleOrder() {
         return orderWith(OrderItem.of(UUID.randomUUID(), "지바", "/uploads/z_t.webp", 10_000, 2));

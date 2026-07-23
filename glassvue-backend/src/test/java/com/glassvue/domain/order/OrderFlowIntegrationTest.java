@@ -122,6 +122,10 @@ class OrderFlowIntegrationTest {
                 // memberId는 화면이 "내 주문인가"를 판단해 결제·취소 버튼을 띄우는 근거다.
                 // 빠지면 버튼이 조용히 사라지므로(2026-07-20 실제 발생) 응답 계약으로 고정한다.
                 .andExpect(jsonPath("$.data.memberId").isNotEmpty())
+                // 주문번호(V15) — 고객이 CS에 불러줄 수 있는 값. UUID 앞자리를 잘라 쓰던 걸 대체한다.
+                // 형식(yyyyMMdd-NNNN)을 계약으로 고정한다: 화면·CS·검색이 이 모양을 전제한다.
+                .andExpect(jsonPath("$.data.orderNo").value(
+                        org.hamcrest.Matchers.matchesPattern("\\d{8}-\\d{4,}")))
                 // buyerNickname은 관리자가 목록→상세로 들어와도 구매자를 잃지 않게 하는 스냅샷(V5).
                 // 상세 응답 계약으로 고정한다(빠지면 관리자 동선에 구멍이 생긴다).
                 .andExpect(jsonPath("$.data.buyerNickname").value("구매자"))
