@@ -13,7 +13,7 @@ class OrderTest {
     private Order newOrder() {
         return Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 10_000, 2)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층");
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000);
     }
 
     @Test
@@ -26,6 +26,20 @@ class OrderTest {
         assertThat(o.isShippable()).isFalse();
         assertThat(o.getTotalPrice()).isEqualTo(20_000);
         assertThat(o.getPaidAt()).isNull();
+        // totalPrice는 상품 합계, payAmount는 실제 결제 금액(= 합계 + 배송비).
+        // 둘을 갈라 두지 않으면 과거 주문의 숫자가 무엇인지 알 수 없어진다.
+        assertThat(o.getShippingFee()).isEqualTo(3_000);
+        assertThat(o.getPayAmount()).isEqualTo(23_000);
+    }
+
+    @Test
+    @DisplayName("배송비 0(무료배송)이면 결제 금액은 상품 합계와 같다")
+    void freeShipping() {
+        Order o = Order.create(UUID.randomUUID(), "구매자닉",
+                List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 40_000, 1)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 0);
+        assertThat(o.getShippingFee()).isZero();
+        assertThat(o.getPayAmount()).isEqualTo(o.getTotalPrice());
     }
 
     @Test
@@ -95,7 +109,7 @@ class OrderTest {
     void ownership() {
         UUID me = UUID.randomUUID();
         Order o = Order.create(me, "구매자닉", List.of(OrderItem.of(UUID.randomUUID(), "x", null, 1000, 1)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층");
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000);
         assertThat(o.isOwnedBy(me)).isTrue();
         assertThat(o.isOwnedBy(UUID.randomUUID())).isFalse();
     }

@@ -20,7 +20,11 @@ public record AdminOrderResponse(
         UUID memberId,
         String buyerNickname,
         OrderStatus status,
+        // 관리자 화면은 **실제로 받은 금액**(payAmount)을 보여줘야 고객이 본 숫자와 어긋나지 않는다.
+        // totalPrice(상품 합계)도 함께 내려 정산 시 배송비를 갈라 볼 수 있게 한다.
         long totalPrice,
+        long shippingFee,
+        long payAmount,
         int itemCount,
         String summary,
         Instant createdAt,
@@ -36,6 +40,8 @@ public record AdminOrderResponse(
                 o.getBuyerNickname(),
                 o.getStatus(),
                 o.getTotalPrice(),
+                o.getShippingFee(),
+                o.getPayAmount(),
                 count,
                 count <= 1 ? first : first + " 외 " + (count - 1) + "건",
                 o.getCreatedAt(),

@@ -19,6 +19,7 @@ import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.policy.ShippingPolicy;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,6 +45,7 @@ public class OrderService {
     private final ProductCommandService productCommandService;
     private final ApplicationEventPublisher eventPublisher;
     private final DeliveryProperties deliveryProperties;
+    private final ShippingPolicy shippingPolicy;
 
     /**
      * 장바구니 → 주문 생성. 재고 원자적 차감 + 카트 비우기.
@@ -68,8 +70,12 @@ public class OrderService {
             orderItems.add(OrderItem.of(i.productId(), i.name(), i.thumbUrl(), i.price(), i.quantity()));
         }
 
+        // 배송비는 **서버가 계산해 스냅샷**한다 — 요청 본문으로 받으면 클라이언트가 0원으로 위조할 수 있다
+        // (품목·가격을 장바구니에서 읽는 것과 같은 이유).
+        long shippingFee = shippingPolicy.feeFor(cart.totalPrice());
         Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems,
-                req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2()));
+                req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2(),
+                shippingFee));
         cartService.clear(memberId);
         // 도메인 이벤트 발행 — 구독자(알림·포인트 등)는 order가 모른다. AFTER_COMMIT 리스너가 커밋된 주문에만 반응.
         eventPublisher.publishEvent(OrderPlacedEvent.from(order));

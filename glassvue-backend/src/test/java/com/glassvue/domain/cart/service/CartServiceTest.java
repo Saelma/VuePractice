@@ -11,6 +11,7 @@ import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.catalog.dto.ProductResponse;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
+import com.glassvue.global.policy.ShippingPolicy;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,6 +28,9 @@ class CartServiceTest {
 
     @Mock CartStore cartStore;
     @Mock ProductQueryService productQueryService;
+    // 설정 객체라 목이 아니라 실제 인스턴스를 넣는다 — 배송비 계산은 순수 산술이고,
+    // 목으로 두면 항상 0을 돌려줘 "배송비가 안 붙는" 경로만 검증하게 된다.
+    @Spy ShippingPolicy shippingPolicy = new ShippingPolicy();
     @InjectMocks CartService service;
 
     private final UUID memberId = UUID.randomUUID();

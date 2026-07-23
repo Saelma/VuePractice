@@ -5,6 +5,7 @@ import com.glassvue.domain.cart.dto.CartItemAddRequest;
 import com.glassvue.domain.cart.dto.CartItemResponse;
 import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.catalog.dto.ProductResponse;
+import com.glassvue.global.policy.ShippingPolicy;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ public class CartService {
 
     private final CartStore cartStore;
     private final ProductQueryService productQueryService;
+    private final ShippingPolicy shippingPolicy;
 
     /** 상품 존재 확인 후 담기(수량 증가). */
     public void add(UUID memberId, CartItemAddRequest req) {
@@ -48,7 +50,7 @@ public class CartService {
     public CartResponse getCart(UUID memberId) {
         Map<UUID, Long> items = cartStore.items(memberId);
         if (items.isEmpty()) {
-            return new CartResponse(List.of(), 0, 0);
+            return new CartResponse(List.of(), 0, 0, 0, 0, 0);
         }
 
         Map<UUID, ProductResponse> products = productQueryService.findByIds(items.keySet()).stream()
@@ -71,6 +73,8 @@ public class CartService {
             totalQuantity += qty;
             totalPrice += lineTotal;
         }
-        return new CartResponse(lines, totalQuantity, totalPrice);
+        long shippingFee = shippingPolicy.feeFor(totalPrice);
+        return new CartResponse(lines, totalQuantity, totalPrice,
+                shippingFee, totalPrice + shippingFee, shippingPolicy.amountUntilFree(totalPrice));
     }
 }

@@ -230,9 +230,22 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <span class="text-sm font-semibold tabular-nums text-ink-900">{{ priceText(item.lineTotal) }}</span>
           </li>
         </ul>
+        <dl class="space-y-2 border-t border-line px-5 py-4 text-sm">
+          <div class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">상품 금액</dt>
+            <dd class="tabular-nums text-ink-700">{{ priceText(order.totalPrice) }}</dd>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">배송비</dt>
+            <dd class="tabular-nums" :class="order.shippingFee ? 'text-ink-700' : 'text-emerald-700'">
+              {{ order.shippingFee ? priceText(order.shippingFee) : '무료' }}
+            </dd>
+          </div>
+        </dl>
+        <!-- 주문 시점에 실제로 받은 금액이다 — 정책이 바뀌어도 이 숫자는 안 바뀐다(스냅샷). -->
         <div class="flex items-end justify-between gap-4 border-t border-line px-5 py-4">
-          <span class="text-sm font-medium text-ink-700">합계</span>
-          <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(order.totalPrice) }}</span>
+          <span class="text-sm font-medium text-ink-700">결제 금액</span>
+          <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(order.payAmount) }}</span>
         </div>
       </div>
 

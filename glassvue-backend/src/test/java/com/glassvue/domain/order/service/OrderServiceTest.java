@@ -25,6 +25,7 @@ import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
+import com.glassvue.global.policy.ShippingPolicy;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
 import java.util.List;
@@ -50,6 +51,9 @@ class OrderServiceTest {
     // 설정 객체라 목이 아니라 실제 인스턴스를 넣는다 — 조회 링크 생성은 순수 문자열 조립이고,
     // 목으로 두면 null을 돌려줘 "링크가 안 만들어지는" 경로만 검증하게 된다.
     @Spy DeliveryProperties deliveryProperties = new DeliveryProperties();
+    // 설정 객체라 목이 아니라 실제 인스턴스를 넣는다 — 배송비 계산은 순수 산술이고,
+    // 목으로 두면 항상 0을 돌려줘 "배송비가 안 붙는" 경로만 검증하게 된다.
+    @Spy ShippingPolicy shippingPolicy = new ShippingPolicy();
     @InjectMocks OrderService orderService;
 
     private final UUID memberId = UUID.randomUUID();
@@ -60,7 +64,7 @@ class OrderServiceTest {
             "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층");
 
     private Order orderWith(OrderItem... items) {
-        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층");
+        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000);
     }
     private Order sampleOrder() {
         return orderWith(OrderItem.of(UUID.randomUUID(), "지바", "/uploads/z_t.webp", 10_000, 2));
@@ -197,7 +201,7 @@ class OrderServiceTest {
     private CartResponse cartWith(CartItemResponse... items) {
         long qty = 0, price = 0;
         for (CartItemResponse i : items) { qty += i.quantity(); price += i.lineTotal(); }
-        return new CartResponse(List.of(items), qty, price);
+        return new CartResponse(List.of(items), qty, price, 0, price, 0);
     }
     private CartItemResponse availableItem(UUID pid, long qty) {
         return new CartItemResponse(pid, "지바", 10_000, ProductStatus.SELLING, qty, 10_000 * qty, true, "/uploads/z_t.webp");

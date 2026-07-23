@@ -11,7 +11,7 @@ import ItemThumb from '../components/ItemThumb.vue';
 import EmptyState from '../components/EmptyState.vue';
 
 const router = useRouter();
-const cart = ref({ items: [], totalQuantity: 0, totalPrice: 0 });
+const cart = ref({ items: [], totalQuantity: 0, totalPrice: 0, shippingFee: 0, payAmount: 0, amountUntilFree: 0 });
 const error = ref('');
 const loading = ref(true);
 
@@ -154,11 +154,23 @@ function goCheckout() {
             <dt class="text-ink-500">상품 금액</dt>
             <dd class="tabular-nums text-ink-700">{{ priceText(cart.totalPrice) }}</dd>
           </div>
+          <div class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">배송비</dt>
+            <dd class="tabular-nums" :class="cart.shippingFee ? 'text-ink-700' : 'text-emerald-700'">
+              {{ cart.shippingFee ? priceText(cart.shippingFee) : '무료' }}
+            </dd>
+          </div>
         </dl>
 
+        <!-- 무료배송까지 남은 금액 — 얼마를 더 담아야 하는지 알려주는 게 "배송비 3,000원"보다 유용하다.
+             서버가 계산해 내려준다(화면이 정책을 알 필요가 없다). -->
+        <p v-if="cart.amountUntilFree > 0" class="muted mt-3">
+          {{ priceText(cart.amountUntilFree) }} 더 담으면 <strong class="text-ink-700">무료배송</strong>
+        </p>
+
         <div class="mt-4 flex items-end justify-between gap-4 border-t border-line pt-4">
-          <span class="text-sm font-medium text-ink-700">합계</span>
-          <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(cart.totalPrice) }}</span>
+          <span class="text-sm font-medium text-ink-700">결제 금액</span>
+          <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(cart.payAmount) }}</span>
         </div>
 
         <button type="button" class="btn btn-primary mt-5 w-full" @click="goCheckout">주문하기</button>

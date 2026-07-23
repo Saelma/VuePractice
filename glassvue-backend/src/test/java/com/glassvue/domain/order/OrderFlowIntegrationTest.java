@@ -93,6 +93,10 @@ class OrderFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalQuantity").value(2))
                 .andExpect(jsonPath("$.data.totalPrice").value(20_000))
+                // 장바구니도 배송비를 미리 보여준다 — 주문서가 정책을 몰라도 결제 요약을 그릴 수 있게.
+                .andExpect(jsonPath("$.data.shippingFee").value(3_000))
+                .andExpect(jsonPath("$.data.payAmount").value(23_000))
+                .andExpect(jsonPath("$.data.amountUntilFree").value(10_000))
                 .andExpect(jsonPath("$.data.items[0].available").value(true));
 
         // 3) 결제(checkout) → 주문 생성
@@ -111,6 +115,10 @@ class OrderFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("ORDERED"))
                 .andExpect(jsonPath("$.data.totalPrice").value(20_000))
+                // 배송비는 서버가 정책으로 계산해 스냅샷한다(요청 본문으로 안 받는다 — 0원 위조 방지).
+                // 상품 합계 20,000원 < 무료 기준 30,000원이라 3,000원이 붙는다.
+                .andExpect(jsonPath("$.data.shippingFee").value(3_000))
+                .andExpect(jsonPath("$.data.payAmount").value(23_000))
                 // memberId는 화면이 "내 주문인가"를 판단해 결제·취소 버튼을 띄우는 근거다.
                 // 빠지면 버튼이 조용히 사라지므로(2026-07-20 실제 발생) 응답 계약으로 고정한다.
                 .andExpect(jsonPath("$.data.memberId").isNotEmpty())

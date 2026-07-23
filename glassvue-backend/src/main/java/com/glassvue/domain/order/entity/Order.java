@@ -45,8 +45,17 @@ public class Order extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private OrderStatus status;
 
+    /** 상품 합계(배송비 제외). 이 의미는 바꾸지 않는다 — 바꾸면 과거 주문의 숫자가 무엇인지 알 수 없어진다. */
     @Column(nullable = false)
     private long totalPrice;
+
+    /**
+     * 주문 시점에 실제로 부과된 배송비(스냅샷). 정책({@code glassvue.shipping})은 바뀌지만
+     * 과거 주문에 받은 금액은 그대로여야 한다 — 배송지·구매자 닉네임과 같은 이유.
+     * 배송비 도입 이전 주문은 받은 적이 없으므로 0이 사실이다(모르는 값이 아니다).
+     */
+    @Column(name = "shipping_fee", nullable = false)
+    private long shippingFee;
 
     private Instant paidAt;
 
@@ -104,8 +113,10 @@ public class Order extends BaseTimeEntity {
     /** 배송지는 주문 시점 스냅샷으로 받는다(회원 주소를 참조하지 않는다). */
     public static Order create(UUID memberId, String buyerNickname, List<OrderItem> orderItems,
                                String shipRecipient, String shipPhone,
-                               String shipZipcode, String shipAddress1, String shipAddress2) {
+                               String shipZipcode, String shipAddress1, String shipAddress2,
+                               long shippingFee) {
         Order order = new Order(memberId, buyerNickname);
+        order.shippingFee = shippingFee;
         order.shipRecipient = shipRecipient;
         order.shipPhone = shipPhone;
         order.shipZipcode = shipZipcode;
@@ -119,6 +130,11 @@ public class Order extends BaseTimeEntity {
         items.add(item);
         item.assignOrder(this);
         this.totalPrice += item.getLineTotal();
+    }
+
+    /** 실제 결제 금액 = 상품 합계 + 배송비. 저장하지 않고 계산한다(두 값이 어긋날 여지를 만들지 않는다). */
+    public long getPayAmount() {
+        return totalPrice + shippingFee;
     }
 
     public boolean isPayable() {

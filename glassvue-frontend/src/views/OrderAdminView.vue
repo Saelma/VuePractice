@@ -202,7 +202,8 @@ function fmt(v) {
       <DxColumn data-field="createdAt" caption="주문일시" :width="160" :calculate-display-value="(r) => fmt(r.createdAt)" />
       <DxColumn data-field="buyerNickname" caption="구매자" :width="130" />
       <DxColumn data-field="summary" caption="상품" />
-      <DxColumn data-field="totalPrice" caption="금액" :width="120" alignment="right" :calculate-display-value="(r) => priceText(r.totalPrice)" />
+      <!-- 고객이 본 숫자와 어긋나지 않게 **실제 받은 금액**(payAmount)을 보여준다. -->
+      <DxColumn data-field="payAmount" caption="금액" :width="120" alignment="right" :calculate-display-value="(r) => priceText(r.payAmount)" />
       <DxColumn data-field="status" caption="상태" :width="100" alignment="center" cell-template="statusCell" />
       <DxColumn caption="처리" :width="150" alignment="center" cell-template="actionCell" />
 
