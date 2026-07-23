@@ -89,16 +89,37 @@ curl --cacert glassvue.crt https://192.168.50.14/api/products   # 200 이어야 
 2. **`/etc/nginx/ssl/`** 인증서 배치(위 절차).
 3. **`/var/www/glassvue-uploads/`** 업로드 디렉토리 — 유닛의 `ReadWritePaths` 대상이라 없으면 기동 실패.
 4. **IP 정적 고정** — `nmcli con mod enp0s3 ipv4.method manual ...` (2026-07-22 핸드오프 §3-1).
-5. **Oracle 부팅 자동시작** — `enable` **하나로는 부족하다**(2026-07-23 재부팅으로 확인). 세 가지가 다 필요:
+5. **Oracle 부팅 자동시작** — `enable` **하나로는 부족하다**(2026-07-23 확인). 둘 다 필요:
    - `sudo systemctl enable oracledb_ESPDB-19c` — 안 하면 백엔드의 `After=` 가 가리킬 대상이 없어 무의미.
-   - **`/etc/hosts` 에 `192.168.50.14   ecstel` 핀** — `listener.ora` 가 `(HOST = ecstel)` 로 바인딩하는데,
-     핀이 없으면 호스트명이 IPv6 링크로컬(`fe80::…`)로만 잡혀 부팅 초반 리스너 바인드가 실패한다.
-   - **`override.conf` 반영**(위 systemd 절) — SysV 유닛엔 네트워크 의존성이 없어 부팅 13초 만에 실행돼
-     네트워크가 덜 올라온 채 리스너가 죽는다. `After/Wants=network-online.target` 으로 대기시킨다.
-     (`NetworkManager-wait-online` 이 `enabled` 여야 network-online 이 실제로 대기를 건다.)
+   - **`override.conf` 반영**(위 systemd 절) — **이게 없으면 부팅 때 반드시 실패한다.**
+     핵심은 `Environment=SU=/usr/sbin/runuser` 다. 이유는 파일 안 주석에 적어 뒀다.
 
-   > **배경 (2026-07-23)**: `enable` 만 해두고 재부팅했더니 `oracledb_ESPDB-19c` 가 `status=1` 로 실패했다
-   > (start→fail 이 같은 1초 — 리스너 즉시 바인드 실패). DB 는 수동 `lsnrctl start` + `startup` 으로 복구했다.
-   > 원인은 위 둘(호스트명 미해석 + 네트워크 의존성 부재). 검증 = 재부팅 후 손 안 대고
-   > `systemctl is-active oracledb_ESPDB-19c glassvue-backend` 둘 다 `active`.
+   > **배경 (2026-07-23)**: `enable` 만 해두고 재부팅했더니 `oracledb_ESPDB-19c` 가 `status=1` 로 실패했고,
+   > 백엔드는 DB 를 못 잡아 무한 재시작(`activating`) — **운영이 통째로 내려가 있었다.**
+   >
+   > 원인은 **SELinux** 였다. 부팅 시 SysV 스크립트는 `init_t` 컨텍스트로 도는데 SELinux 가
+   > `init_t → su_exec_t`(`/bin/su`) 실행을 거부한다. 스크립트는 리스너·DB 를 **둘 다 `su` 로** 띄우므로
+   > 둘 다 즉시 실패했다(`exit=-13`). `runuser`(라벨 `bin_t`)로 바꾸면 통과한다.
+   >
+   > **왜 찾기 어려웠나** — 진단 순서를 그대로 남긴다(같은 길을 다시 헤매지 않게):
+   > - 스크립트가 두 명령의 출력을 `> /dev/null 2>&1` 로 버려서 **"Failed to start ..." 한 줄만** 남는다.
+   >   Oracle 이 아예 실행되지 않았으므로 TNS/ORA 에러도, 리스너 로그도 **어디에도 없다.**
+   > - 셸에서 수동 실행하면 `unconfined_t` 라 **항상 성공**한다 → "수동은 되는데 부팅만 실패"로 보인다.
+   > - AVC 거부는 **저널이 아니라 `/var/log/audit/audit.log`** 로만 간다. `journalctl | grep avc` 는 빈손이다.
+   >   → `sudo ausearch -ts <시각> -te <시각>` 로 봐야 보인다.
+   > - 헛짚은 가설 4개(전부 탈락): 호스트명 IPv6 링크로컬 해석 / 부팅 시 네트워크 미준비 /
+   >   sqlplus `startup` 실패 / `su` 환경변수 전파 실패.
+   >
+   > **재부팅 없이 검증하는 법** — `systemctl start` 는 ExecStart 를 **`init_t` 로 실행**하므로 부팅과
+   > SELinux 조건이 같다. DB 를 내린 뒤(`sudo bash /etc/init.d/oracledb_ESPDB-19c stop`)
+   > `sudo systemctl start oracledb_ESPDB-19c` 가 성공하면 부팅에서도 성공한다.
+   > 실측(2026-07-23 09:53): 기동 30초 소요, `Oracle Net Listener started.` ·
+   > `Oracle Database instance ESPCDB started.` 두 줄이 찍히고 유닛이 `active`.
+   > (실패할 땐 이 두 줄이 없고 1초 만에 끝난다 — 그게 구별점이다.)
+
+   ⚠ **별건 — 스크립트가 PDB 를 못 연다**: `start()` 의 `alter pluggable database all open` 에
+   **세미콜론이 없고** heredoc 종료자 `EOF` 가 들여쓰기돼 있어(`<<` 인데 `<<-` 가 아님) `ORA-00933` 이 난다.
+   지금 `espdb` 가 열려 있는 건 PDB **saved state** 덕분이다. saved state 가 없어지면 부팅 후
+   PDB 가 `MOUNTED` 인 채 남아 백엔드가 못 붙는다. 확인·보강:
+   `alter pluggable database all open; alter pluggable database all save state;`
 6. **`.env` 실값 작성** — `env.example` 참고.
