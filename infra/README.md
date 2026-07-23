@@ -20,6 +20,8 @@
 **여기 없는 것**(의도적):
 
 - **`.env` 실값** — `.gitignore` 로 막혀 있다. 비밀값(`DB_PASSWORD`·`JWT_SECRET`)은 저장소에 두지 않는다.
+  **백업처: 사용자 개인 Notion**(2026-07-23 확인). 서버의 `/home/ecstel/work/.env` 가 유일본이 아니다.
+  ⚠ `JWT_SECRET` 은 잃으면 복구 불가 — 새로 만들면 기존 토큰이 전부 무효가 되어 전 사용자가 로그아웃된다.
 - **TLS 개인키** (`/etc/nginx/ssl/glassvue.key`) — 절대 커밋하지 않는다. 아래 재발급 절차로 만든다.
 - **Oracle SysV 스크립트** — `/etc/init.d/oracledb_ESPDB-19c` 는 설치 프로그램이 만든 것이라 손대지 않는다.
   대신 **부팅 순서만 drop-in override** 로 보정한다(위 `override.conf`, 아래 배경 참고).
