@@ -10,6 +10,7 @@ import { getCart } from '../api/cart';
 import { checkout as apiCheckout } from '../api/order';
 import { updateShippingAddress } from '../api/member';
 import { priceText } from '../api/product';
+import { fetchMyCoupons } from '../api/coupon';
 import { addressFromUser, hasAddress, validateAddress, trimAddress } from '../api/shipping';
 import { authState } from '../stores/auth';
 import ItemThumb from '../components/ItemThumb.vue';
@@ -17,6 +18,17 @@ import ShippingAddressFields from '../components/ShippingAddressFields.vue';
 
 const router = useRouter();
 const cart = ref({ items: [], totalQuantity: 0, totalPrice: 0, shippingFee: 0, payAmount: 0, amountUntilFree: 0 });
+
+/**
+ * 쿠폰 — 서버가 "지금 얼마 깎이는지"(discountPreview)와 "쓸 수 있는지"(usable)를 계산해 준다.
+ * 화면은 할인 규칙(정액/정률·상한·최소주문금액)을 몰라도 된다.
+ */
+const coupons = ref([]);
+const selectedCouponId = ref(null);
+const selectedCoupon = computed(() => coupons.value.find((c) => c.id === selectedCouponId.value) || null);
+const couponDiscount = computed(() => selectedCoupon.value?.discountPreview ?? 0);
+// 배송비는 **할인 전** 상품합계로 정해지므로 쿠폰을 써도 안 바뀐다.
+const payAmount = computed(() => cart.value.totalPrice - couponDiscount.value + cart.value.shippingFee);
 const loading = ref(true);
 const submitting = ref(false);
 const error = ref('');
@@ -32,6 +44,9 @@ const unavailable = computed(() => cart.value.items.some((i) => !i.available));
 async function load() {
   try {
     cart.value = await getCart();
+    // 쿠폰은 상품합계를 알아야 "얼마 깎이는지"를 서버가 계산해 줄 수 있어 장바구니 뒤에 부른다.
+    // 실패해도 주문은 되어야 하므로 막지 않는다(기본 배송지 저장과 같은 판단).
+    coupons.value = await fetchMyCoupons(cart.value.totalPrice).catch(() => []);
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -60,7 +75,8 @@ async function submit() {
   const address = trimAddress(form);
   try {
     // 기본 배송지 저장은 부가 기능이라 실패해도 주문을 막지 않는다(순서는 주문 먼저).
-    const orderId = await apiCheckout(address);
+    // 쿠폰 id만 보낸다 — 할인액은 서버가 다시 계산한다(본문으로 받으면 위조 가능).
+    const orderId = await apiCheckout({ ...address, memberCouponId: selectedCouponId.value });
     if (saveAsDefault.value) {
       await updateShippingAddress(address).catch(() => {});
     }
@@ -128,10 +144,35 @@ async function submit() {
           </li>
         </ul>
 
+        <!-- 쿠폰 선택. 서버가 쿠폰마다 usable·discountPreview·reason을 계산해 주므로
+             화면은 못 쓰는 이유를 그대로 보여주기만 하면 된다. -->
+        <div v-if="coupons.length" class="mt-4 border-t border-line pt-4">
+          <span class="muted mb-2 block">쿠폰</span>
+          <label class="flex items-center gap-2 py-1 text-sm">
+            <input v-model="selectedCouponId" type="radio" :value="null" />
+            <span class="text-ink-700">사용 안 함</span>
+          </label>
+          <label
+            v-for="c in coupons"
+            :key="c.id"
+            class="flex items-center gap-2 py-1 text-sm"
+            :class="c.usable ? '' : 'opacity-50'"
+          >
+            <input v-model="selectedCouponId" type="radio" :value="c.id" :disabled="!c.usable" />
+            <span class="min-w-0 flex-1 truncate text-ink-900">{{ c.name }}</span>
+            <span v-if="c.usable" class="shrink-0 tabular-nums text-danger">−{{ priceText(c.discountPreview) }}</span>
+            <span v-else class="muted shrink-0">{{ c.reason }}</span>
+          </label>
+        </div>
+
         <dl class="mt-4 space-y-2 border-t border-line pt-4 text-sm">
           <div class="flex items-center justify-between gap-4">
             <dt class="text-ink-500">상품 금액</dt>
             <dd class="tabular-nums text-ink-700">{{ priceText(cart.totalPrice) }}</dd>
+          </div>
+          <div v-if="couponDiscount > 0" class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">쿠폰 할인</dt>
+            <dd class="tabular-nums text-danger">−{{ priceText(couponDiscount) }}</dd>
           </div>
           <div class="flex items-center justify-between gap-4">
             <dt class="text-ink-500">배송비</dt>
@@ -149,7 +190,7 @@ async function submit() {
 
         <div class="mt-4 flex items-end justify-between gap-4 border-t border-line pt-4">
           <span class="text-sm font-medium text-ink-700">결제 금액</span>
-          <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(cart.payAmount) }}</span>
+          <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(payAmount) }}</span>
         </div>
 
         <button type="button" class="btn btn-primary mt-5 w-full" :disabled="submitting" @click="submit">

@@ -65,6 +65,17 @@ public class Order extends BaseTimeEntity {
     @Column(name = "shipping_fee", nullable = false)
     private long shippingFee;
 
+    /**
+     * 사용한 쿠폰의 이름·할인액 스냅샷(V17). 쿠폰 정의가 바뀌거나 삭제돼도 주문 내역은
+     * "그때 얼마 할인받았는지"를 그대로 보여줘야 한다 — 배송비·정가와 같은 판단.
+     * 쿠폰을 안 쓴 주문은 이름이 null, 할인액이 0 이다(모르는 값이 아니라 0 이다).
+     */
+    @Column(name = "coupon_name", length = 100, updatable = false)
+    private String couponName;
+
+    @Column(name = "coupon_discount", nullable = false, updatable = false)
+    private long couponDiscount;
+
     private Instant paidAt;
 
     private Instant shippedAt;
@@ -123,9 +134,12 @@ public class Order extends BaseTimeEntity {
     public static Order create(UUID memberId, String buyerNickname, List<OrderItem> orderItems,
                                String shipRecipient, String shipPhone,
                                String shipZipcode, String shipAddress1, String shipAddress2,
-                               long shippingFee, String orderNo) {
+                               long shippingFee, String orderNo,
+                               String couponName, long couponDiscount) {
         Order order = new Order(memberId, buyerNickname, orderNo);
         order.shippingFee = shippingFee;
+        order.couponName = couponName;
+        order.couponDiscount = couponDiscount;
         order.shipRecipient = shipRecipient;
         order.shipPhone = shipPhone;
         order.shipZipcode = shipZipcode;
@@ -141,9 +155,15 @@ public class Order extends BaseTimeEntity {
         this.totalPrice += item.getLineTotal();
     }
 
-    /** 실제 결제 금액 = 상품 합계 + 배송비. 저장하지 않고 계산한다(두 값이 어긋날 여지를 만들지 않는다). */
+    /**
+     * 실제 결제 금액 = 상품합계 − 쿠폰할인 + 배송비. 저장하지 않고 계산한다
+     * (저장하면 구성 요소와 어긋날 여지가 생긴다).
+     *
+     * <p>배송비는 <b>할인 전</b> 상품합계로 정해진다 — 쿠폰을 썼다고 배송비가 붙으면
+     * 고객이 손해 본 기분이 든다(2026-07-23 결정). 그래서 이 식의 순서가 곧 정책이다.
+     */
     public long getPayAmount() {
-        return totalPrice + shippingFee;
+        return totalPrice - couponDiscount + shippingFee;
     }
 
     public boolean isPayable() {

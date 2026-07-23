@@ -25,6 +25,8 @@ public record AdminOrderResponse(
         // totalPrice(상품 합계)도 함께 내려 정산 시 배송비를 갈라 볼 수 있게 한다.
         long totalPrice,
         long shippingFee,
+        String couponName,
+        long couponDiscount,
         long payAmount,
         int itemCount,
         String summary,
@@ -43,6 +45,8 @@ public record AdminOrderResponse(
                 o.getStatus(),
                 o.getTotalPrice(),
                 o.getShippingFee(),
+                o.getCouponName(),
+                o.getCouponDiscount(),
                 o.getPayAmount(),
                 count,
                 count <= 1 ? first : first + " 외 " + (count - 1) + "건",

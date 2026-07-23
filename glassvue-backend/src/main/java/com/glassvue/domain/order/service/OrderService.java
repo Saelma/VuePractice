@@ -4,6 +4,7 @@ import com.glassvue.domain.cart.dto.CartItemResponse;
 import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.cart.service.CartService;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
+import com.glassvue.domain.coupon.service.CouponService;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.dto.AdminOrderResponse;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
@@ -48,6 +49,7 @@ public class OrderService {
     private final ApplicationEventPublisher eventPublisher;
     private final DeliveryProperties deliveryProperties;
     private final ShippingPolicy shippingPolicy;
+    private final CouponService couponService;
 
     /**
      * 장바구니 → 주문 생성. 재고 원자적 차감 + 카트 비우기.
@@ -74,12 +76,27 @@ public class OrderService {
                     i.price(), i.listPrice(), i.quantity()));
         }
 
-        // 배송비는 **서버가 계산해 스냅샷**한다 — 요청 본문으로 받으면 클라이언트가 0원으로 위조할 수 있다
-        // (품목·가격을 장바구니에서 읽는 것과 같은 이유).
+        // 금액 계산 순서: 상품합계 → 쿠폰할인 → 배송비 → 결제금액.
+        //
+        // ⚠ 배송비는 **할인 전** 상품합계로 정한다(2026-07-23 결정) — 쿠폰을 썼다고 배송비가 붙으면
+        // 고객이 손해 본 기분이 든다. 덕분에 이 줄은 쿠폰이 생겨도 그대로다.
         long shippingFee = shippingPolicy.feeFor(cart.totalPrice());
+
+        // 쿠폰은 coupon 도메인의 공개 API로만 다룬다(엔티티·리포지토리를 직접 만지지 않는다).
+        // 검증과 사용처리가 redeem 한 번에 끝나므로 "검증했으니 이제 써도 되겠지" 사이의 틈이 없다.
+        // 같은 트랜잭션이라 주문이 롤백되면 쿠폰 사용도 함께 롤백된다.
+        String couponName = null;
+        long couponDiscount = 0L;
+        if (req.memberCouponId() != null) {
+            couponName = couponService.nameOf(req.memberCouponId());
+            couponDiscount = couponService.redeem(req.memberCouponId(), memberId, cart.totalPrice());
+        }
+
+        // 배송비·할인액 모두 **서버가 계산해 스냅샷**한다 — 요청 본문으로 받으면 위조할 수 있다
+        // (품목·가격을 장바구니에서 읽는 것과 같은 이유).
         Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems,
                 req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2(),
-                shippingFee, nextOrderNo()));
+                shippingFee, nextOrderNo(), couponName, couponDiscount));
         cartService.clear(memberId);
         // 도메인 이벤트 발행 — 구독자(알림·포인트 등)는 order가 모른다. AFTER_COMMIT 리스너가 커밋된 주문에만 반응.
         eventPublisher.publishEvent(OrderPlacedEvent.from(order));

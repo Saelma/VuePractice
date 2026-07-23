@@ -30,6 +30,9 @@ public record OrderCreateRequest(
 
         @Schema(description = "상세 주소(선택)", example = "3층 301호")
         @Size(max = 200)
-        String address2
+        String address2,
+
+        @Schema(description = "사용할 쿠폰(내 쿠폰 id). 비우면 쿠폰 미사용")
+        java.util.UUID memberCouponId
 ) {
 }

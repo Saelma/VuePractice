@@ -74,7 +74,7 @@ class AdminOrderListIntegrationTest {
 
     private void save(java.util.function.Consumer<Order> transition) {
         Order order = Order.create(userId, MARK + "-구매자",
-                List.of(OrderItem.of(UUID.randomUUID(), MARK + "-상품", null, 10_000, null, 1)), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, uniqueOrderNo());
+                List.of(OrderItem.of(UUID.randomUUID(), MARK + "-상품", null, 10_000, null, 1)), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, uniqueOrderNo(), null, 0L);
         transition.accept(order);
         orderRepository.save(order);
     }

@@ -13,7 +13,7 @@ class OrderTest {
     private Order newOrder() {
         return Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 10_000, null, 2)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001");
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L);
     }
 
     @Test
@@ -37,7 +37,7 @@ class OrderTest {
     void freeShipping() {
         Order o = Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 40_000, null, 1)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 0, "20260101-0002");
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 0, "20260101-0002", null, 0L);
         assertThat(o.getShippingFee()).isZero();
         assertThat(o.getPayAmount()).isEqualTo(o.getTotalPrice());
     }
@@ -109,8 +109,34 @@ class OrderTest {
     void ownership() {
         UUID me = UUID.randomUUID();
         Order o = Order.create(me, "구매자닉", List.of(OrderItem.of(UUID.randomUUID(), "x", null, 1000, null, 1)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001");
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L);
         assertThat(o.isOwnedBy(me)).isTrue();
         assertThat(o.isOwnedBy(UUID.randomUUID())).isFalse();
     }
+
+    @Test
+    @DisplayName("쿠폰: 결제 금액 = 상품합계 − 쿠폰할인 + 배송비 (배송비는 할인 전 기준이라 그대로)")
+    void payAmountWithCoupon() {
+        // 상품합계 20,000 / 배송비 3,000 / 쿠폰 5,000 할인
+        Order o = Order.create(UUID.randomUUID(), "구매자닉",
+                List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 10_000, null, 2)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층",
+                3_000, "20260101-0003", "5천원 쿠폰", 5_000L);
+
+        assertThat(o.getTotalPrice()).isEqualTo(20_000);   // 상품합계는 할인 전 그대로
+        assertThat(o.getCouponDiscount()).isEqualTo(5_000);
+        assertThat(o.getShippingFee()).isEqualTo(3_000);
+        assertThat(o.getPayAmount()).isEqualTo(18_000);    // 20,000 - 5,000 + 3,000
+        assertThat(o.getCouponName()).isEqualTo("5천원 쿠폰");
+    }
+
+    @Test
+    @DisplayName("쿠폰 미사용: 할인액 0이고 쿠폰명은 null — 결제 금액은 상품합계 + 배송비")
+    void payAmountWithoutCoupon() {
+        Order o = newOrder();
+        assertThat(o.getCouponDiscount()).isZero();
+        assertThat(o.getCouponName()).isNull();
+        assertThat(o.getPayAmount()).isEqualTo(o.getTotalPrice() + o.getShippingFee());
+    }
+
 }

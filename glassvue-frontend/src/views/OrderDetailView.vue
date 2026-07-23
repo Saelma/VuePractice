@@ -241,6 +241,11 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <dt class="text-ink-500">상품 금액</dt>
             <dd class="tabular-nums text-ink-700">{{ priceText(order.totalPrice) }}</dd>
           </div>
+          <!-- 쿠폰 스냅샷(V17). 안 쓴 주문·도입 이전 주문은 할인액이 0이라 줄이 안 나온다. -->
+          <div v-if="order.couponDiscount > 0" class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">쿠폰 할인<span v-if="order.couponName" class="muted"> · {{ order.couponName }}</span></dt>
+            <dd class="tabular-nums text-danger">−{{ priceText(order.couponDiscount) }}</dd>
+          </div>
           <div class="flex items-center justify-between gap-4">
             <dt class="text-ink-500">배송비</dt>
             <dd class="tabular-nums" :class="order.shippingFee ? 'text-ink-700' : 'text-emerald-700'">

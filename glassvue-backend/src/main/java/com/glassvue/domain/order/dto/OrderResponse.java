@@ -28,6 +28,9 @@ public record OrderResponse(
         // totalPrice는 상품 합계(배송비 제외). payAmount = totalPrice + shippingFee 가 실제 결제 금액이다.
         long totalPrice,
         long shippingFee,
+        // 쿠폰 스냅샷(V17). 안 쓴 주문은 이름 null, 할인액 0.
+        String couponName,
+        long couponDiscount,
         long payAmount,
         List<OrderItemResponse> items,
         Instant createdAt,
@@ -61,6 +64,8 @@ public record OrderResponse(
                 o.getStatus(),
                 o.getTotalPrice(),
                 o.getShippingFee(),
+                o.getCouponName(),
+                o.getCouponDiscount(),
                 o.getPayAmount(),
                 o.getItems().stream().map(OrderItemResponse::from).toList(),
                 o.getCreatedAt(),

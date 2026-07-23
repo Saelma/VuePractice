@@ -56,7 +56,12 @@ public enum ErrorCode {
     INQUIRY_NOT_FOUND("INQUIRY-404", HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
     INQUIRY_NOT_OWNER("INQUIRY-403", HttpStatus.FORBIDDEN, "본인 문의만 수정·삭제할 수 있습니다."),
     INQUIRY_ALREADY_ANSWERED("INQUIRY-400A", HttpStatus.BAD_REQUEST, "답변이 완료된 문의는 수정할 수 없습니다."),
-    INQUIRY_SELF_ANSWER("INQUIRY-403S", HttpStatus.FORBIDDEN, "본인이 등록한 문의에는 답변할 수 없습니다.");
+    INQUIRY_SELF_ANSWER("INQUIRY-403S", HttpStatus.FORBIDDEN, "본인이 등록한 문의에는 답변할 수 없습니다."),
+
+    COUPON_NOT_FOUND("COUPON-404", HttpStatus.NOT_FOUND, "쿠폰을 찾을 수 없습니다."),
+    COUPON_ALREADY_USED("COUPON-409", HttpStatus.CONFLICT, "이미 사용한 쿠폰입니다."),
+    COUPON_EXPIRED("COUPON-400E", HttpStatus.BAD_REQUEST, "사용 기간이 아닌 쿠폰입니다."),
+    COUPON_MIN_ORDER_NOT_MET("COUPON-400M", HttpStatus.BAD_REQUEST, "쿠폰의 최소 주문금액을 채우지 못했습니다.");
 
     private final String code;
     private final HttpStatus status;
