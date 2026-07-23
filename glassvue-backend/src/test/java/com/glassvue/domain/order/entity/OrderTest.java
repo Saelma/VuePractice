@@ -7,7 +7,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** 주문 상태 머신(ORDERED→PAID→SHIPPED, 취소 규칙)의 순수 단위 테스트. */
+/** 주문 상태 머신(ORDERED→PAID→SHIPPED→DELIVERED, 취소 규칙)의 순수 단위 테스트. */
 class OrderTest {
 
     private Order newOrder() {
@@ -41,15 +41,43 @@ class OrderTest {
     }
 
     @Test
-    @DisplayName("발송: SHIPPED로 전이 · shippedAt 기록 · 더는 취소 불가")
+    @DisplayName("발송: SHIPPED로 전이 · shippedAt·운송장 기록 · 더는 취소 불가 · 배송완료 가능")
     void ship() {
         Order o = newOrder();
         o.pay();
-        o.ship();
+        o.ship(DeliveryCarrier.CJ, "123456789012");
         assertThat(o.getStatus()).isEqualTo(OrderStatus.SHIPPED);
         assertThat(o.getShippedAt()).isNotNull();
         assertThat(o.isCancellable()).isFalse();
         assertThat(o.isShippable()).isFalse();
+        // 운송장은 발송과 한 몸이다 — 발송했는데 추적 정보가 없는 상태를 만들지 않는다.
+        assertThat(o.getShipCarrier()).isEqualTo(DeliveryCarrier.CJ);
+        assertThat(o.getShipTrackingNo()).isEqualTo("123456789012");
+        assertThat(o.isDeliverable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("배송완료: DELIVERED로 전이 · deliveredAt 기록 · 재처리 불가 · 취소 불가")
+    void deliver() {
+        Order o = newOrder();
+        o.pay();
+        o.ship(DeliveryCarrier.CJ, "123456789012");
+        o.deliver();
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(o.getDeliveredAt()).isNotNull();
+        assertThat(o.isDeliverable()).isFalse();
+        assertThat(o.isCancellable()).isFalse();
+        // 운송장은 그대로 남는다 — 수령 후에도 배송 이력은 조회할 수 있어야 한다.
+        assertThat(o.getShipTrackingNo()).isEqualTo("123456789012");
+    }
+
+    @Test
+    @DisplayName("발송 전에는 배송완료 처리할 수 없다 (ORDERED·PAID)")
+    void notDeliverableBeforeShip() {
+        Order o = newOrder();
+        assertThat(o.isDeliverable()).isFalse();
+        o.pay();
+        assertThat(o.isDeliverable()).isFalse();
     }
 
     @Test

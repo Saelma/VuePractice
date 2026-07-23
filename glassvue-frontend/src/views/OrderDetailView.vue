@@ -4,7 +4,10 @@
  */
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { getOrder, payOrder, shipOrder, cancelOrder, orderStatusText, orderStatusClass } from '../api/order';
+import {
+  getOrder, payOrder, shipOrder, deliverOrder, cancelOrder,
+  orderStatusText, orderStatusClass, DELIVERY_CARRIERS,
+} from '../api/order';
 import { priceText } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
 import { addressText } from '../api/shipping';
@@ -45,8 +48,33 @@ async function act(fn, confirmMsg) {
   }
 }
 const onPay = () => act(payOrder, '결제를 진행할까요? (실제 결제 없이 상태만 결제완료로)');
-const onShip = () => act(shipOrder, '이 주문을 발송 처리할까요?');
 const onCancel = () => act(cancelOrder, '주문을 취소할까요? (재고가 복원됩니다)');
+const onDeliver = () => act(deliverOrder, '이 주문을 배송완료로 처리할까요?');
+
+/**
+ * 발송 처리는 운송장 입력이 필요해 `window.confirm`으로 처리할 수 없다 — 그래서 인라인 폼을 연다.
+ * 값이 null이면 닫힌 상태.
+ */
+const shipForm = ref(null);
+function openShipForm() {
+  shipForm.value = { carrier: 'CJ', trackingNo: '' };
+}
+async function submitShip() {
+  const trackingNo = shipForm.value.trackingNo.trim();
+  // 서버도 @NotBlank로 막지만, 화면에서 먼저 걸러 왕복을 아낀다(배송지 입력과 같은 방식).
+  if (!trackingNo) {
+    error.value = '송장번호를 입력해 주세요.';
+    return;
+  }
+  error.value = '';
+  try {
+    await shipOrder(props.id, { carrier: shipForm.value.carrier, trackingNo });
+    shipForm.value = null;
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
 
 function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
@@ -61,9 +89,11 @@ const STEPS = [
   { key: 'ORDERED', label: '주문 접수', at: (o) => o.createdAt },
   { key: 'PAID', label: '결제 완료', at: (o) => o.paidAt },
   { key: 'SHIPPED', label: '발송 완료', at: (o) => o.shippedAt },
+  { key: 'DELIVERED', label: '배송 완료', at: (o) => o.deliveredAt },
 ];
 const currentStep = computed(() => {
   const s = order.value?.status;
+  if (s === 'DELIVERED') return 3;
   if (s === 'SHIPPED') return 2;
   if (s === 'PAID') return 1;
   return 0; // ORDERED
@@ -162,6 +192,31 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
         </dl>
       </div>
 
+      <!-- 배송 추적(V13). 운송장 도입 이전 주문은 값이 없어 아예 감춘다 — 배송지 카드와 같은 규칙. -->
+      <div v-if="order.shipTrackingNo" class="card mt-6 p-5">
+        <h2 class="section-title">배송 추적</h2>
+        <dl class="mt-3 space-y-2 text-sm">
+          <div class="flex gap-4">
+            <dt class="w-20 shrink-0 text-ink-500">택배사</dt>
+            <dd class="text-ink-900">{{ order.shipCarrierName }}</dd>
+          </div>
+          <div class="flex gap-4">
+            <dt class="w-20 shrink-0 text-ink-500">송장번호</dt>
+            <dd class="tabular-nums text-ink-900">{{ order.shipTrackingNo }}</dd>
+          </div>
+        </dl>
+        <!-- 조회 링크는 서버가 택배사별 형식으로 완성해 준다(화면은 택배사 지식을 갖지 않는다).
+             '기타'처럼 조회 형식이 없는 택배사는 trackingUrl이 null이라 버튼이 안 나오고,
+             송장번호는 위에 그대로 있어 고객이 직접 조회할 수는 있다. -->
+        <a
+          v-if="order.trackingUrl"
+          :href="order.trackingUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-secondary mt-4 inline-flex"
+        >배송 조회 ↗</a>
+      </div>
+
       <!-- 품목 + 합계 -->
       <div class="card mt-6">
         <h2 class="section-title border-b border-line px-5 py-4">주문 품목</h2>
@@ -202,13 +257,43 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             >결제하기</button>
           </template>
 
-          <!-- 관리자 액션: 결제완료 주문 발송 처리 -->
+          <!-- 관리자 액션: 결제완료 → 발송(운송장 입력), 발송완료 → 배송완료 -->
           <button
-            v-if="isAdmin && order.status === 'PAID'"
+            v-if="isAdmin && order.status === 'PAID' && !shipForm"
             type="button"
             class="btn btn-primary"
-            @click="onShip"
+            @click="openShipForm"
           >발송 처리</button>
+          <button
+            v-if="isAdmin && order.status === 'SHIPPED'"
+            type="button"
+            class="btn btn-primary"
+            @click="onDeliver"
+          >배송완료 처리</button>
+        </div>
+      </div>
+
+      <!-- 발송 처리 폼(관리자). 운송장이 필수라 confirm 대화상자로는 처리할 수 없어 인라인 폼으로 받는다. -->
+      <div v-if="shipForm" class="card mt-4 p-5">
+        <h2 class="section-title">운송장 등록</h2>
+        <p class="muted mt-1">
+          등록하면 주문이 발송완료로 바뀌고 고객이 배송을 조회할 수 있습니다.
+        </p>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <label class="block">
+            <span class="muted mb-1 block">택배사</span>
+            <select v-model="shipForm.carrier" class="field">
+              <option v-for="c in DELIVERY_CARRIERS" :key="c.value" :value="c.value">{{ c.text }}</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="muted mb-1 block">송장번호</span>
+            <input v-model="shipForm.trackingNo" class="field" placeholder="숫자만 입력" />
+          </label>
+        </div>
+        <div class="mt-4 flex justify-end gap-2">
+          <button type="button" class="btn btn-secondary" @click="shipForm = null">취소</button>
+          <button type="button" class="btn btn-primary" @click="submitShip">발송 처리</button>
         </div>
       </div>
     </template>

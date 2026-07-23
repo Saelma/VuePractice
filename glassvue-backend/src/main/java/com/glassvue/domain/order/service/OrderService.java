@@ -9,6 +9,7 @@ import com.glassvue.domain.order.dto.AdminOrderResponse;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
+import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.entity.OrderStatus;
@@ -136,16 +137,38 @@ public class OrderService {
         log.info("Order paid: {} by {}", id, memberId);
     }
 
-    /** 발송 처리(관리자 전용, 권한은 SecurityConfig에서 강제) — PAID 상태만. */
+    /**
+     * 발송 처리(관리자 전용, 권한은 SecurityConfig에서 강제) — PAID 상태만.
+     *
+     * <p>운송장(택배사·송장번호)을 함께 받는다. 발송과 운송장 등록을 한 트랜잭션으로 묶어야
+     * "발송됐는데 추적 정보가 없는" 중간 상태가 생기지 않는다.
+     */
     @Transactional
-    public void ship(UUID id) {
+    public void ship(UUID id, DeliveryCarrier carrier, String trackingNo) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!order.isShippable()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_SHIPPABLE);
         }
-        order.ship();
-        log.info("Order shipped: {}", id);
+        order.ship(carrier, trackingNo);
+        log.info("Order shipped: {} via {} ({})", id, carrier, trackingNo);
+    }
+
+    /**
+     * 배송완료 처리(관리자 전용) — SHIPPED 상태만.
+     *
+     * <p>실제 커머스는 택배사 웹훅으로 자동 전이하지만, 지금은 관리자가 누르는 수동 전이다
+     * (PG 연동과 같은 자리 — 나중에 자동화하더라도 이 상태 전이 자체는 그대로 쓰인다).
+     */
+    @Transactional
+    public void deliver(UUID id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!order.isDeliverable()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_DELIVERABLE);
+        }
+        order.deliver();
+        log.info("Order delivered: {}", id);
     }
 
     /** 주문 취소 — 본인 주문·취소가능(ORDERED/PAID) 상태만. 재고 복원. */

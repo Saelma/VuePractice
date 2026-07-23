@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
+import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.repository.OrderRepository;
@@ -62,7 +63,7 @@ class AdminOrderListIntegrationTest {
         // 상태가 다른 주문 3건 — 필터가 실제로 거르는지 보려면 상태가 섞여 있어야 한다.
         save(o -> {});                       // ORDERED
         save(Order::pay);                    // PAID
-        save(o -> { o.pay(); o.ship(); });   // SHIPPED
+        save(o -> { o.pay(); o.ship(DeliveryCarrier.CJ, "123"); });   // SHIPPED
     }
 
     private UUID member(String loginId, String nickname, Role role) {

@@ -1,5 +1,6 @@
 package com.glassvue.domain.order.dto;
 
+import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderStatus;
 import java.time.Instant;
@@ -28,12 +29,18 @@ public record OrderResponse(
         Instant paidAt,
         Instant shippedAt,
         Instant cancelledAt,
+        Instant deliveredAt,
         // 배송지 스냅샷(주문 시점). 배송지 도입(V11) 이전 주문은 전부 null이다.
         String shipRecipient,
         String shipPhone,
         String shipZipcode,
         String shipAddress1,
-        String shipAddress2
+        String shipAddress2,
+        // 배송 추적(V13). 운송장 도입 이전 주문은 전부 null이라 화면이 추적 영역을 감춘다.
+        DeliveryCarrier shipCarrier,
+        String shipCarrierName,
+        String shipTrackingNo,
+        String trackingUrl
 ) {
     public static OrderResponse from(Order o) {
         return new OrderResponse(
@@ -47,10 +54,15 @@ public record OrderResponse(
                 o.getPaidAt(),
                 o.getShippedAt(),
                 o.getCancelledAt(),
+                o.getDeliveredAt(),
                 o.getShipRecipient(),
                 o.getShipPhone(),
                 o.getShipZipcode(),
                 o.getShipAddress1(),
-                o.getShipAddress2());
+                o.getShipAddress2(),
+                o.getShipCarrier(),
+                o.getShipCarrier() == null ? null : o.getShipCarrier().getDisplayName(),
+                o.getShipTrackingNo(),
+                o.getShipCarrier() == null ? null : o.getShipCarrier().trackingUrl(o.getShipTrackingNo()));
     }
 }

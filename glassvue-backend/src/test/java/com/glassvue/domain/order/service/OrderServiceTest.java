@@ -16,6 +16,7 @@ import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
+import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.entity.OrderStatus;
@@ -97,8 +98,11 @@ class OrderServiceTest {
         Order order = sampleOrder();
         order.pay();
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        orderService.ship(orderId);
+        orderService.ship(orderId, DeliveryCarrier.CJ, "123456789012");
         assertThat(order.getStatus()).isEqualTo(OrderStatus.SHIPPED);
+        // 운송장은 발송과 한 트랜잭션이다 — "발송됐는데 추적 정보가 없는" 중간 상태를 만들지 않는다.
+        assertThat(order.getShipCarrier()).isEqualTo(DeliveryCarrier.CJ);
+        assertThat(order.getShipTrackingNo()).isEqualTo("123456789012");
     }
 
     @Test
@@ -106,7 +110,29 @@ class OrderServiceTest {
     void ship_notShippable() {
         Order order = sampleOrder();
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        assertErrorCode(() -> orderService.ship(orderId), ErrorCode.ORDER_NOT_SHIPPABLE);
+        assertErrorCode(() -> orderService.ship(orderId, DeliveryCarrier.CJ, "123"),
+                ErrorCode.ORDER_NOT_SHIPPABLE);
+    }
+
+    @Test
+    @DisplayName("배송완료: SHIPPED 주문 → DELIVERED + 수령 시각 기록")
+    void deliver_success() {
+        Order order = sampleOrder();
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123456789012");
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        orderService.deliver(orderId);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(order.getDeliveredAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("배송완료: 미발송(PAID) 주문 → ORDER_NOT_DELIVERABLE")
+    void deliver_notDeliverable() {
+        Order order = sampleOrder();
+        order.pay();
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        assertErrorCode(() -> orderService.deliver(orderId), ErrorCode.ORDER_NOT_DELIVERABLE);
     }
 
     @Test
@@ -128,7 +154,7 @@ class OrderServiceTest {
     void cancel_shippedBlocked() {
         Order order = sampleOrder();
         order.pay();
-        order.ship();
+        order.ship(DeliveryCarrier.CJ, "123");
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
         assertErrorCode(() -> orderService.cancel(orderId, memberId), ErrorCode.ORDER_NOT_CANCELLABLE);
         verify(productCommandService, never()).increaseStock(any(), org.mockito.ArgumentMatchers.anyLong());

@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 이커머스 전체 플로우 통합 — 실 컨텍스트 + MockMvc.
- * 장바구니 담기 → 결제(checkout) → 주문 조회 → 결제(pay) → 관리자 발송(ship)까지 관통.
+ * 장바구니 담기 → 결제(checkout) → 주문 조회 → 결제(pay) → 관리자 발송(ship) → 배송완료(deliver)까지 관통.
  * 회원(구매자·관리자)·상품을 리포지토리로 만들고 @Transactional 롤백 → 자체 완결·공유 DB 무오염.
  * (장바구니는 Redis지만 checkout이 비우므로 잔여 최소.)
  */
@@ -136,10 +136,75 @@ class OrderFlowIntegrationTest {
         mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
                 .andExpect(jsonPath("$.data.status").value("PAID"));
 
-        // 7) 발송(관리자) → SHIPPED
-        mockMvc.perform(post("/api/orders/" + orderId + "/ship").header("Authorization", admin))
+        // 7) 발송(관리자) → SHIPPED. 운송장(택배사·송장번호)이 필수다(V13).
+        //    운송장 없이 발송하면 고객이 추적할 수 없고 나중에 채워 넣을 경로도 없어서, 본문을 요구한다.
+        mockMvc.perform(post("/api/orders/" + orderId + "/ship").header("Authorization", admin)
+                        .contentType(JSON)
+                        .content("{\"carrier\":\"CJ\",\"trackingNo\":\"123456789012\"}"))
+                .andExpect(status().isOk());
+
+        // 8) 발송 후 조회 — 상태 + 운송장 스냅샷이 응답 계약에 실린다.
+        //    trackingUrl은 서버가 택배사별 형식으로 완성해 준다(화면이 택배사 지식을 갖지 않게).
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.status").value("SHIPPED"))
+                .andExpect(jsonPath("$.data.shipCarrier").value("CJ"))
+                .andExpect(jsonPath("$.data.shipCarrierName").value("CJ대한통운"))
+                .andExpect(jsonPath("$.data.shipTrackingNo").value("123456789012"))
+                .andExpect(jsonPath("$.data.trackingUrl").value(
+                        "https://trace.cjlogistics.co.kr/next/tracking.html?wblNo=123456789012"));
+
+        // 9) 배송완료(관리자) → DELIVERED + 수령 시각 기록
+        mockMvc.perform(post("/api/orders/" + orderId + "/deliver").header("Authorization", admin))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
-                .andExpect(jsonPath("$.data.status").value("SHIPPED"));
+                .andExpect(jsonPath("$.data.status").value("DELIVERED"))
+                .andExpect(jsonPath("$.data.deliveredAt").isNotEmpty());
+
+        // 10) 이미 배송완료된 주문은 다시 배송완료할 수 없다 → 400
+        mockMvc.perform(post("/api/orders/" + orderId + "/deliver").header("Authorization", admin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("ORDER-400D"));
+    }
+
+    @Test
+    @DisplayName("발송 처리에 운송장이 없으면 400 — 추적 불가한 발송을 막는다")
+    void ship_requiresTrackingInfo() throws Exception {
+        String admin = "Bearer " + login(adminLoginId);
+
+        // 존재하지 않는 주문이라도 본문 검증이 먼저 걸린다(@Valid는 서비스 진입 전에 동작).
+        // 즉 "주문을 못 찾음(404)"이 아니라 "본문이 잘못됨(400)"이어야 한다.
+        String someId = UUID.randomUUID().toString();
+
+        // 본문 자체가 없음 → 400 (GlobalExceptionHandler의 HttpMessageNotReadable 처리)
+        mockMvc.perform(post("/api/orders/" + someId + "/ship").header("Authorization", admin))
+                .andExpect(status().isBadRequest());
+
+        // 송장번호 누락 → 400
+        mockMvc.perform(post("/api/orders/" + someId + "/ship").header("Authorization", admin)
+                        .contentType(JSON).content("{\"carrier\":\"CJ\"}"))
+                .andExpect(status().isBadRequest());
+
+        // 택배사 누락 → 400
+        mockMvc.perform(post("/api/orders/" + someId + "/ship").header("Authorization", admin)
+                        .contentType(JSON).content("{\"trackingNo\":\"123\"}"))
+                .andExpect(status().isBadRequest());
+
+        // 없는 택배사 → 400 (DB CHECK 대신 enum이 검증한다 — DeliveryCarrier 참고)
+        mockMvc.perform(post("/api/orders/" + someId + "/ship").header("Authorization", admin)
+                        .contentType(JSON).content("{\"carrier\":\"없는택배\",\"trackingNo\":\"123\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("배송완료 처리 권한 — 비로그인 401 / 일반 사용자 403")
+    void deliver_requiresAdmin() throws Exception {
+        String buyer = "Bearer " + login(buyerLoginId);
+        String someId = UUID.randomUUID().toString();
+
+        mockMvc.perform(post("/api/orders/" + someId + "/deliver"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/orders/" + someId + "/deliver").header("Authorization", buyer))
+                .andExpect(status().isForbidden());
     }
 }

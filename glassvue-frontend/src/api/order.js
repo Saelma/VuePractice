@@ -27,7 +27,25 @@ export const ORDER_STATUS_OPTIONS = [
   { value: 'ORDERED', text: '결제대기' },
   { value: 'PAID', text: '결제완료' },
   { value: 'SHIPPED', text: '발송완료' },
+  { value: 'DELIVERED', text: '배송완료' },
   { value: 'CANCELLED', text: '취소됨' },
+];
+
+/**
+ * 택배사 선택지(관리자 발송 처리용).
+ *
+ * ⚠ 백엔드 `DeliveryCarrier` enum과 값이 같아야 한다 — 여기 없는 값을 보내면 서버가 400으로 거른다.
+ * 목록을 API로 내려받지 않고 정적으로 둔 이유: 선택지 표시는 화면의 몫이고, 실제 검증과
+ * **조회 URL 생성은 서버가** 한다(화면은 응답의 `trackingUrl`을 링크로 걸 뿐이다).
+ * 그래서 이 목록이 낡아도 생기는 일은 "선택지가 하나 안 보인다"이지 잘못된 저장이 아니다.
+ */
+export const DELIVERY_CARRIERS = [
+  { value: 'CJ', text: 'CJ대한통운' },
+  { value: 'KOREA_POST', text: '우체국택배' },
+  { value: 'HANJIN', text: '한진택배' },
+  { value: 'LOTTE', text: '롯데택배' },
+  { value: 'LOGEN', text: '로젠택배' },
+  { value: 'ETC', text: '기타(직접 전달 등)' },
 ];
 
 export function getOrder(id) {
@@ -38,8 +56,17 @@ export function payOrder(id) {
   return apiPost(`/api/orders/${id}/pay`); // ORDERED → PAID (실제 결제는 이후 PG 연동)
 }
 
-export function shipOrder(id) {
-  return apiPost(`/api/orders/${id}/ship`); // PAID → SHIPPED (관리자)
+/**
+ * 발송 처리(관리자, PAID → SHIPPED). 운송장이 **필수**다.
+ * 운송장 없이 발송하면 고객이 추적할 수 없고 나중에 채워 넣을 경로도 없어, 서버가 본문을 요구한다.
+ */
+export function shipOrder(id, { carrier, trackingNo }) {
+  return apiPost(`/api/orders/${id}/ship`, { carrier, trackingNo });
+}
+
+/** 배송완료 처리(관리자, SHIPPED → DELIVERED). 지금은 수동 전이 — 택배사 웹훅 연동은 이후 단계. */
+export function deliverOrder(id) {
+  return apiPost(`/api/orders/${id}/deliver`);
 }
 
 export function cancelOrder(id) {
@@ -50,6 +77,7 @@ export const ORDER_STATUS_TEXT = {
   ORDERED: '결제대기',
   PAID: '결제완료',
   SHIPPED: '발송완료',
+  DELIVERED: '배송완료',
   CANCELLED: '취소됨',
 };
 export function orderStatusText(status) {
@@ -62,7 +90,8 @@ export function orderStatusText(status) {
 const STATUS_CLASS = {
   ORDERED: 'badge-warning', // 결제대기 — 할 일이 남았다
   PAID: 'badge-success', // 결제완료
-  SHIPPED: 'badge-neutral', // 발송완료 — 더 할 일 없음
+  SHIPPED: 'badge-neutral', // 발송완료 — 배송 중(아직 종착이 아니다)
+  DELIVERED: 'badge-success', // 배송완료 — 정상 종료
   CANCELLED: 'badge-danger', // 취소됨
 };
 export function orderStatusClass(status) {

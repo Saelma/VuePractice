@@ -12,8 +12,8 @@ import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import {
-  fetchAdminOrders, fetchAdminOrderCounts, shipOrder,
-  orderStatusText, orderStatusClass, ORDER_STATUS_TEXT,
+  fetchAdminOrders, fetchAdminOrderCounts, shipOrder, deliverOrder,
+  orderStatusText, orderStatusClass, ORDER_STATUS_TEXT, DELIVERY_CARRIERS,
 } from '../api/order';
 import { priceText } from '../api/product';
 
@@ -82,13 +82,39 @@ function reset() {
   search();
 }
 
-async function onShip(row) {
-  if (!window.confirm(`${row.buyerNickname}님의 주문을 발송 처리할까요?`)) return;
+/**
+ * 발송 처리는 운송장(택배사·송장번호) 입력이 필요해 confirm 대화상자로 처리할 수 없다.
+ * 목록 위에 입력 패널을 띄우고, 어느 주문인지 함께 보여준다(그리드에서 행을 잃지 않게).
+ */
+const shipTarget = ref(null);
+function openShip(row) {
+  shipTarget.value = { id: row.id, buyer: row.buyerNickname, carrier: 'CJ', trackingNo: '' };
+}
+async function submitShip() {
+  const trackingNo = shipTarget.value.trackingNo.trim();
+  // 서버도 @NotBlank로 막지만 화면에서 먼저 거른다(왕복 절약).
+  if (!trackingNo) {
+    error.value = '송장번호를 입력해 주세요.';
+    return;
+  }
   error.value = '';
   try {
-    await shipOrder(row.id);
+    await shipOrder(shipTarget.value.id, { carrier: shipTarget.value.carrier, trackingNo });
+    shipTarget.value = null;
     gridRef.value?.instance.refresh();
     await loadCounts(); // 발송 대기 건수가 즉시 줄어드는 게 보이게
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+async function onDeliver(row) {
+  if (!window.confirm(`${row.buyerNickname}님의 주문을 배송완료로 처리할까요?`)) return;
+  error.value = '';
+  try {
+    await deliverOrder(row.id);
+    gridRef.value?.instance.refresh();
+    await loadCounts();
   } catch (e) {
     error.value = e.message;
   }
@@ -140,6 +166,30 @@ function fmt(v) {
       </div>
     </div>
 
+    <!-- 운송장 입력(발송 처리). 어느 주문인지 함께 보여줘야 그리드에서 행을 잃지 않는다. -->
+    <div v-if="shipTarget" class="card mb-4 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="section-title">운송장 등록 — {{ shipTarget.buyer }}님의 주문</h2>
+        <span class="muted">등록하면 발송완료로 바뀌고 고객이 배송을 조회할 수 있습니다.</span>
+      </div>
+      <div class="mt-3 flex flex-wrap items-end gap-3">
+        <label class="block">
+          <span class="muted mb-1 block">택배사</span>
+          <select v-model="shipTarget.carrier" class="field">
+            <option v-for="c in DELIVERY_CARRIERS" :key="c.value" :value="c.value">{{ c.text }}</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="muted mb-1 block">송장번호</span>
+          <input v-model="shipTarget.trackingNo" class="field" placeholder="숫자만 입력" @keyup.enter="submitShip" />
+        </label>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-primary" @click="submitShip">발송 처리</button>
+          <button type="button" class="btn btn-secondary" @click="shipTarget = null">취소</button>
+        </div>
+      </div>
+    </div>
+
     <DxDataGrid
       ref="gridRef"
       :data-source="store"
@@ -171,8 +221,14 @@ function fmt(v) {
             v-if="data.data.status === 'PAID'"
             type="button"
             class="btn btn-secondary btn-sm"
-            @click="onShip(data.data)"
+            @click="openShip(data.data)"
           >발송</button>
+          <button
+            v-if="data.data.status === 'SHIPPED'"
+            type="button"
+            class="btn btn-secondary btn-sm"
+            @click="onDeliver(data.data)"
+          >배송완료</button>
           <button type="button" class="btn btn-ghost btn-sm" @click="router.push(`/orders/${data.data.id}`)">상세</button>
         </div>
       </template>

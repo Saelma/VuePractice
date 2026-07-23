@@ -2,6 +2,7 @@ package com.glassvue.domain.order.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.global.config.JpaAuditingConfig;
@@ -63,7 +64,7 @@ class OrderRepositoryIntegrationTest {
     @Test
     @DisplayName("SHIPPED 주문 → 구매함 (배송까지 받은 고객이 리뷰를 쓸 수 있어야 한다)")
     void shipped_counts() {
-        orderWithStatus(o -> { o.pay(); o.ship(); });
+        orderWithStatus(o -> { o.pay(); o.ship(DeliveryCarrier.CJ, "123"); });
         assertThat(orderRepository.existsPurchase(memberId, productId)).isTrue();
     }
 

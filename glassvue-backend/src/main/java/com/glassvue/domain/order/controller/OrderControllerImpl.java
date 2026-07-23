@@ -5,6 +5,7 @@ import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
+import com.glassvue.domain.order.dto.OrderShipRequest;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.security.LoginUser;
@@ -58,8 +59,16 @@ public class OrderControllerImpl implements OrderController {
 
     @Override
     @PostMapping("/{id}/ship")
-    public ResponseEntity<ApiResponse<Void>> ship(@PathVariable UUID id) {
-        orderService.ship(id);
+    public ResponseEntity<ApiResponse<Void>> ship(@PathVariable UUID id,
+                                                  @Valid @RequestBody OrderShipRequest request) {
+        orderService.ship(id, request.carrier(), request.trackingNo());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Override
+    @PostMapping("/{id}/deliver")
+    public ResponseEntity<ApiResponse<Void>> deliver(@PathVariable UUID id) {
+        orderService.deliver(id);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
