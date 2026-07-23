@@ -205,6 +205,16 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
   파일 쓰기는 되돌리지 않는다. DB row가 없어 스위퍼도 못 잡는다.
 > 도메인 간 통신은 공개 서비스로만(catalog `ProductQueryService.ensureExists`, order `OrderService.hasPurchased`).
 
+> **배송비(2026-07-23, V14)**: `orders.total_price` 는 **상품 합계**(배송비 제외)이고, 배송비는
+> `orders.shipping_fee` 에 **따로** 둔다. `total_price` 에 더해버리면 이미 쌓인 주문의 숫자가
+> "상품 합계"인지 "결제 금액"인지 알 수 없어진다. 결제 금액(`payAmount`)은 **저장하지 않고 계산**한다
+> — 저장하면 두 값이 어긋날 여지가 생긴다.
+> **정책은 설정(`glassvue.shipping`), 부과된 금액은 스냅샷** — 정책이 바뀌어도 과거 주문의 배송비는
+> 그대로여야 한다(배송지·구매자 닉네임과 같은 이유). 배송비는 **서버가 계산**한다(요청 본문으로 받으면
+> 0원으로 위조 가능 — 품목·가격을 장바구니에서 읽는 것과 같은 이유).
+> `ShippingPolicy` 는 **global** 에 있다: 장바구니(주문 전 미리보기)와 주문(부과)이 둘 다 읽어야 하는데
+> 이미 `order → cart` 의존이 있어 order 에 두면 `cart → order` 로 **순환**이 된다.
+>
 > **주문 상태**: `ORDERED → PAID → SHIPPED → DELIVERED` (+CANCELLED, ORDERED·PAID만). 취소 시 재고 복원.
 > 2026-07-16에 SHIPPED까지 만들고, **2026-07-23에 배송 추적(V13)** 을 붙이며 DELIVERED를 추가했다.
 > 네 시점이 모두 DB에 기록된다(`created_at`·`paid_at`·`shipped_at`·`delivered_at` + `cancelled_at`) —
