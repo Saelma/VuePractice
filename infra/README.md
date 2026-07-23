@@ -14,13 +14,15 @@
 | `nginx/nginx.conf` | `/etc/nginx/nginx.conf` | 거의 stock. `include conf.d/*.conf` 때문에 필요 |
 | `nginx/conf.d/glassvue.conf` | `/etc/nginx/conf.d/glassvue.conf` | 실질 설정(TLS·프록시·캐시·보안헤더) |
 | `systemd/glassvue-backend.service` | `/etc/systemd/system/glassvue-backend.service` | |
+| `systemd/oracledb_ESPDB-19c.service.d/override.conf` | `/etc/systemd/system/oracledb_ESPDB-19c.service.d/override.conf` | Oracle 서비스 drop-in — 네트워크 뜬 뒤 시작(아래) |
 | `env.example` | `/home/ecstel/work/.env` | **형식만**. 실제 값은 커밋 금지 |
 
 **여기 없는 것**(의도적):
 
 - **`.env` 실값** — `.gitignore` 로 막혀 있다. 비밀값(`DB_PASSWORD`·`JWT_SECRET`)은 저장소에 두지 않는다.
 - **TLS 개인키** (`/etc/nginx/ssl/glassvue.key`) — 절대 커밋하지 않는다. 아래 재발급 절차로 만든다.
-- **Oracle 설정** — `/etc/init.d/oracledb_ESPDB-19c` 는 설치 프로그램이 만든 것이라 손대지 않았다.
+- **Oracle SysV 스크립트** — `/etc/init.d/oracledb_ESPDB-19c` 는 설치 프로그램이 만든 것이라 손대지 않는다.
+  대신 **부팅 순서만 drop-in override** 로 보정한다(위 `override.conf`, 아래 배경 참고).
 
 ## 반영하는 법 (전부 sudo — CLAUDE.md 상 직접 실행)
 
@@ -35,6 +37,12 @@ sudo /usr/local/sbin/nginx -t && sudo systemctl reload nginx
 # systemd
 sudo cp infra/systemd/glassvue-backend.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl restart glassvue-backend
+
+# Oracle 서비스 drop-in (부팅 순서 보정 — 배경은 아래 6번)
+sudo mkdir -p /etc/systemd/system/oracledb_ESPDB-19c.service.d
+sudo cp infra/systemd/oracledb_ESPDB-19c.service.d/override.conf \
+        /etc/systemd/system/oracledb_ESPDB-19c.service.d/
+sudo systemctl daemon-reload
 ```
 
 ## 드리프트 확인
@@ -81,6 +89,16 @@ curl --cacert glassvue.crt https://192.168.50.14/api/products   # 200 이어야 
 2. **`/etc/nginx/ssl/`** 인증서 배치(위 절차).
 3. **`/var/www/glassvue-uploads/`** 업로드 디렉토리 — 유닛의 `ReadWritePaths` 대상이라 없으면 기동 실패.
 4. **IP 정적 고정** — `nmcli con mod enp0s3 ipv4.method manual ...` (2026-07-22 핸드오프 §3-1).
-5. **Oracle 부팅 자동시작** — `sudo systemctl enable oracledb_ESPDB-19c`.
-   안 하면 백엔드의 `After=` 가 **가리킬 대상이 없어 무의미**해지고, 재부팅 때 DB 없이 시작해 실패한다.
+5. **Oracle 부팅 자동시작** — `enable` **하나로는 부족하다**(2026-07-23 재부팅으로 확인). 세 가지가 다 필요:
+   - `sudo systemctl enable oracledb_ESPDB-19c` — 안 하면 백엔드의 `After=` 가 가리킬 대상이 없어 무의미.
+   - **`/etc/hosts` 에 `192.168.50.14   ecstel` 핀** — `listener.ora` 가 `(HOST = ecstel)` 로 바인딩하는데,
+     핀이 없으면 호스트명이 IPv6 링크로컬(`fe80::…`)로만 잡혀 부팅 초반 리스너 바인드가 실패한다.
+   - **`override.conf` 반영**(위 systemd 절) — SysV 유닛엔 네트워크 의존성이 없어 부팅 13초 만에 실행돼
+     네트워크가 덜 올라온 채 리스너가 죽는다. `After/Wants=network-online.target` 으로 대기시킨다.
+     (`NetworkManager-wait-online` 이 `enabled` 여야 network-online 이 실제로 대기를 건다.)
+
+   > **배경 (2026-07-23)**: `enable` 만 해두고 재부팅했더니 `oracledb_ESPDB-19c` 가 `status=1` 로 실패했다
+   > (start→fail 이 같은 1초 — 리스너 즉시 바인드 실패). DB 는 수동 `lsnrctl start` + `startup` 으로 복구했다.
+   > 원인은 위 둘(호스트명 미해석 + 네트워크 의존성 부재). 검증 = 재부팅 후 손 안 대고
+   > `systemctl is-active oracledb_ESPDB-19c glassvue-backend` 둘 다 `active`.
 6. **`.env` 실값 작성** — `env.example` 참고.
