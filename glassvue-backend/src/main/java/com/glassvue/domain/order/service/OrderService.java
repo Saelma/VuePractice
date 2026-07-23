@@ -9,6 +9,7 @@ import com.glassvue.domain.order.dto.AdminOrderResponse;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
+import com.glassvue.domain.order.config.DeliveryProperties;
 import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
@@ -42,6 +43,7 @@ public class OrderService {
     private final CartService cartService;
     private final ProductCommandService productCommandService;
     private final ApplicationEventPublisher eventPublisher;
+    private final DeliveryProperties deliveryProperties;
 
     /**
      * 장바구니 → 주문 생성. 재고 원자적 차감 + 카트 비우기.
@@ -88,7 +90,7 @@ public class OrderService {
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> myOrders(UUID memberId, OrderSearchCondition condition, Pageable pageable) {
         Page<Order> page = orderRepository.search(condition.scopedTo(memberId), pageable);
-        return PageResponse.from(page.map(OrderResponse::from));
+        return PageResponse.from(page.map(this::toResponse));
     }
 
     /** 관리자 주문 목록 — 전체 주문. 구매자 정보를 포함한 별도 응답을 쓴다. */
@@ -122,7 +124,13 @@ public class OrderService {
                 ? orderRepository.findById(id)
                 : orderRepository.findByIdAndMemberId(id, user.id()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        return OrderResponse.from(order);
+        return toResponse(order);
+    }
+
+    /** 조회 링크는 설정으로 만들어 응답에 실어 준다 — 화면이 택배사별 URL 형식을 알 필요가 없게. */
+    private OrderResponse toResponse(Order order) {
+        return OrderResponse.from(order,
+                deliveryProperties.resolve(order.getShipCarrier(), order.getShipTrackingNo()));
     }
 
     /** 결제 완료 처리 — 본인 주문·ORDERED만. 실제 결제는 이후 PG 연동으로 대체(지금은 상태 전이만). */

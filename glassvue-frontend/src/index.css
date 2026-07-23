@@ -141,6 +141,10 @@ body {
 .alert-success {
   @apply rounded-card border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-700;
 }
+/* 주의 — 막는 건 아니지만 알아야 하는 것(예: 예시 데이터라는 고지) */
+.alert-warning {
+  @apply rounded-card border border-amber-100 bg-amber-50 p-3 text-sm text-amber-800;
+}
 
 /* --- 스켈레톤 --- */
 .skeleton {

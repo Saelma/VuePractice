@@ -42,7 +42,12 @@ public record OrderResponse(
         String shipTrackingNo,
         String trackingUrl
 ) {
-    public static OrderResponse from(Order o) {
+    /**
+     * {@code trackingUrl}은 설정({@code glassvue.delivery})으로 만들어져 들어온다 —
+     * 화면이 택배사별 URL 형식을 알 필요가 없게 서버가 완성해서 준다. 만들 수 없으면 null이고,
+     * 그때 화면은 조회 링크를 감추고 송장번호만 보여준다.
+     */
+    public static OrderResponse from(Order o, String trackingUrl) {
         return new OrderResponse(
                 o.getId(),
                 o.getMemberId(),
@@ -63,6 +68,6 @@ public record OrderResponse(
                 o.getShipCarrier(),
                 o.getShipCarrier() == null ? null : o.getShipCarrier().getDisplayName(),
                 o.getShipTrackingNo(),
-                o.getShipCarrier() == null ? null : o.getShipCarrier().trackingUrl(o.getShipTrackingNo()));
+                trackingUrl);
     }
 }

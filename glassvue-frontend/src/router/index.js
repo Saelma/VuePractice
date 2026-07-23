@@ -15,6 +15,7 @@ import CartView from '../views/CartView.vue';
 import CheckoutView from '../views/CheckoutView.vue';
 import OrderListView from '../views/OrderListView.vue';
 import OrderDetailView from '../views/OrderDetailView.vue';
+import MockTrackingView from '../views/MockTrackingView.vue';
 
 // 정적 경로(/notices/new)가 동적(/notices/:id)보다 우선 매칭된다(vue-router는 구체성 순).
 const routes = [
@@ -36,6 +37,10 @@ const routes = [
   { path: '/orders', name: 'order-list', component: OrderListView, meta: { requiresAuth: true } },
   { path: '/admin/orders', name: 'order-admin', component: OrderAdminView, meta: { requiresAdmin: true } },
   { path: '/orders/:id', name: 'order-detail', component: OrderDetailView, props: true, meta: { requiresAuth: true } },
+
+  // 배송 조회 **예시** 페이지. 실제 택배사 사이트 대신 여기로 보낸다(연습 단계라 외부 의존을 만들지 않는다).
+  // 백엔드 설정 glassvue.delivery.default-tracking-url 이 이 경로를 가리킨다.
+  { path: '/mock-tracking', name: 'mock-tracking', component: MockTrackingView },
 ];
 
 const router = createRouter({

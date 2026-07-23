@@ -87,3 +87,18 @@ app:
   upload:
     dir: /var/www/glassvue-uploads
     url-prefix: /uploads
+
+# 배송 조회 링크. {trackingNo}·{carrier} 자리에 값이 채워져 응답의 trackingUrl로 내려간다.
+#
+# ⚠ 기본값은 **앱 안의 예시 페이지**다. 실제 택배사 사이트를 가리키지 않는 이유:
+#   ①주문이 전부 가짜라 송장번호도 가짜여서 실제 조회 페이지로 보내봐야 "조회 결과 없음"만 나온다
+#   ②통제할 수 없는 외부 의존이 생긴다 — 택배사가 URL을 바꾸면 링크가 조용히 깨지는데 알 방법이 없다
+#   (ARCHITECTURE §1 "미리 만들지 않는다")
+#
+# 실제 배송이 필요해지면 tracking-url 아래에 택배사별 실제 URL을 넣기만 하면 된다(코드 변경 없음).
+#   tracking-url:
+#     CJ: "https://실제주소?wblNo={trackingNo}"
+# default-tracking-url을 빈 문자열로 두면 링크 자체를 만들지 않는다(송장번호만 표시).
+glassvue:
+  delivery:
+    default-tracking-url: "/mock-tracking?carrier={carrier}&no={trackingNo}"

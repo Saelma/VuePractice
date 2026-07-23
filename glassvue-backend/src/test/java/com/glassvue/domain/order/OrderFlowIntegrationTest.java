@@ -150,8 +150,10 @@ class OrderFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.shipCarrier").value("CJ"))
                 .andExpect(jsonPath("$.data.shipCarrierName").value("CJ대한통운"))
                 .andExpect(jsonPath("$.data.shipTrackingNo").value("123456789012"))
-                .andExpect(jsonPath("$.data.trackingUrl").value(
-                        "https://trace.cjlogistics.co.kr/next/tracking.html?wblNo=123456789012"));
+                // 조회 링크는 서버가 설정(glassvue.delivery)으로 완성해 준다 — 화면이 택배사별 URL 형식을
+                // 알지 않게. 기본값은 **앱 안의 예시 페이지**다(연습 단계라 실제 택배사로 보내지 않는다).
+                .andExpect(jsonPath("$.data.trackingUrl")
+                        .value("/mock-tracking?carrier=CJ&no=123456789012"));
 
         // 9) 배송완료(관리자) → DELIVERED + 수령 시각 기록
         mockMvc.perform(post("/api/orders/" + orderId + "/deliver").header("Authorization", admin))

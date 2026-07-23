@@ -16,6 +16,7 @@ import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
+import com.glassvue.domain.order.config.DeliveryProperties;
 import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -45,6 +47,9 @@ class OrderServiceTest {
     @Mock CartService cartService;
     @Mock ProductCommandService productCommandService;
     @Mock ApplicationEventPublisher eventPublisher;
+    // 설정 객체라 목이 아니라 실제 인스턴스를 넣는다 — 조회 링크 생성은 순수 문자열 조립이고,
+    // 목으로 두면 null을 돌려줘 "링크가 안 만들어지는" 경로만 검증하게 된다.
+    @Spy DeliveryProperties deliveryProperties = new DeliveryProperties();
     @InjectMocks OrderService orderService;
 
     private final UUID memberId = UUID.randomUUID();

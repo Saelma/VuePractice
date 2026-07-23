@@ -6,40 +6,32 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * 택배사 → 배송조회 URL 생성. 서버가 완성된 링크를 주기로 한 규약을 고정한다
- * (화면이 택배사별 URL 형식을 알지 않게 하는 것이 목적).
+ * 택배사 enum. 조회 URL은 여기 없다 — 설정({@code glassvue.delivery})으로 뺐다.
+ * 여기서 고정하는 건 표시명과 "조회할 곳이 있는 택배사인가"뿐이다.
  */
 class DeliveryCarrierTest {
-
-    @Test
-    @DisplayName("송장번호를 URL 형식에 끼워 넣는다")
-    void buildsTrackingUrl() {
-        assertThat(DeliveryCarrier.CJ.trackingUrl("123456789012"))
-                .isEqualTo("https://trace.cjlogistics.co.kr/next/tracking.html?wblNo=123456789012");
-        assertThat(DeliveryCarrier.LOGEN.trackingUrl("999"))
-                .isEqualTo("https://www.ilogen.com/web/personal/trace/999");
-    }
-
-    @Test
-    @DisplayName("조회 형식이 없는 택배사(기타)는 링크가 null — 화면은 송장번호만 보여준다")
-    void etcHasNoUrl() {
-        assertThat(DeliveryCarrier.ETC.getTrackingUrlFormat()).isNull();
-        assertThat(DeliveryCarrier.ETC.trackingUrl("123")).isNull();
-    }
-
-    @Test
-    @DisplayName("송장번호가 없거나 비면 링크도 없다 — 형식만으로 빈 조회 URL을 만들지 않는다")
-    void noTrackingNoMeansNoUrl() {
-        assertThat(DeliveryCarrier.CJ.trackingUrl(null)).isNull();
-        assertThat(DeliveryCarrier.CJ.trackingUrl("")).isNull();
-        assertThat(DeliveryCarrier.CJ.trackingUrl("  ")).isNull();
-    }
 
     @Test
     @DisplayName("모든 택배사가 표시명을 갖는다 — 화면이 enum 이름을 그대로 노출하지 않게")
     void everyCarrierHasDisplayName() {
         for (DeliveryCarrier c : DeliveryCarrier.values()) {
             assertThat(c.getDisplayName()).isNotBlank();
+        }
+    }
+
+    @Test
+    @DisplayName("기타(ETC)는 조회할 택배사가 없다 — 직접 전달 등")
+    void etcIsNotTrackable() {
+        assertThat(DeliveryCarrier.ETC.isTrackable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("나머지 택배사는 조회 대상이다")
+    void othersAreTrackable() {
+        for (DeliveryCarrier c : DeliveryCarrier.values()) {
+            if (c != DeliveryCarrier.ETC) {
+                assertThat(c.isTrackable()).as(c.name()).isTrue();
+            }
         }
     }
 }
