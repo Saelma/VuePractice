@@ -205,7 +205,18 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
   파일 쓰기는 되돌리지 않는다. DB row가 없어 스위퍼도 못 잡는다.
 > 도메인 간 통신은 공개 서비스로만(catalog `ProductQueryService.ensureExists`, order `OrderService.hasPurchased`).
 
-> **주문 상태(2026-07-16 구현)**: `ORDERED → PAID → SHIPPED` (+CANCELLED, ORDERED·PAID만). 취소 시 재고 복원.
+> **주문 상태**: `ORDERED → PAID → SHIPPED → DELIVERED` (+CANCELLED, ORDERED·PAID만). 취소 시 재고 복원.
+> 2026-07-16에 SHIPPED까지 만들고, **2026-07-23에 배송 추적(V13)** 을 붙이며 DELIVERED를 추가했다.
+> 네 시점이 모두 DB에 기록된다(`created_at`·`paid_at`·`shipped_at`·`delivered_at` + `cancelled_at`) —
+> 주문 상세의 진행 스텝은 이 실제 기록을 그린다(화면에서 지어낸 값이 아니다).
+>
+> **배송 추적(2026-07-23, V13)**: 발송 처리에 **운송장(택배사·송장번호)이 필수**다. 운송장 없이 발송하면
+> 나중에 채워 넣을 경로가 없어 그 주문은 영영 추적 불가가 되므로, 발송 전이와 운송장 등록을 한 트랜잭션으로 묶었다.
+> 택배사는 `DeliveryCarrier` enum이고 **조회 URL 형식을 서버가 갖는다** — 응답에 완성된 `trackingUrl`을 실어
+> 화면이 택배사 지식을 갖지 않게 한다. `orders.ship_carrier`에는 **일부러 CHECK를 걸지 않았다**(택배사는 늘어날
+> 값이라 CHECK를 걸면 추가할 때마다 제약 교체 마이그레이션이 필요하다 — 검증은 enum이 한다).
+> 반대로 `orders.status`는 상태 전이 규칙이라 DB CHECK를 유지한다(V13에서 `ck_orders_status`로 이름을 붙였다).
+> 배송완료 전이는 지금 **관리자 수동**이다 — 택배사 웹훅 연동은 이후 단계(PG와 같은 자리).
 > **결제(PAID) 전이는 지금 플레이스홀더** — `POST /orders/{id}/pay`가 상태만 바꾼다(실제 돈 안 움직임). **실제 PG 연동은 MSA 단계로 보류(2026-07-16 결정)**.
 > PG 붙일 때: ①`OrderService.pay()`(seam)는 그대로, 그 앞단을 "PG 서버 금액검증 후 pay() 호출"로 교체 ②**`payment` 도메인/테이블 신설**(provider·거래ID·금액·영수증, 주문과 별도 테이블) ③webhook(멱등) ④환불 연동(취소 시 PG 환불 API). **PG사 미정 상태로 payment 도메인을 선설계하지 않는다**(§1 "미리 만들지 않는다").
 
