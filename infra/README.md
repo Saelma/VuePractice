@@ -117,9 +117,20 @@ curl --cacert glassvue.crt https://192.168.50.14/api/products   # 200 이어야 
    > `Oracle Database instance ESPCDB started.` 두 줄이 찍히고 유닛이 `active`.
    > (실패할 땐 이 두 줄이 없고 1초 만에 끝난다 — 그게 구별점이다.)
 
-   ⚠ **별건 — 스크립트가 PDB 를 못 연다**: `start()` 의 `alter pluggable database all open` 에
-   **세미콜론이 없고** heredoc 종료자 `EOF` 가 들여쓰기돼 있어(`<<` 인데 `<<-` 가 아님) `ORA-00933` 이 난다.
-   지금 `espdb` 가 열려 있는 건 PDB **saved state** 덕분이다. saved state 가 없어지면 부팅 후
-   PDB 가 `MOUNTED` 인 채 남아 백엔드가 못 붙는다. 확인·보강:
+   ⚠ **별건 — 스크립트는 PDB 를 못 연다. 대신 saved state 가 연다**: `start()` 의
+   `alter pluggable database all open` 에 **세미콜론이 없고** heredoc 종료자 `EOF` 가 들여쓰기돼 있어
+   (`<<` 인데 `<<-` 가 아님) `ORA-00933` 이 난다. 즉 **스크립트는 PDB 를 여는 데 매번 실패한다.**
+
+   그런데도 `espdb` 가 열리는 건 PDB **saved state** 때문이다. 확인함(2026-07-23):
+   ```
+   select name, open_mode from v$pdbs;              → ESPDB  READ WRITE
+   select con_name, state from dba_pdb_saved_states; → ESPDB  OPEN
+   ```
+   같은 날 재부팅에서 스크립트의 `alter ...` 는 실패했는데 `ESPDB` 는 `READ WRITE` 였다 —
+   saved state 가 실제로 동작한다는 **실증**이다. saved state 는 CDB 에 영구 저장되므로
+   `discard state` 를 명시적으로 하거나 PDB 를 재생성하지 않는 한 유지된다. **추가 조치 불필요.**
+
+   → 다만 **재구축 시에는 이 상태가 없다.** 새로 만든 PDB 는 saved state 가 비어 있어
+   부팅 후 `MOUNTED` 로 남는다. 재구축 직후 한 번 걸어 둘 것:
    `alter pluggable database all open; alter pluggable database all save state;`
 6. **`.env` 실값 작성** — `env.example` 참고.
