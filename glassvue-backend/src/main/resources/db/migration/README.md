@@ -35,10 +35,17 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
   # 1) 이전 검증 결과를 비운다 (빈 스키마에서 시작해야 의미가 있다)
   sudo -iu oracle bash -c 'sqlplus -S / as sysdba' <<'EOF'
   ALTER SESSION SET CONTAINER=espdb;
-  -- 스키마만 비우기: 테이블 전부 DROP (계정은 유지)
+  -- 스키마만 비우기: 테이블 + 시퀀스 전부 DROP (계정은 유지)
+  --
+  -- ⚠ 시퀀스를 빼먹으면 안 된다. 테이블만 지우면 V15가 만든 seq_order_no가 살아남아
+  --    다음 검증에서 CREATE SEQUENCE가 ORA-00955(이미 사용 중인 이름)로 실패한다.
+  --    2026-07-23 V16 검증에서 실제로 걸렸다.
   BEGIN
     FOR t IN (SELECT table_name FROM dba_tables WHERE owner='ESPTEST') LOOP
       EXECUTE IMMEDIATE 'DROP TABLE ESPTEST."'||t.table_name||'" CASCADE CONSTRAINTS PURGE';
+    END LOOP;
+    FOR s IN (SELECT sequence_name FROM dba_sequences WHERE sequence_owner='ESPTEST') LOOP
+      EXECUTE IMMEDIATE 'DROP SEQUENCE ESPTEST."'||s.sequence_name||'"';
     END LOOP;
   END;
   /
