@@ -1,5 +1,6 @@
 import { apiGet, apiPost } from './client';
 import { authState, setTokens, setUser, clearSession } from '../stores/auth';
+import { clearWishlist } from '../stores/wishlist';
 
 export function signup(payload) {
   return apiPost('/api/auth/signup', payload);
@@ -20,6 +21,7 @@ export async function logout() {
     /* 서버 로그아웃 실패해도 클라이언트 세션은 정리 */
   }
   clearSession();
+  clearWishlist(); // 안 비우면 다음 사람이 남의 하트를 본다
 }
 
 // 앱 로드 시 저장된 토큰으로 내 정보 갱신(유효성 확인 겸)
@@ -31,6 +33,7 @@ export async function loadMe() {
     return me;
   } catch (e) {
     clearSession();
+    clearWishlist();
     return null;
   }
 }

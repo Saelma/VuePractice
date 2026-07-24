@@ -34,6 +34,7 @@ async function onLogout() {
 
         <div class="flex items-center gap-4 text-sm">
           <template v-if="isLoggedIn">
+            <RouterLink to="/wishlist" class="nav-link">찜</RouterLink>
             <RouterLink to="/cart" class="nav-link">장바구니</RouterLink>
             <RouterLink to="/orders" class="nav-link">주문내역</RouterLink>
             <span class="hidden h-4 w-px bg-line sm:block"></span>

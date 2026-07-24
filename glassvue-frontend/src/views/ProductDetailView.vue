@@ -9,7 +9,9 @@ import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discountRate } from '../api/product';
 import { addToCart } from '../api/cart';
 import { authState, isLoggedIn } from '../stores/auth';
+import { loadWishlistIds } from '../stores/wishlist';
 import StarRating from '../components/StarRating.vue';
+import WishlistButton from '../components/WishlistButton.vue';
 import ProductReviews from '../components/ProductReviews.vue';
 import ProductInquiries from '../components/ProductInquiries.vue';
 
@@ -43,6 +45,7 @@ async function onAddToCart() {
 }
 
 onMounted(async () => {
+  if (isLoggedIn.value) loadWishlistIds(); // 하트를 채우려면 내 찜 id가 필요하다
   try {
     product.value = await getProduct(props.id);
   } catch (e) {
@@ -183,12 +186,18 @@ async function onDelete() {
                   <p class="text-xl font-bold tabular-nums text-ink-900">{{ priceText(lineTotal) }}</p>
                 </div>
               </div>
-              <button type="button" class="btn btn-primary mt-4 w-full" @click="onAddToCart">장바구니 담기</button>
+              <div class="mt-4 flex gap-2">
+                <button type="button" class="btn btn-primary flex-1" @click="onAddToCart">장바구니 담기</button>
+                <!-- 찜은 품절이어도 할 수 있다 — 재입고를 기다리는 게 찜의 용도다 -->
+                <WishlistButton :product-id="id" size="md" />
+              </div>
               <p v-if="cartMsg" class="alert-success mt-3">{{ cartMsg }}</p>
             </template>
-            <p v-else class="mt-5 border-t border-line pt-5 text-sm text-ink-500">
-              구매하려면 로그인이 필요해요.
-            </p>
+            <div v-else class="mt-5 border-t border-line pt-5">
+              <p class="text-sm text-ink-500">구매하려면 로그인이 필요해요.</p>
+              <!-- 비로그인에게도 하트는 보여준다. 누르면 로그인으로 보내므로 유입 경로가 된다. -->
+              <WishlistButton :product-id="id" size="md" class="mt-3" />
+            </div>
 
             <!-- 보조 행동 -->
             <div class="mt-5 flex flex-wrap gap-2 border-t border-line pt-5">

@@ -11,9 +11,11 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { fetchProducts, SORT_OPTIONS, STATUS_OPTIONS, statusText, priceText, hasDiscount, discountRate } from '../api/product';
 import { fetchCategories } from '../api/category';
-import { authState } from '../stores/auth';
+import { authState, isLoggedIn } from '../stores/auth';
+import { loadWishlistIds } from '../stores/wishlist';
 import StarRating from '../components/StarRating.vue';
 import EmptyState from '../components/EmptyState.vue';
+import WishlistButton from '../components/WishlistButton.vue';
 
 const router = useRouter();
 const categories = ref([]);
@@ -60,6 +62,8 @@ async function load(p = 0) {
 
 onMounted(async () => {
   load(0);
+  // 찜 하트를 채우려면 내가 찜한 상품 id가 필요하다. 실패해도 목록은 그대로 동작한다.
+  if (isLoggedIn.value) loadWishlistIds();
   try {
     categories.value = await fetchCategories();
   } catch (e) {
@@ -255,12 +259,14 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
         </EmptyState>
 
         <!-- 카드 그리드 -->
+        <!-- 카드가 통째로 <button>이라 찜 하트를 그 안에 넣을 수 없다(button 중첩).
+             래퍼 div를 두고 하트를 카드 위에 절대배치한다. -->
         <div v-else class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div v-for="p in items" :key="p.id" class="relative">
+          <WishlistButton :product-id="p.id" class="absolute right-3 top-3 z-10" />
           <button
-            v-for="p in items"
-            :key="p.id"
             type="button"
-            class="group overflow-hidden rounded-card border border-line bg-surface text-left shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            class="group w-full overflow-hidden rounded-card border border-line bg-surface text-left shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
             @click="router.push(`/products/${p.id}`)"
           >
             <div class="aspect-square overflow-hidden bg-canvas">
@@ -292,6 +298,7 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
               >{{ statusText(p.status) }}</span>
             </div>
           </button>
+          </div>
         </div>
 
         <!-- 페이지 이동 -->
