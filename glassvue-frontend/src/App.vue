@@ -29,6 +29,7 @@ async function onLogout() {
             <RouterLink to="/" class="nav-link" active-class="" exact-active-class="router-link-active">공지</RouterLink>
             <RouterLink to="/products" class="nav-link">상품</RouterLink>
             <RouterLink v-if="isAdmin" to="/admin/orders" class="nav-link">주문 관리</RouterLink>
+            <RouterLink v-if="isAdmin" to="/admin/stats" class="nav-link">매출</RouterLink>
           </nav>
         </div>
 
