@@ -16,5 +16,8 @@ public enum PointType {
      * DB CHECK 제약 교체 마이그레이션이 따라온다(2026-07-16 에 {@code orders.status} 로 실제로 겪었다).
      * 값 하나 미리 넣는 비용보다 그쪽이 크다.
      */
-    ADJUST
+    ADJUST,
+
+    /** 반품 환불 — 결제금액을 적립금으로 돌려주고 그 주문의 적립을 회수한 순변동(2026-07-24, C-9). */
+    REFUND
 }

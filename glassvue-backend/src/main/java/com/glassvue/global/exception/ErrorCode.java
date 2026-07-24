@@ -52,6 +52,8 @@ public enum ErrorCode {
     ORDER_NOT_PAYABLE("ORDER-400P", HttpStatus.BAD_REQUEST, "결제할 수 없는 주문입니다(이미 결제·취소됨)."),
     ORDER_NOT_SHIPPABLE("ORDER-400H", HttpStatus.BAD_REQUEST, "발송할 수 없는 주문입니다(결제 완료 상태만 발송 가능)."),
     ORDER_NOT_DELIVERABLE("ORDER-400D", HttpStatus.BAD_REQUEST, "배송완료 처리할 수 없는 주문입니다(발송된 주문만 가능)."),
+    ORDER_NOT_RETURNABLE("ORDER-400R", HttpStatus.BAD_REQUEST, "반품할 수 없는 주문입니다(배송완료된 주문만 요청 가능)."),
+    ORDER_NOT_RETURN_PENDING("ORDER-400RP", HttpStatus.BAD_REQUEST, "반품 요청 상태가 아닙니다."),
 
     // 리뷰
     REVIEW_NOT_FOUND("REVIEW-404", HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없습니다."),

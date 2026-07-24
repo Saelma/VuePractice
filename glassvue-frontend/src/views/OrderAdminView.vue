@@ -12,7 +12,7 @@ import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import {
-  fetchAdminOrders, fetchAdminOrderCounts, shipOrder, deliverOrder,
+  fetchAdminOrders, fetchAdminOrderCounts, shipOrder, deliverOrder, approveReturn, rejectReturn,
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT, DELIVERY_CARRIERS,
 } from '../api/order';
 import { priceText } from '../api/product';
@@ -111,6 +111,25 @@ async function submitShip() {
   } catch (e) {
     shipError.value = e.message;
   }
+}
+
+async function onReturnApprove(row) {
+  if (!window.confirm(`${row.buyerNickname}님의 반품을 승인할까요? 재고 복원 + 결제금액을 적립금으로 환불합니다.`)) return;
+  shipError.value = ''; error.value = '';
+  try {
+    await approveReturn(row.id);
+    gridRef.value?.instance.refresh();
+    await loadCounts();
+  } catch (e) { error.value = e.message; }
+}
+async function onReturnReject(row) {
+  if (!window.confirm(`${row.buyerNickname}님의 반품을 거절할까요? 배송완료로 되돌립니다.`)) return;
+  shipError.value = ''; error.value = '';
+  try {
+    await rejectReturn(row.id);
+    gridRef.value?.instance.refresh();
+    await loadCounts();
+  } catch (e) { error.value = e.message; }
 }
 
 async function onDeliver(row) {
@@ -242,6 +261,10 @@ function fmt(v) {
             class="btn btn-secondary btn-sm"
             @click="onDeliver(data.data)"
           >배송완료</button>
+          <template v-if="data.data.status === 'RETURN_REQUESTED'">
+            <button type="button" class="btn btn-secondary btn-sm" @click="onReturnApprove(data.data)">반품승인</button>
+            <button type="button" class="btn btn-ghost btn-sm" @click="onReturnReject(data.data)">거절</button>
+          </template>
           <button type="button" class="btn btn-ghost btn-sm" @click="router.push(`/orders/${data.data.id}`)">상세</button>
         </div>
       </template>

@@ -3,6 +3,7 @@ package com.glassvue.domain.order.controller;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.domain.order.dto.ReturnRequest;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderShipRequest;
@@ -76,6 +77,29 @@ public class OrderControllerImpl implements OrderController {
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponse<Void>> cancel(@LoginUser AuthUser user, @PathVariable UUID id) {
         orderService.cancel(id, user.id());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Override
+    @PostMapping("/{id}/return-request")
+    public ResponseEntity<ApiResponse<Void>> requestReturn(
+            @LoginUser AuthUser user, @PathVariable UUID id, @Valid @RequestBody ReturnRequest request) {
+        orderService.requestReturn(id, user.id(), request.reason());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    // 반품 승인·거절은 관리자만 — SecurityConfig 의 /return-approve·/return-reject 매처가 막는다(ship·deliver 와 같은 방식).
+    @Override
+    @PostMapping("/{id}/return-approve")
+    public ResponseEntity<ApiResponse<Void>> approveReturn(@PathVariable UUID id) {
+        orderService.approveReturn(id);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Override
+    @PostMapping("/{id}/return-reject")
+    public ResponseEntity<ApiResponse<Void>> rejectReturn(@PathVariable UUID id) {
+        orderService.rejectReturn(id);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 }

@@ -2,6 +2,7 @@ package com.glassvue.domain.order.entity;
 
 /**
  * 주문 상태 흐름: ORDERED → PAID → SHIPPED → DELIVERED (정상), 각 단계에서 CANCELLED 가능(발송 이후 제외).
+ * 배송완료 후: DELIVERED → RETURN_REQUESTED → RETURNED (반품 승인) 또는 → DELIVERED (반품 거절).
  * 결제(PAID) 전이는 지금은 상태 플래그만 — 실제 결제는 이후 PG 연동으로 대체(현재 플레이스홀더).
  *
  * <p>⚠ 값을 추가하면 {@code orders.status}의 CHECK 제약도 함께 고쳐야 한다 — enum만 늘리면
@@ -13,5 +14,7 @@ public enum OrderStatus {
     PAID,      // 결제 완료
     SHIPPED,   // 발송 완료(운송장 등록됨)
     DELIVERED, // 배송 완료(수령)
-    CANCELLED  // 취소됨
+    CANCELLED, // 취소됨(ORDERED·PAID 에서만)
+    RETURN_REQUESTED, // 반품 요청됨(DELIVERED 에서만) — 관리자 승인 대기
+    RETURNED   // 반품 완료(승인) — 재고 복원 + 적립금 환불됨
 }

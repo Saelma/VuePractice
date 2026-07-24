@@ -29,6 +29,8 @@ export const ORDER_STATUS_OPTIONS = [
   { value: 'SHIPPED', text: '발송완료' },
   { value: 'DELIVERED', text: '배송완료' },
   { value: 'CANCELLED', text: '취소됨' },
+  { value: 'RETURN_REQUESTED', text: '반품요청' },
+  { value: 'RETURNED', text: '반품완료' },
 ];
 
 /**
@@ -73,12 +75,27 @@ export function cancelOrder(id) {
   return apiPost(`/api/orders/${id}/cancel`);
 }
 
+/** 반품 요청(본인, DELIVERED만). 사유 필수. 승인 시 재고 복원 + 적립금 환불(2026-07-24 C-9). */
+export function requestReturn(id, reason) {
+  return apiPost(`/api/orders/${id}/return-request`, { reason });
+}
+
+export function approveReturn(id) {
+  return apiPost(`/api/orders/${id}/return-approve`);
+}
+
+export function rejectReturn(id) {
+  return apiPost(`/api/orders/${id}/return-reject`);
+}
+
 export const ORDER_STATUS_TEXT = {
   ORDERED: '결제대기',
   PAID: '결제완료',
   SHIPPED: '발송완료',
   DELIVERED: '배송완료',
   CANCELLED: '취소됨',
+  RETURN_REQUESTED: '반품요청',
+  RETURNED: '반품완료',
 };
 export function orderStatusText(status) {
   return ORDER_STATUS_TEXT[status] || status;
@@ -93,6 +110,8 @@ const STATUS_CLASS = {
   SHIPPED: 'badge-neutral', // 발송완료 — 배송 중(아직 종착이 아니다)
   DELIVERED: 'badge-success', // 배송완료 — 정상 종료
   CANCELLED: 'badge-danger', // 취소됨
+  RETURN_REQUESTED: 'badge-warning', // 반품요청 — 관리자 처리 대기(할 일 있음)
+  RETURNED: 'badge-danger', // 반품완료 — 정상 판매가 아님
 };
 export function orderStatusClass(status) {
   return STATUS_CLASS[status] || 'badge-neutral';

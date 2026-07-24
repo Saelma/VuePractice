@@ -74,4 +74,13 @@ public class PointHistory extends BaseTimeEntity {
                                     UUID orderId, String reason) {
         return new PointHistory(memberId, PointType.USE, -Math.abs(amount), balanceAfter, orderId, reason);
     }
+
+    /**
+     * 반품 환불 — <b>순변동</b>(환불 − 적립회수)을 한 줄로 남긴다(2026-07-24, C-9).
+     * 순변동은 항상 ≥ 0 이라 부호를 강제하지 않는다. 상세(얼마 환불·얼마 회수)는 reason 에 적는다.
+     */
+    public static PointHistory refunded(UUID memberId, long netAmount, long balanceAfter,
+                                        UUID orderId, String reason) {
+        return new PointHistory(memberId, PointType.REFUND, netAmount, balanceAfter, orderId, reason);
+    }
 }

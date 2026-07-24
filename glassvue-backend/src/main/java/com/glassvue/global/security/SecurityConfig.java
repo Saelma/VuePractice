@@ -56,6 +56,9 @@ public class SecurityConfig {
                         // 발송·배송완료 처리는 관리자만(그 외 주문 API는 로그인). orders/** 보다 먼저 와야 한다.
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/ship").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/deliver").hasRole("ADMIN")
+                        // 반품 승인·거절도 관리자만(반품 요청은 본인이라 아래 authenticated 로 덮인다).
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/return-approve").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/return-reject").hasRole("ADMIN")
                         .requestMatchers("/api/orders/**").authenticated()
                         // 이미지 업로드는 로그인만 — 포토 리뷰(2026-07-20)부터 일반 사용자도 올린다.
                         // 원래 ADMIN 전용이었지만 그건 상품 이미지가 유일한 용도였을 때 얘기다.

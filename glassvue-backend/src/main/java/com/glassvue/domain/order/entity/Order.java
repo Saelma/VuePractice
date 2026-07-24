@@ -127,6 +127,17 @@ public class Order extends BaseTimeEntity {
     // 수령 시각. 결제(paid_at)·발송(shipped_at)·취소(cancelled_at)와 같은 성격의 기록이다.
     private Instant deliveredAt;
 
+    // --- 반품(V24, C-9) ---
+    // 배송완료 주문을 고객이 반품 요청 → 관리자 승인. 사유·시각을 남긴다(CS·정산 근거).
+    @Column(name = "return_reason", length = 500)
+    private String returnReason;
+
+    @Column(name = "return_requested_at")
+    private Instant returnRequestedAt;
+
+    @Column(name = "returned_at")
+    private Instant returnedAt;
+
     // @BatchSize: 목록 조회에서 주문마다 items를 따로 읽는 N+1을 막는다(IN 쿼리 한 번으로 묶음).
     // 컬렉션 fetch join은 페이징과 같이 쓰면 전체를 메모리에 올리므로(HHH000104) 쓰지 않는다.
     @BatchSize(size = 100)
@@ -244,6 +255,42 @@ public class Order extends BaseTimeEntity {
     public void cancel() {
         this.status = OrderStatus.CANCELLED;
         this.cancelledAt = Instant.now();
+    }
+
+    /** 배송완료 주문만 반품 요청할 수 있다(운송 중·미결제 주문은 취소로 처리). */
+    public boolean isReturnRequestable() {
+        return status == OrderStatus.DELIVERED;
+    }
+
+    /** 요청된 반품만 승인·거절할 수 있다. */
+    public boolean isReturnPending() {
+        return status == OrderStatus.RETURN_REQUESTED;
+    }
+
+    public void requestReturn(String reason) {
+        this.status = OrderStatus.RETURN_REQUESTED;
+        this.returnReason = reason;
+        this.returnRequestedAt = Instant.now();
+    }
+
+    /** 관리자 승인 — 재고 복원·환불은 서비스가 하고, 여기선 상태·시각만 남긴다. */
+    public void approveReturn() {
+        this.status = OrderStatus.RETURNED;
+        this.returnedAt = Instant.now();
+    }
+
+    /** 관리자 거절 — 배송완료 상태로 되돌린다. 사유는 기록으로 남겨 둔다(요청이 있었다는 흔적). */
+    public void rejectReturn() {
+        this.status = OrderStatus.DELIVERED;
+        this.returnRequestedAt = null;
+    }
+
+    /**
+     * 반품 환불액 = 상품합계 − 쿠폰할인. 사용했던 적립금 + 현금분을 한꺼번에 적립금으로 돌려준다.
+     * 배송비는 뺀다(운임은 소진됐다). 이 값과 적립 회수(earned_point)를 합쳐 순변동이 결정된다.
+     */
+    public long refundableAmount() {
+        return Math.max(0L, totalPrice - couponDiscount);
     }
 
     public boolean isOwnedBy(UUID memberId) {

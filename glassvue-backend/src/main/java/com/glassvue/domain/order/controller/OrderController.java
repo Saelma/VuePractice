@@ -5,6 +5,7 @@ import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderShipRequest;
+import com.glassvue.domain.order.dto.ReturnRequest;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
@@ -44,4 +45,15 @@ public interface OrderController {
 
     @Operation(summary = "주문 취소 (본인, ORDERED·PAID만)")
     ResponseEntity<ApiResponse<Void>> cancel(@Parameter(hidden = true) AuthUser user, UUID id);
+
+    @Operation(summary = "반품 요청 (본인, DELIVERED만)",
+            description = "관리자 승인 시 옵션 재고 복원 + 결제금액을 적립금으로 환불하고 그 주문의 적립을 회수한다.")
+    ResponseEntity<ApiResponse<Void>> requestReturn(
+            @Parameter(hidden = true) AuthUser user, UUID id, ReturnRequest request);
+
+    @Operation(summary = "반품 승인 (관리자, RETURN_REQUESTED→RETURNED)")
+    ResponseEntity<ApiResponse<Void>> approveReturn(UUID id);
+
+    @Operation(summary = "반품 거절 (관리자, RETURN_REQUESTED→DELIVERED)")
+    ResponseEntity<ApiResponse<Void>> rejectReturn(UUID id);
 }

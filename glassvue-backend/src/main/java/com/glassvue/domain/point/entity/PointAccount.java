@@ -80,6 +80,25 @@ public class PointAccount extends BaseTimeEntity {
     }
 
     /**
+     * 반품 환불 순변동을 잔액에 더한다(2026-07-24, C-9).
+     *
+     * <p>순변동 = 환불액 − 적립회수. 환불액(상품합계−쿠폰)이 적립(그 몇 %)보다 항상 크므로 ≥ 0 이지만,
+     * 방어적으로 음수면 0 으로 막는다(잔액이 음수가 되면 DB CHECK 에 걸린다).
+     */
+    public void refund(long netAmount) {
+        this.balance += Math.max(0L, netAmount);
+    }
+
+    /**
+     * 반품으로 구매확정액을 되돌리고 등급을 다시 정한다 — 강등될 수 있다.
+     * {@code addPurchase} 의 반대. 0 아래로는 안 내려간다.
+     */
+    public void subtractPurchase(long amount) {
+        this.totalPurchase = Math.max(0L, this.totalPurchase - Math.max(0L, amount));
+        this.grade = MemberGrade.of(this.totalPurchase);
+    }
+
+    /**
      * 구매확정액을 누적하고 등급을 다시 정한다.
      *
      * <p>등급을 별도 경로로 바꾸지 않는 이유: 누적액과 등급이 <b>따로 움직일 수 있으면</b>

@@ -42,6 +42,11 @@ public record OrderResponse(
         Instant shippedAt,
         Instant cancelledAt,
         Instant deliveredAt,
+        // 반품(V24). 요청·완료 시각과 사유·환불액. 반품이 없었으면 전부 null/0.
+        String returnReason,
+        Instant returnRequestedAt,
+        Instant returnedAt,
+        long refundAmount,
         // 배송지 스냅샷(주문 시점). 배송지 도입(V11) 이전 주문은 전부 null이다.
         String shipRecipient,
         String shipPhone,
@@ -79,6 +84,12 @@ public record OrderResponse(
                 o.getShippedAt(),
                 o.getCancelledAt(),
                 o.getDeliveredAt(),
+                o.getReturnReason(),
+                o.getReturnRequestedAt(),
+                o.getReturnedAt(),
+                (o.getStatus() == com.glassvue.domain.order.entity.OrderStatus.RETURNED
+                        || o.getStatus() == com.glassvue.domain.order.entity.OrderStatus.RETURN_REQUESTED)
+                        ? o.refundableAmount() : 0L,
                 o.getShipRecipient(),
                 o.getShipPhone(),
                 o.getShipZipcode(),

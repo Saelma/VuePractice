@@ -6,6 +6,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   getOrder, payOrder, shipOrder, deliverOrder, cancelOrder,
+  requestReturn, approveReturn, rejectReturn,
   orderStatusText, orderStatusClass, DELIVERY_CARRIERS,
 } from '../api/order';
 import { priceText, hasDiscount, discountRate } from '../api/product';
@@ -50,6 +51,25 @@ async function act(fn, confirmMsg) {
 const onPay = () => act(payOrder, '결제를 진행할까요? (실제 결제 없이 상태만 결제완료로)');
 const onCancel = () => act(cancelOrder, '주문을 취소할까요? (재고가 복원됩니다)');
 const onDeliver = () => act(deliverOrder, '이 주문을 배송완료로 처리할까요?');
+
+// 반품(2026-07-24 C-9). 요청은 사유 입력이 필요해 인라인 폼으로 받는다(취소·발송과 같은 이유).
+const returnForm = ref(null);
+function openReturnForm() { returnForm.value = { reason: '' }; }
+async function submitReturn() {
+  const reason = (returnForm.value?.reason || '').trim();
+  if (!reason) { error.value = '반품 사유를 입력하세요.'; return; }
+  error.value = '';
+  try {
+    await requestReturn(props.id, reason);
+    returnForm.value = null;
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+const onApproveReturn = () => act(approveReturn,
+  '반품을 승인할까요? 재고가 복원되고 결제금액이 적립금으로 환불됩니다(적립·등급은 회수).');
+const onRejectReturn = () => act(rejectReturn, '반품을 거절할까요? 배송완료 상태로 되돌아갑니다.');
 
 /**
  * 발송 처리는 운송장 입력이 필요해 `window.confirm`으로 처리할 수 없다 — 그래서 인라인 폼을 연다.
@@ -291,6 +311,12 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
               class="btn btn-primary"
               @click="onPay"
             >결제하기</button>
+            <button
+              v-if="order.status === 'DELIVERED' && !returnForm"
+              type="button"
+              class="btn btn-secondary"
+              @click="openReturnForm"
+            >반품 요청</button>
           </template>
 
           <!-- 관리자 액션: 결제완료 → 발송(운송장 입력), 발송완료 → 배송완료 -->
@@ -306,7 +332,47 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             class="btn btn-primary"
             @click="onDeliver"
           >배송완료 처리</button>
+          <template v-if="isAdmin && order.status === 'RETURN_REQUESTED'">
+            <button type="button" class="btn btn-primary" @click="onApproveReturn">반품 승인</button>
+            <button type="button" class="btn btn-secondary" @click="onRejectReturn">반품 거절</button>
+          </template>
         </div>
+      </div>
+
+      <!-- 반품 요청 폼(구매자). 사유가 필요해 인라인 폼으로 받는다. -->
+      <div v-if="returnForm" class="card mt-4 p-5">
+        <h2 class="section-title">반품 요청</h2>
+        <p class="muted mt-1">
+          관리자 승인 시 상품 금액이 <strong>적립금으로 환불</strong>됩니다(배송비 제외).
+          이 주문으로 받은 적립금과 등급 반영분은 회수됩니다.
+        </p>
+        <label class="field mt-3">
+          <span class="field-label">사유</span>
+          <input v-model="returnForm.reason" class="field" placeholder="예: 단순 변심, 상품 불량" />
+        </label>
+        <div class="mt-3 flex gap-2">
+          <button type="button" class="btn btn-primary" @click="submitReturn">반품 요청</button>
+          <button type="button" class="btn btn-secondary" @click="returnForm = null">닫기</button>
+        </div>
+      </div>
+
+      <!-- 반품 진행 상태 안내 -->
+      <div v-if="order.status === 'RETURN_REQUESTED' || order.status === 'RETURNED'" class="card mt-4 p-5">
+        <h2 class="section-title">반품</h2>
+        <dl class="mt-3 space-y-2 text-sm">
+          <div class="flex justify-between gap-4">
+            <dt class="text-ink-500">상태</dt>
+            <dd>{{ order.status === 'RETURNED' ? '반품 완료 (환불됨)' : '반품 요청됨 (관리자 처리 대기)' }}</dd>
+          </div>
+          <div v-if="order.returnReason" class="flex justify-between gap-4">
+            <dt class="text-ink-500">사유</dt>
+            <dd class="text-ink-900">{{ order.returnReason }}</dd>
+          </div>
+          <div v-if="order.status === 'RETURNED'" class="flex justify-between gap-4">
+            <dt class="text-ink-500">환불 적립금</dt>
+            <dd class="tabular-nums text-ink-900">{{ priceText(order.refundAmount) }}</dd>
+          </div>
+        </dl>
       </div>
 
       <!-- 발송 처리 폼(관리자). 운송장이 필수라 confirm 대화상자로는 처리할 수 없어 인라인 폼으로 받는다. -->

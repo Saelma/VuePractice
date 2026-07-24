@@ -12,7 +12,9 @@ describe('order status 헬퍼', () => {
     expect(orderStatusText('SHIPPED')).toBe('발송완료');
     expect(orderStatusText('DELIVERED')).toBe('배송완료');
     expect(orderStatusText('CANCELLED')).toBe('취소됨');
-    expect(Object.keys(ORDER_STATUS_TEXT)).toHaveLength(5);
+    expect(orderStatusText('RETURN_REQUESTED')).toBe('반품요청');
+    expect(orderStatusText('RETURNED')).toBe('반품완료');
+    expect(Object.keys(ORDER_STATUS_TEXT)).toHaveLength(7);
   });
 
   it('모르는 상태는 원문 그대로', () => {

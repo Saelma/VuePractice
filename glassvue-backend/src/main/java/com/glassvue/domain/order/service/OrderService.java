@@ -261,4 +261,53 @@ public class OrderService {
         eventPublisher.publishEvent(OrderCancelledEvent.from(order));
         log.info("Order cancelled: {}", id);
     }
+
+    /**
+     * 반품 요청 (2026-07-24, C-9) — 배송완료 주문만. 본인 주문만(findByIdAndMemberId).
+     * 아직 환불·재고 복원은 하지 않는다 — 관리자 승인 때 한다.
+     */
+    @Transactional
+    public void requestReturn(UUID id, UUID memberId, String reason) {
+        Order order = orderRepository.findByIdAndMemberId(id, memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!order.isReturnRequestable()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_RETURNABLE);
+        }
+        order.requestReturn(reason);
+        log.info("Return requested: {} by {}", id, memberId);
+    }
+
+    /**
+     * 반품 승인(관리자) — 옵션 재고 복원 + 적립금 환불. 요청된 반품만 승인할 수 있다.
+     *
+     * <p>재고 복원은 취소와 같고, 환불은 point 도메인 공개 API 로만 한다(도메인 경계).
+     * 한 트랜잭션이라 재고·환불·상태가 함께 커밋되거나 함께 롤백된다.
+     */
+    @Transactional
+    public void approveReturn(UUID id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!order.isReturnPending()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_RETURN_PENDING);
+        }
+        order.approveReturn();
+        // 물건이 돌아왔으니 재고 복원(취소와 동일 — 옵션 단위).
+        order.getItems().forEach(it -> productCommandService.increaseStock(it.getVariantId(), it.getQuantity()));
+        // 환불 = 상품합계−쿠폰을 적립금으로, 배송완료 적립은 회수, 등급 기준에서도 차감.
+        pointService.refundReturnedOrder(order.getMemberId(),
+                order.refundableAmount(), order.getEarnedPoint(), order.rewardableAmount(), id);
+        log.info("Return approved: {}", id);
+    }
+
+    /** 반품 거절(관리자) — 배송완료로 되돌린다. 재고·적립은 건드리지 않는다(승인 안 했으니). */
+    @Transactional
+    public void rejectReturn(UUID id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!order.isReturnPending()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_RETURN_PENDING);
+        }
+        order.rejectReturn();
+        log.info("Return rejected: {}", id);
+    }
 }

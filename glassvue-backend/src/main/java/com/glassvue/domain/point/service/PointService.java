@@ -132,6 +132,35 @@ public class PointService {
     }
 
     /**
+     * 반품 환불 (2026-07-24, C-9) — 결제금액을 적립금으로 돌려주고 그 주문의 적립을 회수한다.
+     *
+     * <p>한 번의 <b>순변동</b>으로 처리한다:
+     * <pre>순변동 = 환불액(상품합계−쿠폰) − 적립회수(배송완료 때 준 earned_point)</pre>
+     * 환불액이 적립보다 항상 크므로 순변동 ≥ 0 — 잔액이 음수가 될 일이 없다(그래서 파밍이 불가능하다:
+     * 사서 적립받고 반품해도 적립분은 회수돼 순이득이 없다).
+     *
+     * <p>등급 기준(누적 구매확정액)에서도 이 주문의 몫을 <b>빼고 재산정</b>한다 — 강등될 수 있다.
+     * "샀다가 반품하면 등급만 남는" 것도 막는다. 적립·환불·등급이 한 트랜잭션에서 함께 움직인다.
+     *
+     * @param refundAmount   환불액(상품합계 − 쿠폰) = order.refundableAmount()
+     * @param earnedToReverse 배송완료 때 준 적립 = order.earnedPoint()
+     * @param purchaseToRemove 등급에 반영됐던 이 주문의 구매확정액 = order.rewardableAmount()
+     * @return 실제 적립된 순변동(참고·로그용)
+     */
+    public long refundReturnedOrder(UUID memberId, long refundAmount, long earnedToReverse,
+                                    long purchaseToRemove, UUID orderId) {
+        PointAccount account = accountOrOpen(memberId);
+        long net = refundAmount - Math.max(0L, earnedToReverse);
+        account.refund(net);
+        account.subtractPurchase(purchaseToRemove);
+        historyRepository.save(PointHistory.refunded(memberId, Math.max(0L, net), account.getBalance(), orderId,
+                "반품 환불 " + refundAmount + " (적립 " + earnedToReverse + " 회수)"));
+        log.info("Point refunded (return): member={} refund={} earnedReversed={} net={} order={} balance={} grade={}",
+                memberId, refundAmount, earnedToReverse, net, orderId, account.getBalance(), account.getGrade());
+        return net;
+    }
+
+    /**
      * 계정을 꺼내고, <b>없으면 그 자리에서 연다</b>. <b>쓰기 트랜잭션에서만</b> 쓴다.
      *
      * <p>계정은 원래 가입 시({@link #openAccount}) 만들고 기존 회원은 V21 이 백필했다.
