@@ -70,6 +70,12 @@ public class Product extends BaseTimeEntity {
     @Column(name = "review_count", nullable = false)
     private long reviewCount;
 
+    // 판매량 비정규화 — order 도메인이 주문/취소/반품 이벤트로 밀어넣는다(catalog는 order를 모른다).
+    // 목록의 "인기순" 정렬을 조인 없이 하려는 것(avg_rating 과 같은 방식, V25). 주문/취소로 바뀌고
+    // 상품 생성/수정으로는 바뀌지 않는다. @Async best-effort 라 근사값이다 — 인기 랭킹이라 허용된다.
+    @Column(name = "sold_count", nullable = false)
+    private long soldCount;
+
     @Builder
     private Product(String name, String description, long price, Long listPrice,
                     ProductStatus status, UUID imageGroupId, Category category) {

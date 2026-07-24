@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { isLoggedIn, authState } from '../stores/auth';
+import HomeView from '../views/HomeView.vue';
 import NoticeListView from '../views/NoticeListView.vue';
 import NoticeDetailView from '../views/NoticeDetailView.vue';
 import NoticeFormView from '../views/NoticeFormView.vue';
@@ -21,10 +22,12 @@ import MockTrackingView from '../views/MockTrackingView.vue';
 
 // 정적 경로(/notices/new)가 동적(/notices/:id)보다 우선 매칭된다(vue-router는 구체성 순).
 const routes = [
-  { path: '/', name: 'notice-list', component: NoticeListView },
+  // 첫 화면은 스토어프론트 홈(B-8). 공지는 /notices 로 옮겼다 — 커머스의 첫 화면은 상품이어야 한다.
+  { path: '/', name: 'home', component: HomeView },
   { path: '/login', name: 'login', component: LoginView },
   { path: '/signup', name: 'signup', component: SignupView },
   { path: '/settings', name: 'settings', component: MyPageView, meta: { requiresAuth: true } },
+  { path: '/notices', name: 'notice-list', component: NoticeListView },
   { path: '/notices/new', name: 'notice-create', component: NoticeFormView, meta: { requiresAuth: true } },
   { path: '/notices/:id', name: 'notice-detail', component: NoticeDetailView, props: true },
   { path: '/notices/:id/edit', name: 'notice-edit', component: NoticeFormView, props: true, meta: { requiresAuth: true } },

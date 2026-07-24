@@ -23,4 +23,16 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, Product
     @Modifying
     @Query("update Product p set p.avgRating = :avg, p.reviewCount = :cnt where p.id = :id")
     int updateRating(@Param("id") UUID id, @Param("avg") double avg, @Param("cnt") long cnt);
+
+    /**
+     * 판매량 비정규화 컬럼 증감 — 주문/취소/반품 이벤트 수신 시. delta 는 음수(취소·반품)일 수 있다.
+     * updateRating 과 같은 이유로 벌크 UPDATE 다(상품 전체 로딩·더티체킹 불필요).
+     *
+     * <p>음수로 내려가지 않게 CASE 로 0에서 막는다 — @Async best-effort 라 이벤트가 유실·중복되면
+     * 합이 어긋날 수 있는데, 판매량이 음수면 인기순 정렬이 이상해진다(잔액 CHECK 와 같은 방어선).
+     * 반영된 행 수 반환(0 = 이미 삭제된 상품).
+     */
+    @Modifying
+    @Query("update Product p set p.soldCount = case when p.soldCount + :delta < 0 then 0 else p.soldCount + :delta end where p.id = :id")
+    int addSoldCount(@Param("id") UUID id, @Param("delta") long delta);
 }

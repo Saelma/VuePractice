@@ -10,6 +10,7 @@ import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discount
 import { addToCart } from '../api/cart';
 import { authState, isLoggedIn } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
+import { pushRecentlyViewed } from '../stores/recentlyViewed';
 import StarRating from '../components/StarRating.vue';
 import WishlistButton from '../components/WishlistButton.vue';
 import ProductReviews from '../components/ProductReviews.vue';
@@ -67,6 +68,7 @@ onMounted(async () => {
   if (isLoggedIn.value) loadWishlistIds(); // 하트를 채우려면 내 찜 id가 필요하다
   try {
     product.value = await getProduct(props.id);
+    pushRecentlyViewed(product.value); // 홈 "최근 본 상품" 에 남긴다(localStorage, B-8)
   } catch (e) {
     error.value = e.message;
   } finally {

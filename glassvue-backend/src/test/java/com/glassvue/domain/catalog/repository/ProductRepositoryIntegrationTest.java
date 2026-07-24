@@ -34,6 +34,7 @@ class ProductRepositoryIntegrationTest {
 
     @Autowired ProductRepository productRepository;
     @Autowired CategoryRepository categoryRepository;
+    @Autowired jakarta.persistence.EntityManager entityManager;
 
     private static final String MARK = "ZZP";
     private UUID catElecId;
@@ -123,5 +124,38 @@ class ProductRepositoryIntegrationTest {
         var r = productRepository.search(cond(MARK, null, 20_000L, null, catElecId), firstPage());
         assertThat(r.getContent()).hasSize(1);
         assertThat(r.getContent().get(0).getName()).contains("마우스");
+    }
+
+    @Test
+    @DisplayName("정렬: soldCount — 홈 인기순을 허용한다(V25 비정규화 컬럼이라 조인 불필요)")
+    void sortBySoldCount() {
+        var r = productRepository.search(cond(MARK, null, null, null, null),
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "soldCount")));
+        assertThat(r.getContent()).hasSize(3); // 거부되지 않고 정렬됨(값은 모두 0)
+    }
+
+    @Test
+    @DisplayName("addSoldCount: 증감이 반영되고, 음수로는 내려가지 않는다(0에서 막힘)")
+    void addSoldCountClampsAtZero() {
+        Category c = categoryRepository.save(Category.builder().name("ZZC-집계").build());
+        Product p = productRepository.save(Product.builder()
+                .name(MARK + "-집계상품").description("d").price(1_000).status(ProductStatus.SELLING).category(c).build());
+        UUID id = p.getId();
+
+        assertThat(productRepository.addSoldCount(id, 5)).isEqualTo(1);
+        assertThat(productRepository.addSoldCount(id, -2)).isEqualTo(1); // 3
+        // 남은 3에서 10을 빼도 음수(-7)가 아니라 0으로 막힌다(잔액 CHECK 와 같은 방어선).
+        assertThat(productRepository.addSoldCount(id, -10)).isEqualTo(1);
+
+        // 벌크 UPDATE라 1차 캐시가 낡았다 — 지우고 DB에서 다시 읽어야 실제 값이 보인다.
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(productRepository.findById(id).orElseThrow().getSoldCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("addSoldCount: 없는 상품이면 0행(이미 삭제됨) — 예외 아님")
+    void addSoldCountMissingProduct() {
+        assertThat(productRepository.addSoldCount(UUID.randomUUID(), 3)).isZero();
     }
 }

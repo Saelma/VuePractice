@@ -53,6 +53,7 @@ class CacheSerializationTest {
                         "/uploads/a.png", "/uploads/a_m.webp", "/uploads/a_t.webp")),
                 4.5,
                 2L,
+                123L,    // soldCount
                 Instant.parse("2026-07-20T12:34:56Z"),
                 Instant.parse("2026-07-20T13:00:00Z"));
         return new PageResponse<>(List.of(p), 0, 20, 1L, 1, true);

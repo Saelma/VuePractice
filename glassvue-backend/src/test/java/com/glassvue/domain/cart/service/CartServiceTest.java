@@ -46,7 +46,7 @@ class CartServiceTest {
         boolean soldOut = status != ProductStatus.SELLING || stock <= 0;
         return new ProductResponse(productId, "지바", "desc", price, null,
                 List.of(variant), stock, soldOut, status,
-                UUID.randomUUID(), "전자기기", List.of(), 0.0, 0L, null, null);
+                UUID.randomUUID(), "전자기기", List.of(), 0.0, 0L, 0L, null, null);
     }
 
     private void stubResolve(long price, long stock, ProductStatus status) {

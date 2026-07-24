@@ -37,6 +37,8 @@ public record ProductResponse(
         List<ImageResponse> images,
         double averageRating,
         long reviewCount,
+        // 누적 판매량(비정규화, V25). 홈 "인기순" 정렬 기준이자 "N개 판매" 표시에 쓴다.
+        long soldCount,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -56,6 +58,7 @@ public record ProductResponse(
                 p.getId(), p.getName(), p.getDescription(), p.getPrice(), p.getListPrice(),
                 variantResponses, totalStock, soldOut,
                 p.getStatus(), p.getCategory().getId(), p.getCategory().getName(),
-                images, p.getAvgRating(), p.getReviewCount(), p.getCreatedAt(), p.getUpdatedAt());
+                images, p.getAvgRating(), p.getReviewCount(), p.getSoldCount(),
+                p.getCreatedAt(), p.getUpdatedAt());
     }
 }

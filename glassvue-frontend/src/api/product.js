@@ -6,11 +6,12 @@ export function fetchProducts({ name, categoryId, minPrice, maxPrice, status, so
 }
 
 /**
- * 상품 목록 정렬 옵션 — 백엔드 SORTABLE 화이트리스트(createdAt·price·stock·name·avgRating)와 맞춰야 한다.
+ * 상품 목록 정렬 옵션 — 백엔드 SORTABLE 화이트리스트(createdAt·price·stock·name·avgRating·soldCount)와 맞춰야 한다.
  * 여기 없는 값을 보내면 서버가 400으로 거부한다.
  */
 export const SORT_OPTIONS = [
   { value: 'createdAt,desc', text: '최신순' },
+  { value: 'soldCount,desc', text: '인기순' },
   { value: 'price,asc', text: '가격 낮은순' },
   { value: 'price,desc', text: '가격 높은순' },
   { value: 'avgRating,desc', text: '평점 높은순' },

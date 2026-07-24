@@ -36,7 +36,7 @@ async function onDelete() {
   if (!window.confirm('이 공지를 삭제할까요?')) return;
   try {
     await deleteNotice(props.id);
-    router.push('/');
+    router.push('/notices');
   } catch (e) {
     error.value = e.message;
   }
@@ -50,7 +50,7 @@ function fmt(v) {
 <template>
   <section class="page-narrow">
     <!-- 돌아가기: 읽는 화면에선 이탈 경로가 위에 있는 게 자연스럽다 -->
-    <button type="button" class="btn btn-ghost -ml-2 mb-4" @click="router.push('/')">← 목록</button>
+    <button type="button" class="btn btn-ghost -ml-2 mb-4" @click="router.push('/notices')">← 목록</button>
 
     <div v-if="error" class="alert-error">{{ error }}</div>
 
@@ -89,7 +89,7 @@ function fmt(v) {
       <div class="whitespace-pre-wrap py-8 text-[15px] leading-7 text-ink-700">{{ notice.content }}</div>
 
       <div class="flex items-center gap-2 border-t border-line pt-5">
-        <button type="button" class="btn btn-secondary" @click="router.push('/')">목록</button>
+        <button type="button" class="btn btn-secondary" @click="router.push('/notices')">목록</button>
         <template v-if="isOwner">
           <button type="button" class="btn btn-secondary" @click="router.push(`/notices/${id}/edit`)">수정</button>
           <button type="button" class="btn btn-danger ml-auto" @click="onDelete">삭제</button>

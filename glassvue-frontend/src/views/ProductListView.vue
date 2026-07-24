@@ -5,19 +5,19 @@
  * 적용된 조건은 상단에 **칩**으로 보여주고 하나씩 뗄 수 있게 한다(필터가 걸린 줄 모르고 헤매지 않게).
  * 정렬은 백엔드 화이트리스트(SORT_OPTIONS)와 맞춰야 400이 나지 않는다.
  */
-import { reactive, ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { reactive, ref, computed, onMounted, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxNumberBox } from 'devextreme-vue/number-box';
-import { fetchProducts, SORT_OPTIONS, STATUS_OPTIONS, statusText, priceText, hasDiscount, discountRate } from '../api/product';
+import { fetchProducts, SORT_OPTIONS, STATUS_OPTIONS, statusText, priceText } from '../api/product';
 import { fetchCategories } from '../api/category';
 import { authState, isLoggedIn } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
-import StarRating from '../components/StarRating.vue';
 import EmptyState from '../components/EmptyState.vue';
-import WishlistButton from '../components/WishlistButton.vue';
+import ProductCard from '../components/ProductCard.vue';
 
 const router = useRouter();
+const route = useRoute();
 const categories = ref([]);
 const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 
@@ -60,7 +60,22 @@ async function load(p = 0) {
   }
 }
 
+/**
+ * URL 쿼리(?name=…&categoryId=…&sort=…)를 화면 조건으로 반영한다.
+ * 홈의 카테고리 바로가기·"인기 더보기"·헤더 검색이 전부 이 경로로 들어온다.
+ * 정렬은 화이트리스트에 있는 값만 받는다(임의 값이면 서버가 400을 낸다).
+ */
+function syncFromQuery() {
+  const q = route.query;
+  form.name = q.name || '';
+  applied.name = q.name ? String(q.name).trim() || null : null;
+  form.categoryId = q.categoryId || null;
+  applied.categoryId = q.categoryId || null;
+  sort.value = q.sort && SORT_OPTIONS.some((o) => o.value === q.sort) ? q.sort : SORT_OPTIONS[0].value;
+}
+
 onMounted(async () => {
+  syncFromQuery();
   load(0);
   // 찜 하트를 채우려면 내가 찜한 상품 id가 필요하다. 실패해도 목록은 그대로 동작한다.
   if (isLoggedIn.value) loadWishlistIds();
@@ -69,6 +84,13 @@ onMounted(async () => {
   } catch (e) {
     /* 카테고리 로드 실패해도 목록은 동작 */
   }
+});
+
+// 이미 /products 에 있는데 헤더 검색·홈 링크로 쿼리만 바뀌면 onMounted 는 다시 안 뛴다 → 쿼리를 지켜본다.
+// 사이드바 필터(apply 등)는 URL 을 안 건드리므로 이 watch 를 건드리지 않는다(충돌 없음).
+watch(() => route.query, () => {
+  syncFromQuery();
+  load(0);
 });
 
 function apply() {
@@ -119,8 +141,6 @@ const chips = computed(() => {
   if (applied.maxPrice != null) out.push({ key: 'maxPrice', label: `${priceText(applied.maxPrice)} 이하` });
   return out;
 });
-
-const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : null);
 </script>
 
 <template>
@@ -258,49 +278,9 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
           </button>
         </EmptyState>
 
-        <!-- 카드 그리드 -->
-        <!-- 카드가 통째로 <button>이라 찜 하트를 그 안에 넣을 수 없다(button 중첩).
-             래퍼 div를 두고 하트를 카드 위에 절대배치한다. -->
+        <!-- 카드 그리드 (카드는 홈과 공유하는 ProductCard 컴포넌트) -->
         <div v-else class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          <div v-for="p in items" :key="p.id" class="relative">
-          <WishlistButton :product-id="p.id" class="absolute right-3 top-3 z-10" />
-          <button
-            type="button"
-            class="group w-full overflow-hidden rounded-card border border-line bg-surface text-left shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-            @click="router.push(`/products/${p.id}`)"
-          >
-            <div class="aspect-square overflow-hidden bg-canvas">
-              <img
-                v-if="thumbOf(p)"
-                :src="thumbOf(p)"
-                :alt="p.name"
-                class="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-              />
-              <div v-else class="flex h-full items-center justify-center text-3xl text-ink-400">🖼️</div>
-            </div>
-
-            <div class="p-4">
-              <p class="text-xs text-ink-500">{{ p.categoryName }}</p>
-              <h3 class="mt-0.5 line-clamp-1 text-sm font-medium text-ink-900">{{ p.name }}</h3>
-              <div class="mt-2 flex items-end justify-between gap-2">
-                <div class="min-w-0">
-                  <!-- 할인 중이면 정가를 취소선으로 위에, 판매가를 아래에. 정가가 없으면 판매가만 보인다. -->
-                  <span v-if="hasDiscount(p)" class="muted block tabular-nums line-through">{{ priceText(p.listPrice) }}</span>
-                  <span class="text-lg font-semibold tabular-nums text-ink-900">{{ priceText(p.price) }}</span>
-                  <span v-if="hasDiscount(p)" class="ml-1 text-sm font-semibold text-danger">{{ discountRate(p) }}%</span>
-                </div>
-                <StarRating :model-value="p.averageRating" :count="p.reviewCount" size="sm" />
-              </div>
-              <span
-                v-if="p.status !== 'SELLING'"
-                class="badge mt-2"
-                :class="p.status === 'SOLD_OUT' ? 'badge-warning' : 'badge-neutral'"
-              >{{ statusText(p.status) }}</span>
-              <!-- 판매중이지만 전 옵션이 품절인 경우도 품절로 표시(soldOut은 서버가 계산) -->
-              <span v-else-if="p.soldOut" class="badge badge-warning mt-2">품절</span>
-            </div>
-          </button>
-          </div>
+          <ProductCard v-for="p in items" :key="p.id" :product="p" />
         </div>
 
         <!-- 페이지 이동 -->

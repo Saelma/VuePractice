@@ -25,9 +25,9 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
     private final JPAQueryFactory queryFactory;
 
     private static final QProduct product = QProduct.product;
-    // 정렬 허용 필드(화이트리스트). avgRating은 리뷰 이벤트로 비정규화해 둔 컬럼이라(V4)
-    // 조인 없이 정렬할 수 있다 — 커머스의 기본 정렬인 "평점순"을 위해 열어둔다.
-    private static final Set<String> SORTABLE = Set.of("createdAt", "price", "stock", "name", "avgRating");
+    // 정렬 허용 필드(화이트리스트). avgRating·soldCount는 이벤트로 비정규화해 둔 컬럼이라(V4·V25)
+    // 조인 없이 정렬할 수 있다 — "평점순"과 홈의 "인기순"(판매량)을 위해 열어둔다.
+    private static final Set<String> SORTABLE = Set.of("createdAt", "price", "stock", "name", "avgRating", "soldCount");
 
     @Override
     public Page<Product> search(ProductSearchCondition c, Pageable pageable) {

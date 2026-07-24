@@ -4,6 +4,7 @@ import static org.mockito.Mockito.verify;
 
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class OrderEventListenerTest {
     @Test
     @DisplayName("리스너는 로직 없이 Handler에 위임만 한다")
     void delegatesToHandler() {
-        OrderPlacedEvent event = new OrderPlacedEvent(UUID.randomUUID(), UUID.randomUUID(), 10_000, 1);
+        OrderPlacedEvent event = new OrderPlacedEvent(UUID.randomUUID(), UUID.randomUUID(), 10_000, 1, List.of());
         listener.onOrderPlaced(event);
         verify(notificationHandler).handle(event);
     }
@@ -29,7 +30,7 @@ class OrderEventListenerTest {
     @Test
     @DisplayName("취소 이벤트도 Handler에 위임만 한다")
     void delegatesCancelledToHandler() {
-        OrderCancelledEvent event = new OrderCancelledEvent(UUID.randomUUID(), UUID.randomUUID(), 30_000, 2);
+        OrderCancelledEvent event = new OrderCancelledEvent(UUID.randomUUID(), UUID.randomUUID(), 30_000, 2, List.of());
         listener.onOrderCancelled(event);
         verify(notificationHandler).handle(event);
     }

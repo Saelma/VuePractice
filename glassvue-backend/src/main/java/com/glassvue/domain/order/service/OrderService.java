@@ -19,6 +19,7 @@ import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
+import com.glassvue.domain.order.event.OrderReturnedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
@@ -296,6 +297,8 @@ public class OrderService {
         // 환불 = 상품합계−쿠폰을 적립금으로, 배송완료 적립은 회수, 등급 기준에서도 차감.
         pointService.refundReturnedOrder(order.getMemberId(),
                 order.refundableAmount(), order.getEarnedPoint(), order.rewardableAmount(), id);
+        // 판매량 되돌림은 catalog 가 구독한다 — 환불(동기)이 끝난 뒤 결과 알림(주문 취소와 같은 규약).
+        eventPublisher.publishEvent(OrderReturnedEvent.from(order));
         log.info("Return approved: {}", id);
     }
 
