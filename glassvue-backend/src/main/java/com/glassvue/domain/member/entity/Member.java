@@ -30,23 +30,16 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private Role role;
 
-    // --- 기본 배송지 (선택) ---
-    // 주문서에 자동으로 채워 넣기 위한 "현재 값"일 뿐이다. 주문에는 이 값을 **복사(스냅샷)** 하므로,
-    // 여기를 나중에 바꿔도 과거 주문의 배송지는 변하지 않는다.
-    @Column(name = "ship_recipient", length = 50)
-    private String shipRecipient;
-
-    @Column(name = "ship_phone", length = 20)
-    private String shipPhone;
-
-    @Column(name = "ship_zipcode", length = 10)
-    private String shipZipcode;
-
-    @Column(name = "ship_address1", length = 200)
-    private String shipAddress1;
-
-    @Column(name = "ship_address2", length = 200)
-    private String shipAddress2;
+    // --- 기본 배송지는 여기 없다 (2026-07-24, V18) ---
+    //
+    // V11~V17 동안은 ship_recipient·ship_phone·ship_zipcode·ship_address1·ship_address2 5컬럼이
+    // 여기 있었다(회원당 배송지 하나). 주소록(MemberAddress)으로 옮기면서 **매핑을 걷어냈다.**
+    //
+    // DB 컬럼은 아직 남아 있다 — 운영 구 jar 가 그 컬럼을 매핑하고 있어서 지금 DROP 하면 재기동이
+    // 불가능해진다(V18 주석의 expand/contract 참조). 컬럼 DROP 은 V19 로 미뤘다.
+    //
+    // 그동안 "신 코드는 member.ship_* 에 쓰지 않는다" 를 규율이 아니라 **구조로** 보장한다 —
+    // 필드가 없으면 쓸 방법이 없다. ddl-auto=validate 는 매핑되지 않은 여분 컬럼을 문제 삼지 않는다.
 
     @Builder
     private Member(String loginId, String password, String nickname, Role role) {
@@ -54,16 +47,6 @@ public class Member extends BaseTimeEntity {
         this.password = password;
         this.nickname = nickname;
         this.role = role;
-    }
-
-    /** 기본 배송지 저장(마이페이지). 전부 함께 바뀌는 값이라 한 번에 받는다. */
-    public void updateShippingAddress(String recipient, String phone, String zipcode,
-                                      String address1, String address2) {
-        this.shipRecipient = recipient;
-        this.shipPhone = phone;
-        this.shipZipcode = zipcode;
-        this.shipAddress1 = address1;
-        this.shipAddress2 = address2;
     }
 
     public void updateNickname(String nickname) {

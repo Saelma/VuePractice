@@ -4,6 +4,8 @@ import com.glassvue.domain.auth.dto.MemberResponse;
 import com.glassvue.domain.member.dto.ShippingAddressRequest;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.repository.MemberRepository;
+import com.glassvue.domain.member.service.command.MemberAddressCommandService;
+import com.glassvue.domain.member.service.query.MemberAddressQueryService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProvider;
@@ -25,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class MemberService {
 
     private final MemberRepository memberRepository;
+    private final MemberAddressCommandService addressCommandService;
+    private final MemberAddressQueryService addressQueryService;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklist tokenBlacklist;
@@ -38,14 +42,19 @@ public class MemberService {
         }
         member.updateNickname(nickname);
         // 주의: 토큰의 nickname claim은 다음 로그인/refresh 때 갱신됨(과거 글의 작성자명은 그대로).
-        return MemberResponse.from(member);
+        return withDefaultAddress(member);
     }
 
-    /** 기본 배송지 저장 — 주문서에 자동으로 채워 넣기 위한 값. 주문에는 복사(스냅샷)된다. */
+    /**
+     * 기본 배송지 저장 — 주문서에 자동으로 채워 넣기 위한 값. 주문에는 복사(스냅샷)된다.
+     *
+     * <p>2026-07-24(V18)부터 <b>저장 위치가 주소록</b>이다. {@code member.ship_*} 컬럼에 쓰던 것을
+     * 기본 배송지 항목 upsert 로 바꿨다 — API 계약(경로·요청·응답)은 그대로라 화면은 손대지 않았다.
+     */
     public MemberResponse updateShippingAddress(UUID memberId, ShippingAddressRequest req) {
         Member member = find(memberId);
-        member.updateShippingAddress(req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2());
-        return MemberResponse.from(member);
+        addressCommandService.saveDefault(memberId, req);
+        return withDefaultAddress(member);
     }
 
     public void changePassword(UUID memberId, String currentPassword, String newPassword) {
@@ -74,6 +83,11 @@ public class MemberService {
         } catch (Exception ignored) {
             // 이미 만료/무효면 불필요
         }
+    }
+
+    /** MemberResponse의 ship* 필드는 주소록의 기본 항목에서 온다(V18 이전엔 member 컬럼이었다). */
+    private MemberResponse withDefaultAddress(Member member) {
+        return MemberResponse.of(member, addressQueryService.findDefault(member.getId()));
     }
 
     private Member find(UUID memberId) {

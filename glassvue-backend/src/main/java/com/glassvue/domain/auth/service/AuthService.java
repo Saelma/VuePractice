@@ -7,6 +7,7 @@ import com.glassvue.domain.auth.dto.TokenResponse;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
+import com.glassvue.domain.member.service.query.MemberAddressQueryService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProperties;
@@ -28,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private final MemberRepository memberRepository;
+    private final MemberAddressQueryService addressQueryService;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
@@ -49,7 +51,8 @@ public class AuthService {
                 .build();
         memberRepository.save(member);
         log.info("Member signed up: {}", member.getId());
-        return MemberResponse.from(member);
+        // 갓 가입한 회원은 주소록이 비어 있다 — ship* 전부 null.
+        return MemberResponse.of(member, null);
     }
 
     public TokenResponse login(LoginRequest req) {
@@ -92,7 +95,9 @@ public class AuthService {
     public MemberResponse me(UUID memberId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-        return MemberResponse.from(member);
+        // ship* 는 주소록의 기본 항목에서 온다(V18 이전엔 member 컬럼이었다).
+        // 프론트가 로그인 직후 이 응답으로 주문서 자동 채움 값을 갖는다.
+        return MemberResponse.of(member, addressQueryService.findDefault(memberId));
     }
 
     private TokenResponse issueTokens(Member member) {

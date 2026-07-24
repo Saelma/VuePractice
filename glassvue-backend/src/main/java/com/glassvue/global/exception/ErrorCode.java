@@ -30,6 +30,11 @@ public enum ErrorCode {
     PASSWORD_MISMATCH("AUTH-400P", HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),
     ACCESS_DENIED("AUTH-403", HttpStatus.FORBIDDEN, "권한이 없습니다."),
 
+    // 배송지 주소록 (2026-07-24)
+    // 남의 주소는 403이 아니라 404로 답한다 — 존재 여부 자체를 알려주지 않는다(쿠폰과 같은 판단).
+    ADDRESS_NOT_FOUND("ADDRESS-404", HttpStatus.NOT_FOUND, "배송지를 찾을 수 없습니다."),
+    ADDRESS_LIMIT_EXCEEDED("ADDRESS-409", HttpStatus.CONFLICT, "배송지는 최대 10개까지 저장할 수 있습니다."),
+
     // 카탈로그(상품·카테고리)
     CATEGORY_NOT_FOUND("CATEGORY-404", HttpStatus.NOT_FOUND, "카테고리를 찾을 수 없습니다."),
     DUPLICATE_CATEGORY("CATEGORY-409", HttpStatus.CONFLICT, "이미 있는 카테고리입니다."),

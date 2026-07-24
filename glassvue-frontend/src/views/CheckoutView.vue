@@ -12,6 +12,7 @@ import { updateShippingAddress } from '../api/member';
 import { priceText } from '../api/product';
 import { fetchMyCoupons } from '../api/coupon';
 import { addressFromUser, hasAddress, validateAddress, trimAddress } from '../api/shipping';
+import { fetchAddresses, addressToForm, addressSummary } from '../api/address';
 import { authState } from '../stores/auth';
 import ItemThumb from '../components/ItemThumb.vue';
 import ShippingAddressFields from '../components/ShippingAddressFields.vue';
@@ -33,11 +34,24 @@ const loading = ref(true);
 const submitting = ref(false);
 const error = ref('');
 
-// 기본 배송지가 있으면 채워 둔다(없으면 빈 폼). 여기서 고쳐도 기본 배송지는 그대로다.
+// 기본 배송지가 있으면 채워 둔다(없으면 빈 폼). 여기서 고쳐도 저장된 주소는 그대로다.
 const form = reactive(addressFromUser(authState.user));
 const hadDefault = hasAddress(authState.user);
 // 기본 배송지가 없던 사람은 저장을 기본값으로 켜 둔다 — 다음 주문에서 다시 안 쓰게.
 const saveAsDefault = ref(!hadDefault);
+
+/**
+ * 주소록(2026-07-24) — 저장해 둔 배송지를 골라 폼에 붓는다.
+ * 고른 뒤에도 폼은 계속 고칠 수 있고, 고친 값은 **이번 주문에만** 적용된다
+ * (주문에는 스냅샷으로 들어가고 주소록은 안 바뀐다). 주소록에도 반영하려면 아래 체크를 켠다.
+ */
+const addresses = ref([]);
+const selectedAddressId = ref(null);
+
+function pick(a) {
+  selectedAddressId.value = a.id;
+  Object.assign(form, addressToForm(a));
+}
 
 const unavailable = computed(() => cart.value.items.some((i) => !i.available));
 
@@ -47,6 +61,11 @@ async function load() {
     // 쿠폰은 상품합계를 알아야 "얼마 깎이는지"를 서버가 계산해 줄 수 있어 장바구니 뒤에 부른다.
     // 실패해도 주문은 되어야 하므로 막지 않는다(기본 배송지 저장과 같은 판단).
     coupons.value = await fetchMyCoupons(cart.value.totalPrice).catch(() => []);
+    // 주소록도 마찬가지 — 못 읽어도 배송지를 직접 입력해 주문할 수 있어야 한다.
+    addresses.value = await fetchAddresses().catch(() => []);
+    // 기본 배송지를 미리 골라 둔다. 폼은 이미 같은 값으로 채워져 있으므로(authState) 표시만 맞추는 셈이다.
+    const preset = addresses.value.find((a) => a.isDefault);
+    if (preset) selectedAddressId.value = preset.id;
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -118,6 +137,27 @@ async function submit() {
           <h2 class="section-title">배송지</h2>
           <span v-if="hadDefault" class="badge badge-neutral">기본 배송지 불러옴</span>
         </div>
+
+        <!-- 저장해 둔 주소 고르기. 주소록이 비어 있으면 이 블록 자체가 안 나온다. -->
+        <div v-if="addresses.length" class="mt-4 flex flex-wrap gap-2">
+          <button
+            v-for="a in addresses"
+            :key="a.id"
+            type="button"
+            class="rounded-lg border px-3 py-2 text-left"
+            :class="selectedAddressId === a.id ? 'border-brand-600' : 'border-line hover:border-ink-400'"
+            @click="pick(a)"
+          >
+            <span class="flex items-center gap-2">
+              <span class="text-sm font-medium text-ink-900">{{ a.alias }}</span>
+              <span v-if="a.isDefault" class="badge badge-neutral">기본</span>
+            </span>
+            <span class="muted mt-0.5 block">{{ a.recipient }} · {{ addressSummary(a) }}</span>
+          </button>
+        </div>
+        <p v-if="addresses.length" class="muted mt-2">
+          고른 뒤 아래에서 고쳐도 됩니다. 고친 값은 이번 주문에만 적용됩니다.
+        </p>
 
         <div class="mt-4">
           <ShippingAddressFields :form="form" />

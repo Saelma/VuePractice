@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
+import com.glassvue.domain.member.service.command.MemberAddressCommandService;
+import com.glassvue.domain.member.service.query.MemberAddressQueryService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProvider;
@@ -28,6 +30,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class MemberServiceTest {
 
     @Mock MemberRepository memberRepository;
+    // V18 이후 MemberResponse.ship* 는 주소록에서 온다 — 스텁 없이 null 을 돌려주면 "기본 배송지 없음"이다.
+    @Mock MemberAddressCommandService addressCommandService;
+    @Mock MemberAddressQueryService addressQueryService;
     @Mock PasswordEncoder passwordEncoder;
     @Mock RefreshTokenStore refreshTokenStore;
     @Mock TokenBlacklist tokenBlacklist;
