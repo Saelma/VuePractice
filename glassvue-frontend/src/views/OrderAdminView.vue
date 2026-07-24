@@ -87,24 +87,29 @@ function reset() {
  * 목록 위에 입력 패널을 띄우고, 어느 주문인지 함께 보여준다(그리드에서 행을 잃지 않게).
  */
 const shipTarget = ref(null);
+// 발송 패널 전용 에러 — 페이지 맨 위 error는 스크롤하면 안 보인다.
+// 빈 송장번호 경고가 입력칸 바로 옆에 떠야 사용자가 알아챈다(2026-07-24 사용자 지적).
+const shipError = ref('');
 function openShip(row) {
+  shipError.value = '';
   shipTarget.value = { id: row.id, buyer: row.buyerNickname, carrier: 'CJ', trackingNo: '' };
 }
 async function submitShip() {
   const trackingNo = shipTarget.value.trackingNo.trim();
   // 서버도 @NotBlank로 막지만 화면에서 먼저 거른다(왕복 절약).
+  // 에러는 패널 안(shipError)에 띄운다 — 페이지 맨 위 error는 발송 패널을 연 상태에선 안 보인다.
   if (!trackingNo) {
-    error.value = '송장번호를 입력해 주세요.';
+    shipError.value = '송장번호를 입력해 주세요.';
     return;
   }
-  error.value = '';
+  shipError.value = '';
   try {
     await shipOrder(shipTarget.value.id, { carrier: shipTarget.value.carrier, trackingNo });
     shipTarget.value = null;
     gridRef.value?.instance.refresh();
     await loadCounts(); // 발송 대기 건수가 즉시 줄어드는 게 보이게
   } catch (e) {
-    error.value = e.message;
+    shipError.value = e.message;
   }
 }
 
@@ -190,9 +195,10 @@ function fmt(v) {
         </label>
         <div class="flex gap-2">
           <button type="button" class="btn btn-primary" @click="submitShip">발송 처리</button>
-          <button type="button" class="btn btn-secondary" @click="shipTarget = null">취소</button>
+          <button type="button" class="btn btn-secondary" @click="shipTarget = null; shipError = ''">취소</button>
         </div>
       </div>
+      <p v-if="shipError" class="alert-error mt-3">{{ shipError }}</p>
     </div>
 
     <DxDataGrid
