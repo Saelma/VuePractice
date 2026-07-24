@@ -1,8 +1,11 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { RouterLink, RouterView, useRouter } from 'vue-router';
 import { authState, isLoggedIn } from './stores/auth';
 import { logout as apiLogout, loadMe } from './api/auth';
+import { connectNotifications, disconnectNotifications } from './stores/notifications';
+import NotificationBell from './components/NotificationBell.vue';
+import NotificationToaster from './components/NotificationToaster.vue';
 
 const router = useRouter();
 const isAdmin = computed(() => authState.user?.role === 'ADMIN');
@@ -10,6 +13,13 @@ const searchQuery = ref('');
 
 onMounted(() => {
   loadMe(); // 저장된 토큰으로 내 정보 갱신
+  if (isLoggedIn.value) connectNotifications(); // 이미 로그인 상태면 알림 스트림 연결
+});
+
+// 로그인/로그아웃에 맞춰 알림 스트림을 붙이고 뗀다(로그아웃 시 다음 사용자에게 안 새게 끊는다).
+watch(isLoggedIn, (loggedIn) => {
+  if (loggedIn) connectNotifications();
+  else disconnectNotifications();
 });
 
 async function onLogout() {
@@ -61,6 +71,7 @@ const year = new Date().getFullYear();
             <RouterLink to="/wishlist" class="nav-link">찜</RouterLink>
             <RouterLink to="/cart" class="nav-link">장바구니</RouterLink>
             <RouterLink to="/orders" class="nav-link">주문내역</RouterLink>
+            <NotificationBell />
             <span class="hidden h-4 w-px bg-line sm:block"></span>
             <RouterLink to="/settings" class="hidden text-ink-700 hover:text-ink-900 sm:block">
               <b class="font-medium">{{ authState.user?.nickname }}</b>
@@ -108,5 +119,8 @@ const year = new Date().getFullYear();
         <p class="muted mt-8 border-t border-line pt-6">© {{ year }} Glassvue — 데모 프로젝트</p>
       </div>
     </footer>
+
+    <!-- 알림 토스트 — 새 알림이 SSE 로 오면 오른쪽 위에서 슬라이드로 나온다 -->
+    <NotificationToaster />
   </div>
 </template>

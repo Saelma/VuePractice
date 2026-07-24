@@ -18,6 +18,7 @@ import WishlistView from '../views/WishlistView.vue';
 import CheckoutView from '../views/CheckoutView.vue';
 import OrderListView from '../views/OrderListView.vue';
 import OrderDetailView from '../views/OrderDetailView.vue';
+import NotificationsView from '../views/NotificationsView.vue';
 import MockTrackingView from '../views/MockTrackingView.vue';
 
 // 정적 경로(/notices/new)가 동적(/notices/:id)보다 우선 매칭된다(vue-router는 구체성 순).
@@ -42,6 +43,7 @@ const routes = [
   { path: '/wishlist', name: 'wishlist', component: WishlistView, meta: { requiresAuth: true } },
   { path: '/checkout', name: 'checkout', component: CheckoutView, meta: { requiresAuth: true } },
   { path: '/orders', name: 'order-list', component: OrderListView, meta: { requiresAuth: true } },
+  { path: '/notifications', name: 'notifications', component: NotificationsView, meta: { requiresAuth: true } },
   { path: '/admin/orders', name: 'order-admin', component: OrderAdminView, meta: { requiresAdmin: true } },
   { path: '/orders/:id', name: 'order-detail', component: OrderDetailView, props: true, meta: { requiresAuth: true } },
 

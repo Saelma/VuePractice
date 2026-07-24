@@ -50,6 +50,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/wishlist/**").authenticated()
                         // 적립금·등급도 개인 정보다. 돈에 준하는 값이라 특히.
                         .requestMatchers("/api/points/**").authenticated()
+                        // 알림(목록·SSE 스트림·설정)도 개인 것이라 로그인 필요. 스트림도 이 매처로 인증된다.
+                        .requestMatchers("/api/notifications/**").authenticated()
                         // 관리자 전용 API는 경로로 모아 한 줄로 막는다 — 엔드포인트가 늘어도 권한 설정을
                         // 빠뜨릴 수 없다(개별 매처를 잊는 사고 방지). /api/orders/** 보다 먼저 와야 한다.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

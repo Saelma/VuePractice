@@ -3,6 +3,7 @@ package com.glassvue.domain.member.service;
 import com.glassvue.domain.auth.dto.MemberResponse;
 import com.glassvue.domain.member.dto.ShippingAddressRequest;
 import com.glassvue.domain.member.entity.Member;
+import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.glassvue.domain.member.service.command.MemberAddressCommandService;
 import com.glassvue.domain.member.service.query.MemberAddressQueryService;
@@ -33,6 +34,12 @@ public class MemberService {
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklist tokenBlacklist;
     private final JwtProvider jwtProvider;
+
+    /** 관리자 회원 id 목록 — 관리자 대상 알림(재고 부족 등)을 만들 때 쓰는 다른 도메인용 공개 API. */
+    @Transactional(readOnly = true)
+    public java.util.List<UUID> adminIds() {
+        return memberRepository.findIdsByRole(Role.ADMIN);
+    }
 
     public MemberResponse changeNickname(UUID memberId, String nickname) {
         Member member = find(memberId);

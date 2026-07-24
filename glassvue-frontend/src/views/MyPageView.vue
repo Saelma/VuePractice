@@ -6,6 +6,7 @@ import { authState } from '../stores/auth';
 import { changeNickname, changePassword, withdraw } from '../api/member';
 import AddressBook from '../components/AddressBook.vue';
 import PointPanel from '../components/PointPanel.vue';
+import NotificationSettings from '../components/NotificationSettings.vue';
 
 const router = useRouter();
 
@@ -79,6 +80,11 @@ async function onWithdraw() {
     <!-- 배송지 주소록 (2026-07-24) — 기본 배송지 하나만 저장하던 자리를 대체한다 -->
     <div class="mt-8">
       <AddressBook />
+    </div>
+
+    <!-- 알림 설정 (2026-07-24) -->
+    <div class="mt-8">
+      <NotificationSettings />
     </div>
 
     <!-- 비밀번호 변경 -->
