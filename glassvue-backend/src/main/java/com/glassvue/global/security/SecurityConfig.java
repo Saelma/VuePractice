@@ -48,6 +48,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/coupons/**").authenticated()
                         // 찜(위시리스트)도 같은 이유 — 개인 목록이라 매처가 없으면 남의 찜이 열린다.
                         .requestMatchers("/api/wishlist/**").authenticated()
+                        // 적립금·등급도 개인 정보다. 돈에 준하는 값이라 특히.
+                        .requestMatchers("/api/points/**").authenticated()
                         // 관리자 전용 API는 경로로 모아 한 줄로 막는다 — 엔드포인트가 늘어도 권한 설정을
                         // 빠뜨릴 수 없다(개별 매처를 잊는 사고 방지). /api/orders/** 보다 먼저 와야 한다.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

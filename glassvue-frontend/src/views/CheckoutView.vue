@@ -11,6 +11,7 @@ import { checkout as apiCheckout } from '../api/order';
 import { updateShippingAddress } from '../api/member';
 import { priceText } from '../api/product';
 import { fetchMyCoupons } from '../api/coupon';
+import { fetchPointAccount, maxUsablePoint, clampPoint, gradeText } from '../api/point';
 import { addressFromUser, hasAddress, validateAddress, trimAddress } from '../api/shipping';
 import { fetchAddresses, addressToForm, addressSummary } from '../api/address';
 import { authState } from '../stores/auth';
@@ -28,8 +29,20 @@ const coupons = ref([]);
 const selectedCouponId = ref(null);
 const selectedCoupon = computed(() => coupons.value.find((c) => c.id === selectedCouponId.value) || null);
 const couponDiscount = computed(() => selectedCoupon.value?.discountPreview ?? 0);
-// 배송비는 **할인 전** 상품합계로 정해지므로 쿠폰을 써도 안 바뀐다.
-const payAmount = computed(() => cart.value.totalPrice - couponDiscount.value + cart.value.shippingFee);
+/**
+ * 적립금 — 쿠폰 **다음**, 배송비 **앞**이다:
+ *   상품합계 → 쿠폰할인 → 적립금 → 배송비 → 결제금액
+ * 상한은 서버와 같은 규칙(상품합계 − 쿠폰할인, 그리고 잔액 중 작은 쪽)으로 화면이 먼저 막는다.
+ */
+const point = ref(null);
+const usePoint = ref(0);
+const maxPoint = computed(() => maxUsablePoint(point.value?.balance, cart.value.totalPrice, couponDiscount.value));
+// 쿠폰을 바꾸면 상한이 줄 수 있다 — 그때 입력값이 상한을 넘은 채 남지 않게 잘라 둔다.
+const appliedPoint = computed(() => clampPoint(usePoint.value, maxPoint.value));
+
+// 배송비는 **할인 전** 상품합계로 정해지므로 쿠폰·적립금을 써도 안 바뀐다.
+const payAmount = computed(() =>
+  cart.value.totalPrice - couponDiscount.value - appliedPoint.value + cart.value.shippingFee);
 const loading = ref(true);
 const submitting = ref(false);
 const error = ref('');
@@ -63,6 +76,8 @@ async function load() {
     coupons.value = await fetchMyCoupons(cart.value.totalPrice).catch(() => []);
     // 주소록도 마찬가지 — 못 읽어도 배송지를 직접 입력해 주문할 수 있어야 한다.
     addresses.value = await fetchAddresses().catch(() => []);
+    // 적립금도 못 읽어도 주문은 되어야 한다(쿠폰·주소록과 같은 판단).
+    point.value = await fetchPointAccount().catch(() => null);
     // 기본 배송지를 미리 골라 둔다. 폼은 이미 같은 값으로 채워져 있으므로(authState) 표시만 맞추는 셈이다.
     const preset = addresses.value.find((a) => a.isDefault);
     if (preset) selectedAddressId.value = preset.id;
@@ -95,7 +110,12 @@ async function submit() {
   try {
     // 기본 배송지 저장은 부가 기능이라 실패해도 주문을 막지 않는다(순서는 주문 먼저).
     // 쿠폰 id만 보낸다 — 할인액은 서버가 다시 계산한다(본문으로 받으면 위조 가능).
-    const orderId = await apiCheckout({ ...address, memberCouponId: selectedCouponId.value });
+    const orderId = await apiCheckout({
+      ...address,
+      memberCouponId: selectedCouponId.value,
+      // 서버가 잔액과 상한을 다시 검증한다 — 화면 값은 편의일 뿐 신뢰 대상이 아니다.
+      usePoint: appliedPoint.value > 0 ? appliedPoint.value : null,
+    });
     if (saveAsDefault.value) {
       await updateShippingAddress(address).catch(() => {});
     }
@@ -205,6 +225,40 @@ async function submit() {
           </label>
         </div>
 
+        <!-- 적립금 사용. 상한은 서버와 같은 규칙으로 화면이 먼저 막는다(400을 받고 나서 알지 않게). -->
+        <div v-if="point" class="mt-4 border-t border-line pt-4">
+          <div class="flex items-center justify-between gap-2">
+            <span class="muted">적립금</span>
+            <span class="muted">
+              <span class="badge badge-neutral">{{ gradeText(point.grade) }}</span>
+              보유 <strong class="tabular-nums text-ink-700">{{ priceText(point.balance) }}</strong>
+            </span>
+          </div>
+          <div v-if="maxPoint > 0" class="mt-2 flex items-center gap-2">
+            <input
+              v-model.number="usePoint"
+              type="number"
+              min="0"
+              :max="maxPoint"
+              step="1"
+              class="w-full rounded-control border border-line px-3 py-1.5 text-sm tabular-nums"
+              placeholder="0"
+            />
+            <button type="button" class="btn btn-secondary btn-sm shrink-0" @click="usePoint = maxPoint">
+              전액
+            </button>
+          </div>
+          <p v-if="maxPoint > 0" class="muted mt-1">
+            최대 {{ priceText(maxPoint) }}까지 사용할 수 있어요.
+            <span v-if="appliedPoint !== usePoint && usePoint > 0" class="text-danger">
+              ({{ priceText(appliedPoint) }}만 적용됩니다)
+            </span>
+          </p>
+          <p v-else class="muted mt-1">
+            {{ point.balance > 0 ? '이 주문에는 쓸 수 있는 적립금이 없어요.' : '사용할 적립금이 없어요.' }}
+          </p>
+        </div>
+
         <dl class="mt-4 space-y-2 border-t border-line pt-4 text-sm">
           <div class="flex items-center justify-between gap-4">
             <dt class="text-ink-500">상품 금액</dt>
@@ -213,6 +267,10 @@ async function submit() {
           <div v-if="couponDiscount > 0" class="flex items-center justify-between gap-4">
             <dt class="text-ink-500">쿠폰 할인</dt>
             <dd class="tabular-nums text-danger">−{{ priceText(couponDiscount) }}</dd>
+          </div>
+          <div v-if="appliedPoint > 0" class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">적립금 사용</dt>
+            <dd class="tabular-nums text-danger">−{{ priceText(appliedPoint) }}</dd>
           </div>
           <div class="flex items-center justify-between gap-4">
             <dt class="text-ink-500">배송비</dt>

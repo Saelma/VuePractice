@@ -13,7 +13,7 @@ class OrderTest {
     private Order newOrder() {
         return Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 10_000, null, 2)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L);
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L, 0L);
     }
 
     @Test
@@ -37,7 +37,7 @@ class OrderTest {
     void freeShipping() {
         Order o = Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 40_000, null, 1)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 0, "20260101-0002", null, 0L);
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 0, "20260101-0002", null, 0L, 0L);
         assertThat(o.getShippingFee()).isZero();
         assertThat(o.getPayAmount()).isEqualTo(o.getTotalPrice());
     }
@@ -109,7 +109,7 @@ class OrderTest {
     void ownership() {
         UUID me = UUID.randomUUID();
         Order o = Order.create(me, "구매자닉", List.of(OrderItem.of(UUID.randomUUID(), "x", null, 1000, null, 1)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L);
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L, 0L);
         assertThat(o.isOwnedBy(me)).isTrue();
         assertThat(o.isOwnedBy(UUID.randomUUID())).isFalse();
     }
@@ -121,7 +121,7 @@ class OrderTest {
         Order o = Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), "지바", null, 10_000, null, 2)),
                 "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층",
-                3_000, "20260101-0003", "5천원 쿠폰", 5_000L);
+                3_000, "20260101-0003", "5천원 쿠폰", 5_000L, 0L);
 
         assertThat(o.getTotalPrice()).isEqualTo(20_000);   // 상품합계는 할인 전 그대로
         assertThat(o.getCouponDiscount()).isEqualTo(5_000);

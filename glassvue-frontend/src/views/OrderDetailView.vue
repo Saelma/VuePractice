@@ -246,6 +246,10 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <dt class="text-ink-500">쿠폰 할인<span v-if="order.couponName" class="muted"> · {{ order.couponName }}</span></dt>
             <dd class="tabular-nums text-danger">−{{ priceText(order.couponDiscount) }}</dd>
           </div>
+          <div v-if="order.usedPoint > 0" class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">적립금 사용</dt>
+            <dd class="tabular-nums text-danger">−{{ priceText(order.usedPoint) }}</dd>
+          </div>
           <div class="flex items-center justify-between gap-4">
             <dt class="text-ink-500">배송비</dt>
             <dd class="tabular-nums" :class="order.shippingFee ? 'text-ink-700' : 'text-emerald-700'">
@@ -258,6 +262,12 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
           <span class="text-sm font-medium text-ink-700">결제 금액</span>
           <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(order.payAmount) }}</span>
         </div>
+
+        <!-- 적립은 배송완료 시점이라, 그 전에는 "받을 예정"이 아니라 아무 말도 하지 않는다.
+             예정 금액을 미리 보여주면 취소·반품에서 약속이 어긋난다. -->
+        <p v-if="order.earnedPoint > 0" class="muted mt-2 text-right">
+          이 주문으로 <strong class="text-ink-700">{{ priceText(order.earnedPoint) }}</strong> 적립되었어요.
+        </p>
       </div>
 
       <!-- 액션: 조건은 그대로, 스타일만 정리 -->

@@ -25,12 +25,16 @@ public record OrderResponse(
         UUID memberId,
         String buyerNickname,
         OrderStatus status,
-        // totalPrice는 상품 합계(배송비 제외). payAmount = totalPrice + shippingFee 가 실제 결제 금액이다.
+        // totalPrice는 상품 합계(배송비 제외).
+        // payAmount = totalPrice − couponDiscount − usedPoint + shippingFee 가 실제 결제 금액이다.
         long totalPrice,
         long shippingFee,
         // 쿠폰 스냅샷(V17). 안 쓴 주문은 이름 null, 할인액 0.
         String couponName,
         long couponDiscount,
+        // 적립금 스냅샷(V21). 쓴 적 없으면 0, 배송완료 전이면 earnedPoint 도 0이다.
+        long usedPoint,
+        long earnedPoint,
         long payAmount,
         List<OrderItemResponse> items,
         Instant createdAt,
@@ -66,6 +70,8 @@ public record OrderResponse(
                 o.getShippingFee(),
                 o.getCouponName(),
                 o.getCouponDiscount(),
+                o.getUsedPoint(),
+                o.getEarnedPoint(),
                 o.getPayAmount(),
                 o.getItems().stream().map(OrderItemResponse::from).toList(),
                 o.getCreatedAt(),

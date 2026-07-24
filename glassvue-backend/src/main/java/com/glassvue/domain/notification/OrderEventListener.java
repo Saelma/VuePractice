@@ -1,6 +1,7 @@
 package com.glassvue.domain.notification;
 
 import com.glassvue.domain.order.event.OrderCancelledEvent;
+import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
@@ -32,6 +33,16 @@ public class OrderEventListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrderCancelled(OrderCancelledEvent event) {
+        notificationHandler.handle(event);
+    }
+
+    /**
+     * 배송완료 — <b>알림만</b> 한다. 적립은 이미 {@code OrderService.deliver()} 안에서 동기로 끝났다.
+     * 여기서 적립하면 @Async 유실 시 고객 돈이 사라진다(OrderDeliveredEvent javadoc 참조).
+     */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderDelivered(OrderDeliveredEvent event) {
         notificationHandler.handle(event);
     }
 }

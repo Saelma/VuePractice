@@ -8,6 +8,7 @@ import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.glassvue.domain.member.service.query.MemberAddressQueryService;
+import com.glassvue.domain.point.service.PointService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProperties;
@@ -30,6 +31,7 @@ public class AuthService {
 
     private final MemberRepository memberRepository;
     private final MemberAddressQueryService addressQueryService;
+    private final PointService pointService;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
@@ -50,6 +52,9 @@ public class AuthService {
                 .role(Role.USER)
                 .build();
         memberRepository.save(member);
+        // 적립금 계정은 **가입 시** 만든다. 조회할 때 "없으면 만드는" 방식은 읽기가 쓰기를 하게 되고
+        // 동시 조회에서 유니크 충돌도 난다(PointService.accountOf 주석 참조).
+        pointService.openAccount(member.getId());
         log.info("Member signed up: {}", member.getId());
         // 갓 가입한 회원은 주소록이 비어 있다 — ship* 전부 null.
         return MemberResponse.of(member, null);

@@ -1,6 +1,7 @@
 package com.glassvue.domain.notification;
 
 import com.glassvue.domain.order.event.OrderCancelledEvent;
+import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,12 @@ public class OrderNotificationHandler {
     public void handle(OrderPlacedEvent event) {
         log.info("[알림] 주문 확인 발송(stub) — order={} member={} amount={} items={}",
                 event.orderId(), event.memberId(), event.totalPrice(), event.itemCount());
+    }
+
+    /** 배송완료 안내 — 적립 결과를 함께 알린다(적립 자체는 주문 트랜잭션에서 이미 끝났다). */
+    public void handle(OrderDeliveredEvent event) {
+        log.info("[알림] 배송완료 안내 발송(stub) — order={} member={} payable={} earned={}P",
+                event.orderId(), event.memberId(), event.payableAmount(), event.earnedPoint());
     }
 
     public void handle(OrderCancelledEvent event) {

@@ -76,6 +76,17 @@ public class Order extends BaseTimeEntity {
     @Column(name = "coupon_discount", nullable = false, updatable = false)
     private long couponDiscount;
 
+    /**
+     * 이 주문에 쓴 적립금 · 이 주문으로 받은 적립금 — 둘 다 <b>스냅샷</b>이다 (2026-07-24, V21).
+     * 적립률이 나중에 바뀌어도 "그때 얼마 받았는지"는 이 값이 사실이다
+     * (구매자 닉네임 V5 · 배송비 V14 · 정가 V16 · 쿠폰 V17 과 같은 원칙).
+     */
+    @Column(name = "used_point", nullable = false)
+    private long usedPoint;
+
+    @Column(name = "earned_point", nullable = false)
+    private long earnedPoint;
+
     private Instant paidAt;
 
     private Instant shippedAt;
@@ -135,11 +146,12 @@ public class Order extends BaseTimeEntity {
                                String shipRecipient, String shipPhone,
                                String shipZipcode, String shipAddress1, String shipAddress2,
                                long shippingFee, String orderNo,
-                               String couponName, long couponDiscount) {
+                               String couponName, long couponDiscount, long usedPoint) {
         Order order = new Order(memberId, buyerNickname, orderNo);
         order.shippingFee = shippingFee;
         order.couponName = couponName;
         order.couponDiscount = couponDiscount;
+        order.usedPoint = usedPoint;
         order.shipRecipient = shipRecipient;
         order.shipPhone = shipPhone;
         order.shipZipcode = shipZipcode;
@@ -163,7 +175,7 @@ public class Order extends BaseTimeEntity {
      * 고객이 손해 본 기분이 든다(2026-07-23 결정). 그래서 이 식의 순서가 곧 정책이다.
      */
     public long getPayAmount() {
-        return totalPrice - couponDiscount + shippingFee;
+        return totalPrice - couponDiscount - usedPoint + shippingFee;
     }
 
     public boolean isPayable() {
@@ -211,6 +223,22 @@ public class Order extends BaseTimeEntity {
     public void deliver() {
         this.status = OrderStatus.DELIVERED;
         this.deliveredAt = Instant.now();
+    }
+
+    /**
+     * 적립·등급 산정의 기준액 — <b>실제로 낸 상품 대금</b>이다.
+     *
+     * <p>배송비를 빼는 이유: 운임이지 상품 대금이 아니다.
+     * 사용한 적립금을 빼는 이유: 적립금으로 낸 부분에까지 적립을 주면 <b>포인트가 포인트를 낳는다.</b>
+     * 계산을 여기 두는 것은 <b>구독자가 주문 금액 규칙을 몰라도 되게</b> 하기 위해서다(도메인 경계).
+     */
+    public long rewardableAmount() {
+        return Math.max(0L, totalPrice - couponDiscount - usedPoint);
+    }
+
+    /** 배송완료 적립이 실제로 얼마였는지 주문에 스냅샷한다. */
+    public void recordEarnedPoint(long earned) {
+        this.earnedPoint = Math.max(0L, earned);
     }
 
     public void cancel() {

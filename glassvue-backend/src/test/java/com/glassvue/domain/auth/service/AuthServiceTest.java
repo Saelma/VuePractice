@@ -35,6 +35,7 @@ class AuthServiceTest {
     @Mock MemberRepository memberRepository;
     // V18 이후 me() 의 ship* 는 주소록에서 온다(가입 직후는 항상 비어 있다).
     @Mock com.glassvue.domain.member.service.query.MemberAddressQueryService addressQueryService;
+    @Mock com.glassvue.domain.point.service.PointService pointService;
     @Mock PasswordEncoder passwordEncoder;
     @Mock JwtProvider jwtProvider;
     @Mock JwtProperties jwtProperties;

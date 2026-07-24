@@ -5,6 +5,7 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { authState } from '../stores/auth';
 import { changeNickname, changePassword, withdraw } from '../api/member';
 import AddressBook from '../components/AddressBook.vue';
+import PointPanel from '../components/PointPanel.vue';
 
 const router = useRouter();
 
@@ -68,6 +69,11 @@ async function onWithdraw() {
       <button type="button" class="btn btn-secondary self-start" :disabled="nick.loading" @click="onNickname">
         {{ nick.loading ? '변경 중…' : '닉네임 변경' }}
       </button>
+    </div>
+
+    <!-- 적립금 · 등급 (2026-07-24) -->
+    <div class="mt-8">
+      <PointPanel />
     </div>
 
     <!-- 배송지 주소록 (2026-07-24) — 기본 배송지 하나만 저장하던 자리를 대체한다 -->

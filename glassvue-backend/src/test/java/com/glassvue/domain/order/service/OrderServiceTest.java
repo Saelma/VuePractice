@@ -48,6 +48,8 @@ class OrderServiceTest {
     @Mock CartService cartService;
     @Mock ProductCommandService productCommandService;
     @Mock ApplicationEventPublisher eventPublisher;
+    // 적립은 배송완료 때 **동기로** 일어난다(이벤트가 아니다) — 스텁 없이 0을 돌려주면 "적립 없음"이다.
+    @Mock com.glassvue.domain.point.service.PointService pointService;
     // 설정 객체라 목이 아니라 실제 인스턴스를 넣는다 — 조회 링크 생성은 순수 문자열 조립이고,
     // 목으로 두면 null을 돌려줘 "링크가 안 만들어지는" 경로만 검증하게 된다.
     @Spy DeliveryProperties deliveryProperties = new DeliveryProperties();
@@ -61,10 +63,10 @@ class OrderServiceTest {
     private final UUID orderId = UUID.randomUUID();
 
     private static final OrderCreateRequest SHIP = new OrderCreateRequest(
-            "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null);
+            "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, null);
 
     private Order orderWith(OrderItem... items) {
-        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L);
+        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L, 0L);
     }
     private Order sampleOrder() {
         return orderWith(OrderItem.of(UUID.randomUUID(), "지바", "/uploads/z_t.webp", 10_000, null, 2));

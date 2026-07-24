@@ -33,6 +33,16 @@ public record OrderCreateRequest(
         String address2,
 
         @Schema(description = "사용할 쿠폰(내 쿠폰 id). 비우면 쿠폰 미사용")
-        java.util.UUID memberCouponId
+        java.util.UUID memberCouponId,
+
+        /**
+         * 사용할 적립금. 비우거나 0이면 미사용.
+         *
+         * <p>금액을 **클라이언트가 정한다**는 점에서 쿠폰(id만 받고 할인액은 서버가 계산)과 다르다 —
+         * 적립금은 "얼마 쓸지"가 본질적으로 사용자 선택이기 때문이다. 대신 서버가
+         * <b>잔액</b>과 <b>상품합계 − 쿠폰할인 상한</b> 둘 다로 검증한다(위조하면 거절).
+         */
+        @Schema(description = "사용할 적립금(원). 비우면 미사용", example = "1000")
+        Long usePoint
 ) {
 }

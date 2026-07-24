@@ -5,6 +5,7 @@ import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.cart.service.CartService;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.coupon.service.CouponService;
+import com.glassvue.domain.point.service.PointService;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.dto.AdminOrderResponse;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
@@ -16,6 +17,7 @@ import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
+import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
@@ -50,6 +52,7 @@ public class OrderService {
     private final DeliveryProperties deliveryProperties;
     private final ShippingPolicy shippingPolicy;
     private final CouponService couponService;
+    private final PointService pointService;
 
     /**
      * 장바구니 → 주문 생성. 재고 원자적 차감 + 카트 비우기.
@@ -92,11 +95,25 @@ public class OrderService {
             couponDiscount = couponService.redeem(req.memberCouponId(), memberId, cart.totalPrice());
         }
 
+        // 적립금 사용. 쿠폰 다음, 배송비 앞이다:
+        //     상품합계 → 쿠폰할인 → **적립금** → 배송비 → 결제금액
+        // 상한을 **상품합계 − 쿠폰할인**으로 넘긴다 — 넘으면 결제금액이 음수가 되거나
+        // 배송비를 적립금으로 내는 이상한 상태가 된다(쿠폰 할인의 상한과 같은 판단).
+        // 쿠폰과 마찬가지로 use()가 검증과 차감을 한 번에 하고, 주문이 롤백되면 함께 롤백된다.
+        long usedPoint = (req.usePoint() == null || req.usePoint() <= 0) ? 0L : req.usePoint();
+
         // 배송비·할인액 모두 **서버가 계산해 스냅샷**한다 — 요청 본문으로 받으면 위조할 수 있다
         // (품목·가격을 장바구니에서 읽는 것과 같은 이유).
         Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems,
                 req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2(),
-                shippingFee, nextOrderNo(), couponName, couponDiscount));
+                shippingFee, nextOrderNo(), couponName, couponDiscount, usedPoint));
+
+        // 차감은 **주문을 만든 뒤**에 한다 — 적립금 이력이 "어느 주문 때문인지"를 담아야 하는데
+        // 주문보다 먼저 차감하면 order_id 를 넣을 수 없다(이력만 있고 근거가 없는 행이 된다).
+        // 같은 트랜잭션이라 순서를 바꿔도 원자성은 그대로고, 실패하면 주문째 롤백된다.
+        if (usedPoint > 0) {
+            pointService.use(memberId, usedPoint, cart.totalPrice() - couponDiscount, order.getId());
+        }
         cartService.clear(memberId);
         // 도메인 이벤트 발행 — 구독자(알림·포인트 등)는 order가 모른다. AFTER_COMMIT 리스너가 커밋된 주문에만 반응.
         eventPublisher.publishEvent(OrderPlacedEvent.from(order));
@@ -216,7 +233,17 @@ public class OrderService {
             throw new BusinessException(ErrorCode.ORDER_NOT_DELIVERABLE);
         }
         order.deliver();
-        log.info("Order delivered: {}", id);
+
+        // ⚠ 적립은 **동기**다. 이 프로젝트의 리스너는 @Async(인프로세스 best-effort)라 유실될 수 있는데,
+        //    알림이 유실되면 메일 한 통을 놓치지만 **적립이 유실되면 고객 돈이 사라진다.**
+        //    재고 복원을 이벤트로 빼지 않은 것과 같은 판단이다(ARCHITECTURE).
+        //    같은 트랜잭션이므로 배송완료가 롤백되면 적립도 함께 롤백된다.
+        long earned = pointService.earnOnDelivery(order.getMemberId(), order.rewardableAmount(), id);
+        order.recordEarnedPoint(earned);
+
+        // 이벤트는 **알림용**이다 — 적립을 시키는 게 아니라 결과를 알린다.
+        eventPublisher.publishEvent(OrderDeliveredEvent.from(order, earned));
+        log.info("Order delivered: {} earned={}", id, earned);
     }
 
     /** 주문 취소 — 본인 주문·취소가능(ORDERED/PAID) 상태만. 재고 복원. */

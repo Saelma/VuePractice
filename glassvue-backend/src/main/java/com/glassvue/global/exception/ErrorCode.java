@@ -66,7 +66,12 @@ public enum ErrorCode {
     COUPON_NOT_FOUND("COUPON-404", HttpStatus.NOT_FOUND, "쿠폰을 찾을 수 없습니다."),
     COUPON_ALREADY_USED("COUPON-409", HttpStatus.CONFLICT, "이미 사용한 쿠폰입니다."),
     COUPON_EXPIRED("COUPON-400E", HttpStatus.BAD_REQUEST, "사용 기간이 아닌 쿠폰입니다."),
-    COUPON_MIN_ORDER_NOT_MET("COUPON-400M", HttpStatus.BAD_REQUEST, "쿠폰의 최소 주문금액을 채우지 못했습니다.");
+    COUPON_MIN_ORDER_NOT_MET("COUPON-400M", HttpStatus.BAD_REQUEST, "쿠폰의 최소 주문금액을 채우지 못했습니다."),
+
+    // 적립금 · 회원 등급 (2026-07-24)
+    POINT_NOT_ENOUGH("POINT-400N", HttpStatus.BAD_REQUEST, "적립금이 부족합니다."),
+    POINT_INVALID_AMOUNT("POINT-400A", HttpStatus.BAD_REQUEST, "적립금 사용액이 올바르지 않습니다."),
+    POINT_EXCEEDS_ORDER("POINT-400E", HttpStatus.BAD_REQUEST, "적립금은 상품 금액을 넘을 수 없습니다.");
 
     private final String code;
     private final HttpStatus status;
