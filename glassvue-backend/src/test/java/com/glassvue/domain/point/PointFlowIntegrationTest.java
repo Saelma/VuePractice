@@ -8,9 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.entity.ProductVariant;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
+import com.glassvue.domain.catalog.repository.ProductVariantRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
@@ -53,6 +55,7 @@ class PointFlowIntegrationTest {
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired CategoryRepository categoryRepository;
     @Autowired ProductRepository productRepository;
+    @Autowired ProductVariantRepository variantRepository;
     @Autowired PointAccountRepository accountRepository;
     @Autowired PointHistoryRepository historyRepository;
     @Autowired PointService pointService;
@@ -64,6 +67,7 @@ class PointFlowIntegrationTest {
     private String adminLoginId;
     private UUID buyerId;
     private UUID productId;
+    private UUID variantId;
 
     @BeforeEach
     void setUp() {
@@ -77,8 +81,9 @@ class PointFlowIntegrationTest {
 
         Category cat = categoryRepository.save(Category.builder().name("ZZC-포인트" + suffix).build());
         productId = productRepository.save(Product.builder()
-                .name("ZZP-포인트상품" + suffix).description("d").price(50_000).stock(1000)
+                .name("ZZP-포인트상품" + suffix).description("d").price(50_000)
                 .status(ProductStatus.SELLING).category(cat).build()).getId();
+        variantId = variantRepository.save(ProductVariant.of(productId, "기본", 0, 1000, 0)).getId();
     }
 
     private UUID member(String loginId, String nickname, Role role) {
@@ -96,7 +101,7 @@ class PointFlowIntegrationTest {
     /** 상품 50,000 × quantity. 30,000 이상이라 배송비는 0이다. */
     private String order(String buyer, int quantity, Long usePoint) throws Exception {
         mockMvc.perform(post("/api/cart/items").header("Authorization", buyer).contentType(JSON)
-                .content("{\"productId\":\"" + productId + "\",\"quantity\":" + quantity + "}"))
+                .content("{\"variantId\":\"" + variantId + "\",\"quantity\":" + quantity + "}"))
                 .andExpect(status().isOk());
         String body = mockMvc.perform(post("/api/orders").header("Authorization", buyer).contentType(JSON)
                         .content("{\"recipient\":\"ZZ수령인\",\"phone\":\"010-0000-0000\",\"zipcode\":\"06134\","
@@ -238,7 +243,7 @@ class PointFlowIntegrationTest {
     void cannotUseMoreThanBalance() throws Exception {
         String buyer = login(buyerLoginId);
         mockMvc.perform(post("/api/cart/items").header("Authorization", buyer).contentType(JSON)
-                .content("{\"productId\":\"" + productId + "\",\"quantity\":1}"));
+                .content("{\"variantId\":\"" + variantId + "\",\"quantity\":1}"));
         mockMvc.perform(post("/api/orders").header("Authorization", buyer).contentType(JSON)
                         .content("{\"recipient\":\"ZZ수령인\",\"phone\":\"010-0000-0000\",\"zipcode\":\"06134\","
                                 + "\"address1\":\"서울시 강남구 1\",\"address2\":null,\"usePoint\":1000}"))
@@ -260,7 +265,7 @@ class PointFlowIntegrationTest {
 
         // 50,000짜리 주문에 잔액 전부를 쓰려 하면 상한(상품합계)을 넘는다
         mockMvc.perform(post("/api/cart/items").header("Authorization", buyer).contentType(JSON)
-                .content("{\"productId\":\"" + productId + "\",\"quantity\":1}"));
+                .content("{\"variantId\":\"" + variantId + "\",\"quantity\":1}"));
         mockMvc.perform(post("/api/orders").header("Authorization", buyer).contentType(JSON)
                         .content("{\"recipient\":\"ZZ수령인\",\"phone\":\"010-0000-0000\",\"zipcode\":\"06134\","
                                 + "\"address1\":\"서울시 강남구 1\",\"address2\":null,\"usePoint\":" + balance + "}"))

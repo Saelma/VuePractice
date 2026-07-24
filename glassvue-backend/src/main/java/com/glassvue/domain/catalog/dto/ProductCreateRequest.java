@@ -27,10 +27,6 @@ public record ProductCreateRequest(
         @PositiveOrZero
         Long listPrice,
 
-        @Schema(description = "재고 수량", example = "100")
-        @NotNull @PositiveOrZero
-        Long stock,
-
         @Schema(description = "상태(없으면 SELLING)", example = "SELLING")
         ProductStatus status,
 
@@ -39,6 +35,11 @@ public record ProductCreateRequest(
         UUID categoryId,
 
         @Schema(description = "업로드한 이미지 id 목록(순서대로)")
-        List<UUID> imageIds
+        List<UUID> imageIds,
+
+        @Schema(description = "옵션 목록(최소 1개). 단일 옵션 상품이면 한 줄만 담는다")
+        @jakarta.validation.constraints.NotEmpty
+        @jakarta.validation.Valid
+        List<VariantRequest> variants
 ) {
 }

@@ -107,7 +107,7 @@ class CategoryAdminIntegrationTest {
     void admin_deleteInUse_conflict() throws Exception {
         Category category = categoryRepository.findById(categoryId).orElseThrow();
         productRepository.save(Product.builder()
-                .name(MARK + "-상품").description("d").price(1000).stock(1)
+                .name(MARK + "-상품").description("d").price(1000)
                 .status(ProductStatus.SELLING).category(category).build());
 
         mockMvc.perform(delete("/api/categories/" + categoryId).header("Authorization", login(adminLoginId)))

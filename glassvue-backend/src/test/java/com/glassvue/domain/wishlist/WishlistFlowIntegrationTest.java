@@ -8,9 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.entity.ProductVariant;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
+import com.glassvue.domain.catalog.repository.ProductVariantRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
@@ -43,6 +45,7 @@ class WishlistFlowIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired MemberRepository memberRepository;
     @Autowired ProductRepository productRepository;
+    @Autowired ProductVariantRepository variantRepository;
     @Autowired CategoryRepository categoryRepository;
     @Autowired PasswordEncoder passwordEncoder;
 
@@ -74,9 +77,11 @@ class WishlistFlowIntegrationTest {
     }
 
     private UUID product(Category category, String name, long price, long stock) {
-        return productRepository.save(Product.builder()
-                .name(name).description("찜 테스트").price(price).stock(stock)
+        UUID pid = productRepository.save(Product.builder()
+                .name(name).description("찜 테스트").price(price)
                 .status(ProductStatus.SELLING).category(category).build()).getId();
+        variantRepository.save(ProductVariant.of(pid, "기본", 0, stock, 0)); // 재고가 옵션에 있어야 available
+        return pid;
     }
 
     private String login(String loginId) throws Exception {

@@ -73,10 +73,12 @@ public class OrderService {
 
         List<OrderItem> orderItems = new ArrayList<>();
         for (CartItemResponse i : cart.items()) {
-            productCommandService.decreaseStock(i.productId(), i.quantity()); // 부족하면 OUT_OF_STOCK
-            // 정가도 스냅샷한다 — 나중에 추가하면 과거 주문은 백필할 수 없다(배송지·운송장과 같은 이유).
-            orderItems.add(OrderItem.of(i.productId(), i.name(), i.thumbUrl(),
-                    i.price(), i.listPrice(), i.quantity()));
+            // 재고는 옵션(variant) 단위로 차감한다(2026-07-24 C-8). 부족하면 OUT_OF_STOCK.
+            productCommandService.decreaseStock(i.variantId(), i.quantity());
+            // 옵션 id·이름도 스냅샷한다 — 취소 시 재고 복원 대상이고, 옵션명은 주문 내역 표시용이다
+            // (정가·배송지·운송장과 같은 스냅샷 원칙).
+            orderItems.add(OrderItem.of(i.productId(), i.variantId(), i.optionName(),
+                    i.name(), i.thumbUrl(), i.price(), i.listPrice(), i.quantity()));
         }
 
         // 금액 계산 순서: 상품합계 → 쿠폰할인 → 배송비 → 결제금액.
@@ -255,7 +257,7 @@ public class OrderService {
             throw new BusinessException(ErrorCode.ORDER_NOT_CANCELLABLE);
         }
         order.cancel();
-        order.getItems().forEach(it -> productCommandService.increaseStock(it.getProductId(), it.getQuantity()));
+        order.getItems().forEach(it -> productCommandService.increaseStock(it.getVariantId(), it.getQuantity()));
         eventPublisher.publishEvent(OrderCancelledEvent.from(order));
         log.info("Order cancelled: {}", id);
     }

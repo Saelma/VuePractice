@@ -7,9 +7,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.entity.ProductVariant;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
+import com.glassvue.domain.catalog.repository.ProductVariantRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
@@ -57,6 +59,7 @@ class AdminSalesStatsIntegrationTest {
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired CategoryRepository categoryRepository;
     @Autowired ProductRepository productRepository;
+    @Autowired ProductVariantRepository variantRepository;
     @Autowired EntityManager entityManager;
 
     private static final String JSON = "application/json";
@@ -68,6 +71,7 @@ class AdminSalesStatsIntegrationTest {
     private String buyerLoginId;
     private String adminLoginId;
     private UUID productId;
+    private UUID variantId;
 
     @BeforeEach
     void setUp() {
@@ -79,8 +83,9 @@ class AdminSalesStatsIntegrationTest {
 
         Category cat = categoryRepository.save(Category.builder().name("ZZC-통계" + suffix).build());
         productId = productRepository.save(Product.builder()
-                .name("ZZP-통계상품" + suffix).description("d").price(10_000).stock(1000)
+                .name("ZZP-통계상품" + suffix).description("d").price(10_000)
                 .status(ProductStatus.SELLING).category(cat).build()).getId();
+        variantId = variantRepository.save(ProductVariant.of(productId, "기본", 0, 1000, 0)).getId();
     }
 
     private void member(String loginId, String nickname, Role role) {
@@ -98,7 +103,7 @@ class AdminSalesStatsIntegrationTest {
     /** 장바구니 담기 → 주문 생성. 수량 1건이면 상품합계 10,000 + 배송비 3,000 이다. */
     private String order(String buyer, int quantity) throws Exception {
         mockMvc.perform(post("/api/cart/items").header("Authorization", buyer).contentType(JSON)
-                .content("{\"productId\":\"" + productId + "\",\"quantity\":" + quantity + "}"))
+                .content("{\"variantId\":\"" + variantId + "\",\"quantity\":" + quantity + "}"))
                 .andExpect(status().isOk());
         String body = mockMvc.perform(post("/api/orders").header("Authorization", buyer).contentType(JSON)
                         .content("{\"recipient\":\"ZZ수령인\",\"phone\":\"010-0000-0000\",\"zipcode\":\"06134\","

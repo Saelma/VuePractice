@@ -29,9 +29,9 @@ onMounted(load);
 async function changeQty(item, next) {
   try {
     if (next < 1) {
-      await removeCartItem(item.productId);
+      await removeCartItem(item.variantId);
     } else {
-      await updateCartItem(item.productId, next);
+      await updateCartItem(item.variantId, next);
     }
     await load();
   } catch (e) {
@@ -41,7 +41,7 @@ async function changeQty(item, next) {
 
 async function onRemove(item) {
   try {
-    await removeCartItem(item.productId);
+    await removeCartItem(item.variantId);
     await load();
   } catch (e) {
     error.value = e.message;
@@ -109,10 +109,11 @@ function goCheckout() {
     <div v-else class="grid items-start gap-6 lg:grid-cols-3">
       <!-- 항목 -->
       <ul class="card divide-y divide-line lg:col-span-2">
-        <li v-for="item in cart.items" :key="item.productId" class="flex flex-wrap items-center gap-4 px-5 py-4">
+        <li v-for="item in cart.items" :key="item.variantId" class="flex flex-wrap items-center gap-4 px-5 py-4">
           <ItemThumb :src="item.thumbUrl" :alt="item.name" />
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-medium text-ink-900">{{ item.name }}</p>
+            <p v-if="item.optionName" class="muted truncate">{{ item.optionName }}</p>
             <p class="muted mt-1 tabular-nums">{{ priceText(item.price) }}</p>
             <span v-if="!item.available" class="badge badge-danger mt-2">재고 부족 · 판매중지</span>
           </div>

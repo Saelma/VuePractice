@@ -296,6 +296,8 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
                 class="badge mt-2"
                 :class="p.status === 'SOLD_OUT' ? 'badge-warning' : 'badge-neutral'"
               >{{ statusText(p.status) }}</span>
+              <!-- 판매중이지만 전 옵션이 품절인 경우도 품절로 표시(soldOut은 서버가 계산) -->
+              <span v-else-if="p.soldOut" class="badge badge-warning mt-2">품절</span>
             </div>
           </button>
           </div>

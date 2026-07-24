@@ -36,6 +36,19 @@ public class OrderItem extends BaseTimeEntity {
     @Column(name = "product_id", columnDefinition = "RAW(16)", nullable = false)
     private UUID productId;
 
+    /**
+     * 주문한 옵션(variant) — <b>취소 시 재고를 되돌릴 대상</b> (2026-07-24, C-8).
+     * 느슨한 참조라 옵션이 나중에 삭제되면 dangling 이지만, 복원은 0행으로 조용히 무시된다.
+     * 옵션 도입(V22) 이전 주문은 V22 가 각 상품의 기본 옵션으로 백필했다.
+     */
+    @JdbcTypeCode(SqlTypes.BINARY)
+    @Column(name = "variant_id", columnDefinition = "RAW(16)")
+    private UUID variantId;
+
+    /** 주문 시점 옵션명 스냅샷. 단일 옵션 상품이거나 옵션 이전 주문이면 null(화면이 옵션 줄을 감춘다). */
+    @Column(name = "variant_name", length = 100)
+    private String variantName;
+
     @Column(nullable = false, length = 200)
     private String productName;
 
@@ -60,9 +73,12 @@ public class OrderItem extends BaseTimeEntity {
     @Column(nullable = false)
     private long lineTotal;
 
-    private OrderItem(UUID productId, String productName, String productImageUrl,
+    private OrderItem(UUID productId, UUID variantId, String variantName,
+                      String productName, String productImageUrl,
                       long price, Long listPrice, long quantity) {
         this.productId = productId;
+        this.variantId = variantId;
+        this.variantName = variantName;
         this.productName = productName;
         this.productImageUrl = productImageUrl;
         this.price = price;
@@ -71,9 +87,11 @@ public class OrderItem extends BaseTimeEntity {
         this.lineTotal = price * quantity;
     }
 
-    public static OrderItem of(UUID productId, String productName, String productImageUrl,
+    public static OrderItem of(UUID productId, UUID variantId, String variantName,
+                               String productName, String productImageUrl,
                                long price, Long listPrice, long quantity) {
-        return new OrderItem(productId, productName, productImageUrl, price, listPrice, quantity);
+        return new OrderItem(productId, variantId, variantName, productName,
+                productImageUrl, price, listPrice, quantity);
     }
 
     void assignOrder(Order order) {

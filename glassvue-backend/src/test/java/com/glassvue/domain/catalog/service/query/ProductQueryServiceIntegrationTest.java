@@ -44,7 +44,7 @@ class ProductQueryServiceIntegrationTest {
         Category cat = categoryRepository.save(Category.builder().name("ZZC-쿼리").build());
         UUID groupId = imageService.createGroup(List.of()); // 이미지 없는 빈 그룹
         Product p = productRepository.save(Product.builder()
-                .name("ZZP-쿼리상품").description("d").price(12_345).stock(7)
+                .name("ZZP-쿼리상품").description("d").price(12_345)
                 .status(ProductStatus.SELLING).imageGroupId(groupId).category(cat).build());
         productId = p.getId();
     }

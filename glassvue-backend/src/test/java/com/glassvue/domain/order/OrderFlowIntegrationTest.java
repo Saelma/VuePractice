@@ -7,9 +7,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.entity.ProductVariant;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
+import com.glassvue.domain.catalog.repository.ProductVariantRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
@@ -43,6 +45,7 @@ class OrderFlowIntegrationTest {
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired CategoryRepository categoryRepository;
     @Autowired ProductRepository productRepository;
+    @Autowired ProductVariantRepository variantRepository;
 
     private static final String JSON = "application/json";
     private static final String PW = "password123";
@@ -50,6 +53,7 @@ class OrderFlowIntegrationTest {
     private String buyerLoginId;
     private String adminLoginId;
     private UUID productId;
+    private UUID variantId;
 
     @BeforeEach
     void setUp() {
@@ -59,9 +63,10 @@ class OrderFlowIntegrationTest {
         member(adminLoginId, "판매자", Role.ADMIN);
         Category cat = categoryRepository.save(Category.builder().name("ZZC-오더").build());
         Product p = productRepository.save(Product.builder()
-                .name("ZZP-테스트상품").description("d").price(10_000).stock(100)
+                .name("ZZP-테스트상품").description("d").price(10_000)
                 .status(ProductStatus.SELLING).category(cat).build());
         productId = p.getId();
+        variantId = variantRepository.save(ProductVariant.of(productId, "기본", 0, 100, 0)).getId();
     }
 
     private void member(String loginId, String nickname, Role role) {
@@ -85,7 +90,7 @@ class OrderFlowIntegrationTest {
 
         // 1) 장바구니 담기
         mockMvc.perform(post("/api/cart/items").header("Authorization", buyer).contentType(JSON)
-                        .content("{\"productId\":\"" + productId + "\",\"quantity\":2}"))
+                        .content("{\"variantId\":\"" + variantId + "\",\"quantity\":2}"))
                 .andExpect(status().isOk());
 
         // 2) 장바구니 조회 — 구매가능·합계

@@ -7,9 +7,9 @@ import java.util.UUID;
 
 public record CartItemAddRequest(
 
-        @Schema(description = "상품 id")
+        @Schema(description = "옵션(variant) id — 담을 옵션")
         @NotNull
-        UUID productId,
+        UUID variantId,
 
         @Schema(description = "담을 수량", example = "1")
         @NotNull @Positive

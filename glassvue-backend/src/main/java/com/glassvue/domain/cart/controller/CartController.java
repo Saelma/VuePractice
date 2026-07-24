@@ -24,11 +24,11 @@ public interface CartController {
 
     @Operation(summary = "수량 변경")
     ResponseEntity<ApiResponse<Void>> update(
-            @Parameter(hidden = true) AuthUser user, UUID productId, @Valid CartItemUpdateRequest request);
+            @Parameter(hidden = true) AuthUser user, UUID variantId, @Valid CartItemUpdateRequest request);
 
     @Operation(summary = "항목 삭제")
     ResponseEntity<ApiResponse<Void>> remove(
-            @Parameter(hidden = true) AuthUser user, UUID productId);
+            @Parameter(hidden = true) AuthUser user, UUID variantId);
 
     @Operation(summary = "장바구니 비우기")
     ResponseEntity<ApiResponse<Void>> clear(@Parameter(hidden = true) AuthUser user);

@@ -56,7 +56,7 @@ public class WishlistQueryService {
                     p.id(), p.name(), p.price(), p.listPrice(), p.status(),
                     p.images().isEmpty() ? null : p.images().get(0).thumbUrl(),
                     p.averageRating(), p.reviewCount(),
-                    p.status() == ProductStatus.SELLING && p.stock() > 0,
+                    !p.soldOut(),
                     w.getCreatedAt()));
         }
         return items;

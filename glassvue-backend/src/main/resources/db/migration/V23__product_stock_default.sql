@@ -1,0 +1,16 @@
+-- product.stock 을 DEFAULT 0 으로 (2026-07-24, C-8 후속)
+--
+-- ⚠ 이건 V22 의 일부였어야 했는데 놓쳤다 — 통합테스트가 잡았다.
+--
+-- V22 에서 재고를 옵션(product_variant)으로 옮기고 Product 엔티티의 stock 매핑을 걷어냈다(expand/contract).
+-- 그런데 product.stock 컬럼은 V1 에서 **NOT NULL(기본값 없음)** 으로 만들어졌다.
+-- 그래서 신 코드가 상품을 INSERT 할 때 stock 을 안 넣으면 **ORA-01400(NULL 불가)** 로 실패한다.
+-- (V18 의 ship_* 는 nullable 이라 이 문제가 없었다 — NOT NULL 컬럼은 다르다.)
+--
+-- 해결: DEFAULT 0 을 준다. 그러면
+--   · 신 jar: INSERT 에서 stock 을 생략 → DB 가 0 을 채운다(죽은 컬럼이라 값은 무의미).
+--   · 구 jar: 여전히 stock 을 명시적으로 넣고 읽는다 — DEFAULT 는 그 동작에 영향이 없다.
+-- NOT NULL 은 유지한다(제약을 푸는 것보다 기본값을 주는 게 양쪽 jar 에 안전하다).
+--
+-- 컬럼 자체의 DROP 은 여전히 이후 버전이다 — 구 jar 가 운영에서 완전히 내려간 뒤에만 안전하다.
+ALTER TABLE product MODIFY (stock DEFAULT 0);

@@ -41,6 +41,8 @@ public enum ErrorCode {
     CATEGORY_IN_USE("CATEGORY-409U", HttpStatus.CONFLICT, "소속 상품이 있어 삭제할 수 없습니다."),
     PRODUCT_NOT_FOUND("PRODUCT-404", HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
     OUT_OF_STOCK("PRODUCT-400S", HttpStatus.BAD_REQUEST, "재고가 부족합니다."),
+    PRODUCT_NO_VARIANT("PRODUCT-400V", HttpStatus.BAD_REQUEST, "상품은 옵션이 최소 1개 있어야 합니다."),
+    VARIANT_NOT_FOUND("PRODUCT-404V", HttpStatus.NOT_FOUND, "상품 옵션을 찾을 수 없습니다."),
 
     // 주문
     CART_EMPTY("ORDER-400E", HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),

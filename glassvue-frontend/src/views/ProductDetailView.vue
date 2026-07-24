@@ -25,19 +25,38 @@ const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 const qty = ref(1);
 const cartMsg = ref('');
 
+/**
+ * 옵션(variant) 선택 — 재고·가격이 옵션마다 다르다(2026-07-24 C-8).
+ * 옵션이 2개 이상이면 사용자가 골라야 하고, 1개(기본)면 자동 선택돼 UI 를 감춘다.
+ */
+const variants = computed(() => product.value?.variants ?? []);
+const hasOptions = computed(() => variants.value.length > 1);
+const selectedVariantId = ref(null);
+const selectedVariant = computed(() =>
+  variants.value.find((v) => v.id === selectedVariantId.value) || (hasOptions.value ? null : variants.value[0]) || null);
+
 /** 갤러리 표시용 로컬 상태 — 썸네일을 누르면 대표 이미지가 바뀐다(서버 데이터는 건드리지 않는다). */
 const images = computed(() => product.value?.images ?? []);
 const selected = ref(0);
 const mainImage = computed(() => images.value[selected.value] ?? images.value[0] ?? null);
 
-/** 담기 전에 얼마인지 바로 보이게 — 수량을 바꾸면 합계가 따라 움직인다. */
-const lineTotal = computed(() => (product.value ? product.value.price * (qty.value || 1) : 0));
+/** 담기 전에 얼마인지 바로 보이게 — 옵션 가격 × 수량. 옵션 미선택이면 기본가로 미리 보여준다. */
+const unitPrice = computed(() => selectedVariant.value?.price ?? product.value?.price ?? 0);
+const lineTotal = computed(() => unitPrice.value * (qty.value || 1));
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
 
 async function onAddToCart() {
-  cartMsg.value = '';
+  cartMsg.value = ''; error.value = '';
+  if (!selectedVariant.value) {
+    error.value = '옵션을 선택하세요.';
+    return;
+  }
+  if (selectedVariant.value.soldOut) {
+    error.value = '품절된 옵션이에요.';
+    return;
+  }
   try {
-    await addToCart(props.id, qty.value);
+    await addToCart(selectedVariant.value.id, qty.value);
     cartMsg.value = '장바구니에 담았어요.';
   } catch (e) {
     error.value = e.message;
@@ -156,7 +175,7 @@ async function onDelete() {
             <dl class="mt-5 space-y-2 border-t border-line pt-5 text-sm">
               <div class="flex justify-between gap-4">
                 <dt class="text-ink-500">재고</dt>
-                <dd class="tabular-nums text-ink-900">{{ product.stock }}개</dd>
+                <dd class="tabular-nums text-ink-900">{{ product.totalStock }}개</dd>
               </div>
               <div class="flex justify-between gap-4">
                 <dt class="text-ink-500">상태</dt>
@@ -173,6 +192,34 @@ async function onDelete() {
                 <dd class="tabular-nums text-ink-700">{{ fmtDate(product.createdAt) }}</dd>
               </div>
             </dl>
+
+            <!-- 옵션 선택 — 옵션이 2개 이상일 때만. 단일(기본)이면 자동 선택돼 감춘다(2026-07-24 C-8). -->
+            <div v-if="hasOptions" class="mt-5 border-t border-line pt-5">
+              <p class="field-label mb-2">옵션</p>
+              <div class="flex flex-col gap-2">
+                <button
+                  v-for="v in variants"
+                  :key="v.id"
+                  type="button"
+                  class="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors"
+                  :class="[
+                    selectedVariantId === v.id ? 'border-brand-600' : 'border-line hover:border-ink-400',
+                    v.soldOut ? 'cursor-not-allowed opacity-50' : '',
+                  ]"
+                  :disabled="v.soldOut"
+                  @click="selectedVariantId = v.id"
+                >
+                  <span class="text-sm text-ink-900">{{ v.name }}</span>
+                  <span class="flex items-center gap-2">
+                    <span v-if="v.priceDelta" class="muted tabular-nums">
+                      {{ v.priceDelta > 0 ? '+' : '' }}{{ priceText(v.priceDelta) }}
+                    </span>
+                    <span class="text-sm font-medium tabular-nums text-ink-900">{{ priceText(v.price) }}</span>
+                    <span v-if="v.soldOut" class="badge badge-warning">품절</span>
+                  </span>
+                </button>
+              </div>
+            </div>
 
             <!-- 구매 액션: 이 화면의 주 행동 -->
             <template v-if="isLoggedIn">

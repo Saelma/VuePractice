@@ -52,7 +52,7 @@ class ProductRepositoryIntegrationTest {
 
     private void save(String name, long price, ProductStatus status, Category category) {
         productRepository.save(Product.builder()
-                .name(name).description("d").price(price).stock(10).status(status).category(category).build());
+                .name(name).description("d").price(price).status(status).category(category).build());
     }
 
     private ProductSearchCondition cond(String name, Long minPrice, Long maxPrice, ProductStatus status, UUID categoryId) {

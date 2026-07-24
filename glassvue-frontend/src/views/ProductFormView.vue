@@ -14,7 +14,12 @@ const router = useRouter();
 const isEdit = computed(() => !!props.id);
 
 const categories = ref([]);
-const form = reactive({ name: '', description: '', price: null, listPrice: null, stock: null, status: 'SELLING', categoryId: null, images: [] });
+// 옵션(variant): 최소 1개. 단일 옵션 상품은 이름 "기본" 한 줄이면 된다(2026-07-24 C-8).
+const form = reactive({ name: '', description: '', price: null, listPrice: null, status: 'SELLING', categoryId: null, images: [], variants: [] });
+
+function newVariant() { return { name: '', priceDelta: 0, stock: null }; }
+function addVariant() { form.variants.push(newVariant()); }
+function removeVariant(i) { form.variants.splice(i, 1); }
 const error = ref('');
 const saving = ref(false);
 
@@ -24,14 +29,19 @@ onMounted(async () => {
   } catch (e) {
     /* ignore */
   }
+  if (!isEdit.value) {
+    form.variants = [{ name: '기본', priceDelta: 0, stock: null }];
+  }
   if (isEdit.value) {
     try {
       const p = await getProduct(props.id);
       Object.assign(form, {
         name: p.name, description: p.description, price: p.price, listPrice: p.listPrice,
-        stock: p.stock, status: p.status, categoryId: p.categoryId,
+        status: p.status, categoryId: p.categoryId,
       });
       form.images = p.images || [];
+      form.variants = (p.variants || []).map((v) => ({ name: v.name, priceDelta: v.priceDelta, stock: v.stock }));
+      if (!form.variants.length) form.variants = [newVariant()];
     } catch (e) {
       error.value = e.message;
     }
@@ -41,7 +51,12 @@ onMounted(async () => {
 async function onSave() {
   error.value = '';
   if (!form.name.trim() || !form.description.trim()) { error.value = '상품명·설명은 필수입니다.'; return; }
-  if (form.price == null || form.stock == null) { error.value = '가격·재고를 입력하세요.'; return; }
+  if (form.price == null) { error.value = '가격을 입력하세요.'; return; }
+  if (!form.variants.length) { error.value = '옵션을 최소 1개 추가하세요.'; return; }
+  for (const v of form.variants) {
+    if (!v.name.trim()) { error.value = '옵션 이름을 입력하세요.'; return; }
+    if (v.stock == null) { error.value = `'${v.name || '옵션'}'의 재고를 입력하세요.`; return; }
+  }
   if (!form.categoryId) { error.value = '카테고리를 선택하세요.'; return; }
   // 정가가 판매가보다 작거나 같으면 할인이 아니다 — 화면에 취소선이 이상하게 뜨는 걸 미리 막는다.
   if (form.listPrice != null && form.listPrice <= form.price) {
@@ -52,8 +67,9 @@ async function onSave() {
   try {
     const payload = {
       name: form.name, description: form.description, price: form.price, listPrice: form.listPrice,
-      stock: form.stock, status: form.status, categoryId: form.categoryId,
+      status: form.status, categoryId: form.categoryId,
       imageIds: form.images.map((i) => i.id),
+      variants: form.variants.map((v) => ({ name: v.name.trim(), priceDelta: v.priceDelta || 0, stock: v.stock })),
     };
     if (isEdit.value) {
       await updateProduct(props.id, payload);
@@ -101,10 +117,35 @@ async function onSave() {
           <span class="field-label">정가(원, 선택)</span>
           <DxNumberBox v-model:value="form.listPrice" :min="0" format="#,##0" placeholder="할인 없으면 비움" />
         </label>
-        <label class="field flex-1">
-          <span class="field-label">재고</span>
-          <DxNumberBox v-model:value="form.stock" :min="0" format="#,##0" />
-        </label>
+      </div>
+
+      <!-- 옵션 편집 (2026-07-24 C-8). 재고는 옵션마다. 단일 상품은 "기본" 한 줄이면 된다. -->
+      <div class="field">
+        <span class="field-label">옵션 · 재고</span>
+        <p class="muted mb-2">옵션마다 재고를 둡니다. 사이즈·색상이 없으면 "기본" 한 줄만 두세요. 가격차는 기본가 대비 증감(±)입니다.</p>
+        <div class="flex flex-col gap-2">
+          <div v-for="(v, i) in form.variants" :key="i" class="flex flex-wrap items-end gap-2">
+            <label class="field flex-1" style="min-width: 8rem">
+              <span class="muted mb-1 block">옵션명</span>
+              <DxTextBox v-model:value="v.name" placeholder="기본 / 검정 M" />
+            </label>
+            <label class="field" style="width: 8rem">
+              <span class="muted mb-1 block">가격차(±)</span>
+              <DxNumberBox v-model:value="v.priceDelta" format="#,##0" />
+            </label>
+            <label class="field" style="width: 7rem">
+              <span class="muted mb-1 block">재고</span>
+              <DxNumberBox v-model:value="v.stock" :min="0" format="#,##0" />
+            </label>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              :disabled="form.variants.length <= 1"
+              @click="removeVariant(i)"
+            >삭제</button>
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm mt-2 self-start" @click="addVariant">+ 옵션 추가</button>
       </div>
       <label class="field">
         <span class="field-label">설명</span>

@@ -5,9 +5,12 @@ import com.glassvue.domain.cart.dto.CartItemAddRequest;
 import com.glassvue.domain.cart.dto.CartItemResponse;
 import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.catalog.dto.ProductResponse;
-import com.glassvue.global.policy.ShippingPolicy;
+import com.glassvue.domain.catalog.dto.VariantResponse;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
+import com.glassvue.global.exception.BusinessException;
+import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.policy.ShippingPolicy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +21,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
- * 장바구니. 상태는 Redis(CartStore), 상품 정보는 catalog의 공개 서비스에서 합성한다.
+ * 장바구니 (2026-07-24 C-8: 옵션 단위).
+ *
+ * <p>담기는 단위가 상품에서 <b>옵션(variant)</b>으로 바뀌었다. 상태는 Redis(CartStore, field=variantId),
+ * 상품·옵션 정보는 catalog 공개 서비스에서 합성한다. cart 는 catalog 리포지토리를 직접 만지지 않고
+ * {@code productIdsOfVariants}(옵션→상품) + {@code findByIds}(상품+옵션+이미지) 두 공개 API 만 쓴다.
  */
 @Service
 @RequiredArgsConstructor
@@ -28,19 +35,23 @@ public class CartService {
     private final ProductQueryService productQueryService;
     private final ShippingPolicy shippingPolicy;
 
-    /** 상품 존재 확인 후 담기(수량 증가). */
+    /** 옵션 존재 확인 후 담기(수량 증가). 없는 옵션이면 VARIANT_NOT_FOUND. */
     public void add(UUID memberId, CartItemAddRequest req) {
-        productQueryService.get(req.productId()); // 없으면 404
-        cartStore.add(memberId, req.productId(), req.quantity());
+        if (!productQueryService.productIdsOfVariants(List.of(req.variantId())).containsKey(req.variantId())) {
+            throw new BusinessException(ErrorCode.VARIANT_NOT_FOUND);
+        }
+        cartStore.add(memberId, req.variantId(), req.quantity());
     }
 
-    public void setQuantity(UUID memberId, UUID productId, long quantity) {
-        productQueryService.get(productId);
-        cartStore.set(memberId, productId, quantity);
+    public void setQuantity(UUID memberId, UUID variantId, long quantity) {
+        if (!productQueryService.productIdsOfVariants(List.of(variantId)).containsKey(variantId)) {
+            throw new BusinessException(ErrorCode.VARIANT_NOT_FOUND);
+        }
+        cartStore.set(memberId, variantId, quantity);
     }
 
-    public void remove(UUID memberId, UUID productId) {
-        cartStore.remove(memberId, productId);
+    public void remove(UUID memberId, UUID variantId) {
+        cartStore.remove(memberId, variantId);
     }
 
     public void clear(UUID memberId) {
@@ -48,29 +59,43 @@ public class CartService {
     }
 
     public CartResponse getCart(UUID memberId) {
-        Map<UUID, Long> items = cartStore.items(memberId);
+        Map<UUID, Long> items = cartStore.items(memberId); // variantId -> qty
         if (items.isEmpty()) {
             return new CartResponse(List.of(), 0, 0, 0, 0, 0);
         }
 
-        Map<UUID, ProductResponse> products = productQueryService.findByIds(items.keySet()).stream()
+        // 옵션 → 상품 매핑, 그리고 그 상품들의 정보(옵션·이미지 포함)를 한 번에.
+        Map<UUID, UUID> productIdByVariant = productQueryService.productIdsOfVariants(items.keySet());
+        Map<UUID, ProductResponse> products = productQueryService
+                .findByIds(productIdByVariant.values().stream().distinct().toList()).stream()
                 .collect(Collectors.toMap(ProductResponse::id, Function.identity()));
 
         List<CartItemResponse> lines = new ArrayList<>();
         long totalQuantity = 0;
         long totalPrice = 0;
         for (Map.Entry<UUID, Long> e : items.entrySet()) {
-            ProductResponse p = products.get(e.getKey());
-            if (p == null) {
-                cartStore.remove(memberId, e.getKey()); // 삭제된 상품은 정리
+            UUID variantId = e.getKey();
+            UUID productId = productIdByVariant.get(variantId);
+            ProductResponse product = productId == null ? null : products.get(productId);
+            if (product == null) {
+                cartStore.remove(memberId, variantId); // 삭제된 옵션/상품은 정리
                 continue;
             }
+            VariantResponse variant = product.variants().stream()
+                    .filter(v -> v.id().equals(variantId)).findFirst().orElse(null);
+            if (variant == null) {
+                cartStore.remove(memberId, variantId);
+                continue;
+            }
+
             long qty = e.getValue();
-            long lineTotal = p.price() * qty;
-            boolean available = p.status() == ProductStatus.SELLING && p.stock() >= qty;
-            String thumb = p.images().isEmpty() ? null : p.images().get(0).thumbUrl();
-            lines.add(new CartItemResponse(p.id(), p.name(), p.price(), p.listPrice(),
-                    p.status(), qty, lineTotal, available, thumb));
+            long lineTotal = variant.price() * qty;
+            boolean available = product.status() == ProductStatus.SELLING && variant.stock() >= qty;
+            String thumb = product.images().isEmpty() ? null : product.images().get(0).thumbUrl();
+            // 단일 옵션 상품은 옵션명을 감춘다("기본" 노이즈 방지). 옵션이 2개 이상일 때만 보여준다.
+            String optionName = product.variants().size() > 1 ? variant.name() : null;
+            lines.add(new CartItemResponse(product.id(), variantId, product.name(), optionName,
+                    variant.price(), product.listPrice(), product.status(), qty, lineTotal, available, thumb));
             totalQuantity += qty;
             totalPrice += lineTotal;
         }

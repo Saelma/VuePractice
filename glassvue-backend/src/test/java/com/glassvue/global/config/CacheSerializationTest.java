@@ -3,6 +3,7 @@ package com.glassvue.global.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.glassvue.domain.catalog.dto.ProductResponse;
+import com.glassvue.domain.catalog.dto.VariantResponse;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.image.dto.ImageResponse;
 import com.glassvue.global.response.PageResponse;
@@ -39,7 +40,11 @@ class CacheSerializationTest {
                 "설명",
                 12000L,
                 39000L,   // listPrice — 정가가 있는 상태도 직렬화 왕복에 포함시킨다
-                7L,
+                List.of(new VariantResponse(
+                        UUID.fromString("019f7d1c-e0b4-7000-8000-00000000000a"),
+                        "기본", 0, 12000L, 7L, false)),
+                7L,      // totalStock
+                false,   // soldOut
                 ProductStatus.SELLING,
                 UUID.fromString("019f7d1c-e0b4-7000-8000-000000000002"),
                 "카테고리",

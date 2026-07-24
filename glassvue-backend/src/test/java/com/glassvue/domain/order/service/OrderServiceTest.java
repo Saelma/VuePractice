@@ -69,7 +69,7 @@ class OrderServiceTest {
         return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L, 0L);
     }
     private Order sampleOrder() {
-        return orderWith(OrderItem.of(UUID.randomUUID(), "지바", "/uploads/z_t.webp", 10_000, null, 2));
+        return orderWith(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, "지바", "/uploads/z_t.webp", 10_000, null, 2));
     }
     private static void assertErrorCode(Runnable r, ErrorCode expected) {
         assertThatThrownBy(r::run)
@@ -152,7 +152,7 @@ class OrderServiceTest {
         UUID pid = UUID.randomUUID();
         // 39,000원짜리를 31,200원에 파는 상품(20% 할인)
         CartItemResponse discounted = new CartItemResponse(
-                pid, "지바", 31_200, 39_000L, ProductStatus.SELLING, 1, 31_200, true, null);
+                UUID.randomUUID(), pid, "지바", null, 31_200, 39_000L, ProductStatus.SELLING, 1, 31_200, true, null);
         when(cartService.getCart(memberId)).thenReturn(cartWith(discounted));
         when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -170,7 +170,7 @@ class OrderServiceTest {
     @DisplayName("취소: ORDERED 주문 → CANCELLED + 아이템별 재고 복원")
     void cancel_restoresStock() {
         UUID p1 = UUID.randomUUID();
-        Order order = orderWith(OrderItem.of(p1, "지바", null, 10_000, null, 3));
+        Order order = orderWith(OrderItem.of(p1, p1, null, "지바", null, 10_000, null, 3));
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
         orderService.cancel(orderId, memberId);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
@@ -225,8 +225,10 @@ class OrderServiceTest {
         for (CartItemResponse i : items) { qty += i.quantity(); price += i.lineTotal(); }
         return new CartResponse(List.of(items), qty, price, 0, price, 0);
     }
-    private CartItemResponse availableItem(UUID pid, long qty) {
-        return new CartItemResponse(pid, "지바", 10_000, null, ProductStatus.SELLING, qty, 10_000 * qty, true, "/uploads/z_t.webp");
+    private CartItemResponse availableItem(UUID variantId, long qty) {
+        // pid 자리에 variantId 를 넣는다 — checkout 이 이제 variantId 로 재고를 차감하므로 검증이 그걸 본다.
+        return new CartItemResponse(UUID.randomUUID(), variantId, "지바", null, 10_000, null,
+                ProductStatus.SELLING, qty, 10_000 * qty, true, "/uploads/z_t.webp");
     }
 
     @Test
@@ -293,7 +295,7 @@ class OrderServiceTest {
     @DisplayName("결제: 구매불가 상품 포함 → UNAVAILABLE_ITEM")
     void checkout_unavailable() {
         UUID pid = UUID.randomUUID();
-        CartItemResponse soldOut = new CartItemResponse(pid, "품절품", 10_000, null, ProductStatus.SOLD_OUT, 1, 10_000, false, null);
+        CartItemResponse soldOut = new CartItemResponse(UUID.randomUUID(), pid, "품절품", null, 10_000, null, ProductStatus.SOLD_OUT, 1, 10_000, false, null);
         when(cartService.getCart(memberId)).thenReturn(cartWith(soldOut));
         assertErrorCode(() -> orderService.checkout(buyer, SHIP), ErrorCode.UNAVAILABLE_ITEM);
         verify(eventPublisher, never()).publishEvent(any());

@@ -20,7 +20,7 @@ class StockEventListenerTest {
     @Test
     @DisplayName("리스너는 로직 없이 Handler에 위임만 한다")
     void delegatesToHandler() {
-        StockRunningLowEvent event = new StockRunningLowEvent(UUID.randomUUID(), "무선키보드", 3, 5);
+        StockRunningLowEvent event = new StockRunningLowEvent(UUID.randomUUID(), "무선키보드", "검정/M", 3, 5);
         listener.onStockRunningLow(event);
         verify(stockAlertHandler).handle(event);
     }

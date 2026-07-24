@@ -42,19 +42,19 @@ public class CartControllerImpl implements CartController {
     }
 
     @Override
-    @PatchMapping("/items/{productId}")
+    @PatchMapping("/items/{variantId}")
     public ResponseEntity<ApiResponse<Void>> update(
-            @LoginUser AuthUser user, @PathVariable UUID productId,
+            @LoginUser AuthUser user, @PathVariable UUID variantId,
             @Valid @RequestBody CartItemUpdateRequest request) {
-        cartService.setQuantity(user.id(), productId, request.quantity());
+        cartService.setQuantity(user.id(), variantId, request.quantity());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
     @Override
-    @DeleteMapping("/items/{productId}")
+    @DeleteMapping("/items/{variantId}")
     public ResponseEntity<ApiResponse<Void>> remove(
-            @LoginUser AuthUser user, @PathVariable UUID productId) {
-        cartService.remove(user.id(), productId);
+            @LoginUser AuthUser user, @PathVariable UUID variantId) {
+        cartService.remove(user.id(), variantId);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 

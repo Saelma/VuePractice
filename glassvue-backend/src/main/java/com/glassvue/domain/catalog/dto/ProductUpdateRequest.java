@@ -24,9 +24,6 @@ public record ProductUpdateRequest(
         @PositiveOrZero
         Long listPrice,
 
-        @NotNull @PositiveOrZero
-        Long stock,
-
         @NotNull
         ProductStatus status,
 
@@ -34,6 +31,11 @@ public record ProductUpdateRequest(
         UUID categoryId,
 
         @Schema(description = "이미지 id 목록(순서대로, 교체)")
-        List<UUID> imageIds
+        List<UUID> imageIds,
+
+        @Schema(description = "옵션 목록(최소 1개, 통째로 교체)")
+        @jakarta.validation.constraints.NotEmpty
+        @jakarta.validation.Valid
+        List<VariantRequest> variants
 ) {
 }

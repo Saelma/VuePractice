@@ -13,12 +13,14 @@ import org.springframework.stereotype.Component;
 public class StockAlertHandler {
 
     public void handle(StockRunningLowEvent event) {
+        // 재고가 옵션(variant)마다라 어느 옵션인지 함께 찍는다(2026-07-24, C-8).
+        String label = event.productName() + " (" + event.variantName() + ")";
         if (event.remainingStock() == 0) {
-            log.warn("[재고] 품절 — product={}({}) threshold={}",
-                    event.productName(), event.productId(), event.threshold());
+            log.warn("[재고] 품절 — {} product={} threshold={}",
+                    label, event.productId(), event.threshold());
             return;
         }
-        log.warn("[재고] 재고 부족(stub) — product={}({}) remaining={} threshold={}",
-                event.productName(), event.productId(), event.remainingStock(), event.threshold());
+        log.warn("[재고] 재고 부족(stub) — {} product={} remaining={} threshold={}",
+                label, event.productId(), event.remainingStock(), event.threshold());
     }
 }

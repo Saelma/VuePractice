@@ -44,8 +44,10 @@ public class Product extends BaseTimeEntity {
     @Column(name = "list_price")
     private Long listPrice;
 
-    @Column(nullable = false)
-    private long stock; // 재고 수량
+    // 재고는 여기 없다 (2026-07-24, C-8). product.stock 컬럼은 아직 DB 에 있지만(운영 구 jar 가 매핑)
+    // 신 코드는 재고를 product_variant 로만 다룬다 — 엔티티 매핑을 걷어내 "구조로" 못 쓰게 했다
+    // (V18 의 expand/contract 와 같은 방식). 컬럼 DROP 은 이후 버전(구 jar 배포 후).
+    // ddl-auto=validate 는 매핑되지 않은 여분 컬럼을 문제 삼지 않는다(V18 에서 실측).
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -69,25 +71,23 @@ public class Product extends BaseTimeEntity {
     private long reviewCount;
 
     @Builder
-    private Product(String name, String description, long price, Long listPrice, long stock,
+    private Product(String name, String description, long price, Long listPrice,
                     ProductStatus status, UUID imageGroupId, Category category) {
         this.name = name;
         this.description = description;
         this.price = price;
         this.listPrice = listPrice;
-        this.stock = stock;
         this.status = (status != null) ? status : ProductStatus.SELLING;
         this.imageGroupId = imageGroupId;
         this.category = category;
     }
 
-    public void update(String name, String description, long price, Long listPrice, long stock,
+    public void update(String name, String description, long price, Long listPrice,
                        ProductStatus status, UUID imageGroupId, Category category) {
         this.name = name;
         this.description = description;
         this.price = price;
         this.listPrice = listPrice;
-        this.stock = stock;
         this.status = status;
         this.imageGroupId = imageGroupId;
         this.category = category;
