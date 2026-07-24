@@ -222,10 +222,12 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
       <div class="card mt-6">
         <h2 class="section-title border-b border-line px-5 py-4">주문 품목</h2>
         <ul class="divide-y divide-line">
-          <li v-for="item in order.items" :key="item.productId" class="flex items-center gap-4 px-5 py-4">
+          <li v-for="item in order.items" :key="item.variantId || item.productId" class="flex items-center gap-4 px-5 py-4">
             <ItemThumb :src="item.productImageUrl" :alt="item.productName" />
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-ink-900">{{ item.productName }}</p>
+              <!-- 옵션명 스냅샷(2026-07-24 C-8). 단일 옵션/옵션 이전 주문이면 null이라 안 뜬다. -->
+              <p v-if="item.optionName" class="muted truncate">{{ item.optionName }}</p>
               <p class="muted mt-1 tabular-nums">
                 <!-- 주문 시점 정가 스냅샷(V16). 없으면 할인 없이 샀거나 정가 도입 이전 주문이다. -->
                 <span v-if="hasDiscount(item)" class="line-through">{{ priceText(item.listPrice) }}</span>
