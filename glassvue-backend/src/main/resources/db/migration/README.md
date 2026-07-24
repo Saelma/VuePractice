@@ -32,29 +32,41 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
   마이그레이션을 추가할 때마다 여기서 한 번 돌려보면 된다.
 
   ```bash
+  # 0) sqlplus는 ORACLE_HOME을 안 잡으면 SP2-0667로 죽는다
+  set -a; . /home/ecstel/work/.env; set +a
+  export ORACLE_HOME=/opt/oracle/product/19c/dbhome_1
+  export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH
+
   # 1) 이전 검증 결과를 비운다 (빈 스키마에서 시작해야 의미가 있다)
-  sudo -iu oracle bash -c 'sqlplus -S / as sysdba' <<'EOF'
-  ALTER SESSION SET CONTAINER=espdb;
-  -- 스키마만 비우기: 테이블 + 시퀀스 전부 DROP (계정은 유지)
-  --
-  -- ⚠ 시퀀스를 빼먹으면 안 된다. 테이블만 지우면 V15가 만든 seq_order_no가 살아남아
-  --    다음 검증에서 CREATE SEQUENCE가 ORA-00955(이미 사용 중인 이름)로 실패한다.
-  --    2026-07-23 V16 검증에서 실제로 걸렸다.
+  #
+  # ⚠ sudo·sysdba가 필요 없다 — esptest로 직접 접속해 **자기 스키마**를 비운다.
+  #    (2026-07-24에 바꿨다. 예전엔 `sudo -iu oracle ... as sysdba` + dba_tables였는데,
+  #     자기 객체를 DROP 하는 데는 DBA 권한이 필요 없다. sudo가 필요한 절차는 사람 손을
+  #     기다리게 만들어 검증을 건너뛰게 한다.)
+  #
+  # ⚠ 시퀀스를 빼먹지 말 것. 테이블만 지우면 V15가 만든 seq_order_no가 살아남아
+  #    다음 검증에서 CREATE SEQUENCE가 ORA-00955(이미 사용 중인 이름)로 실패한다.
+  #    2026-07-23 V16 검증에서 실제로 걸렸다.
+  sqlplus -s "esptest/TestPw#2026@//$DB_HOST:$DB_PORT/${DB_SERVICE:-espdb}" <<'EOF'
   BEGIN
-    FOR t IN (SELECT table_name FROM dba_tables WHERE owner='ESPTEST') LOOP
-      EXECUTE IMMEDIATE 'DROP TABLE ESPTEST."'||t.table_name||'" CASCADE CONSTRAINTS PURGE';
+    FOR t IN (SELECT table_name FROM user_tables) LOOP
+      EXECUTE IMMEDIATE 'DROP TABLE "'||t.table_name||'" CASCADE CONSTRAINTS PURGE';
     END LOOP;
-    FOR s IN (SELECT sequence_name FROM dba_sequences WHERE sequence_owner='ESPTEST') LOOP
-      EXECUTE IMMEDIATE 'DROP SEQUENCE ESPTEST."'||s.sequence_name||'"';
+    FOR s IN (SELECT sequence_name FROM user_sequences) LOOP
+      EXECUTE IMMEDIATE 'DROP SEQUENCE "'||s.sequence_name||'"';
     END LOOP;
   END;
   /
+  select count(*) as tables_left from user_tables;   -- 0 이어야 한다
+  select count(*) as seqs_left   from user_sequences; -- 0 이어야 한다
+  exit
   EOF
 
   # 2) 그 계정으로 기동 (기본 DB를 안 건드리게 자격증명만 덮어쓴다)
   ./gradlew bootRun --args="--server.port=8083 --spring.profiles.active=dev \
       --spring.datasource.username=esptest --spring.datasource.password=TestPw#2026"
   # 로그에 V1→…→Vn이 순서대로 applied 되고 앱이 뜨면 성공(ddl-auto=validate 통과 = 엔티티와 일치).
+  # 확인 후 반드시 내린다 — 8083이 떠 있으면 다음 검증이 포트 충돌로 죽는다.
   ```
 
   > 계정이 없어졌다면 다시 만든다(DBA 필요):
