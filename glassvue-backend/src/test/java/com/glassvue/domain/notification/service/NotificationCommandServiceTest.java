@@ -69,12 +69,22 @@ class NotificationCommandServiceTest {
     }
 
     @Test
-    @DisplayName("설정 변경: 기존 행이 없으면 새로 저장한다(upsert)")
+    @DisplayName("설정 변경: UPDATE가 0행이면(없음) 새로 저장한다(upsert)")
     void changeSettingInsertsWhenAbsent() {
-        when(prefRepository.findByMemberIdAndType(member, NotificationType.STOCK)).thenReturn(Optional.empty());
+        when(prefRepository.updateEnabled(member, NotificationType.STOCK, false)).thenReturn(0);
 
         service.changeSetting(member, NotificationType.STOCK, false);
 
         verify(prefRepository).save(any(NotificationPref.class));
+    }
+
+    @Test
+    @DisplayName("설정 변경: 이미 있으면 UPDATE만 하고 INSERT 하지 않는다(유니크 경합 회피)")
+    void changeSettingUpdatesWhenPresent() {
+        when(prefRepository.updateEnabled(member, NotificationType.ORDER, false)).thenReturn(1);
+
+        service.changeSetting(member, NotificationType.ORDER, false);
+
+        verify(prefRepository, never()).save(any());
     }
 }

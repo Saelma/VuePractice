@@ -1,5 +1,6 @@
 package com.glassvue.global.security;
 
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -36,6 +37,10 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // 비동기·에러 디스패치는 재인가하지 않는다. SSE(SseEmitter)는 응답을 스트리밍한 뒤
+                        // ASYNC 디스패치로 마무리되는데, 무상태(JWT)라 그 디스패치엔 SecurityContext가 없어
+                        // AuthorizationFilter가 Access Denied를 낸다("응답 이미 커밋됨" 로그). 스프링 공식 해법이다.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         // 공지 글쓰기(등록/수정/삭제)는 로그인 필요. 조회·조회수증가는 공개.
                         .requestMatchers(HttpMethod.POST, "/api/notices").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/notices/*").authenticated()

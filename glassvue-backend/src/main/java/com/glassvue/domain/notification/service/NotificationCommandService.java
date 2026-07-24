@@ -58,12 +58,18 @@ public class NotificationCommandService {
         notificationRepository.markAllRead(memberId);
     }
 
-    /** 알림 타입 켜기/끄기 — 없으면 만들고 있으면 바꾼다(upsert). */
+    /**
+     * 알림 타입 켜기/끄기 — 없으면 만들고 있으면 바꾼다(upsert).
+     *
+     * <p><b>UPDATE 먼저, 없으면 INSERT.</b> find→insert 로 하면 같은 (member,type)의 빠른 연속 토글이
+     * 둘 다 "없음"으로 읽고 각자 INSERT 해 유니크 제약(ORA-00001)에 걸린다(2026-07-24 실측).
+     * 재토글은 순수 UPDATE 라 그 경합이 사라진다. 화면도 요청 중 토글을 잠가 최초 동시삽입까지 막는다.
+     */
     @Transactional
     public void changeSetting(UUID memberId, NotificationType type, boolean enabled) {
-        prefRepository.findByMemberIdAndType(memberId, type)
-                .ifPresentOrElse(
-                        pref -> pref.change(enabled),
-                        () -> prefRepository.save(NotificationPref.of(memberId, type, enabled)));
+        int updated = prefRepository.updateEnabled(memberId, type, enabled);
+        if (updated == 0) {
+            prefRepository.save(NotificationPref.of(memberId, type, enabled));
+        }
     }
 }

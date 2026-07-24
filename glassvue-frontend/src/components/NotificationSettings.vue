@@ -9,6 +9,7 @@ import { fetchNotificationSettings, updateNotificationSetting } from '../api/not
 const settings = ref([]);
 const loading = ref(true);
 const error = ref('');
+const pending = ref(new Set()); // 요청 중인 타입 — 빠른 연속 클릭이 서버에서 유니크 경합을 내지 않게 잠근다
 
 onMounted(async () => {
   try {
@@ -21,13 +22,19 @@ onMounted(async () => {
 });
 
 async function toggle(s) {
+  if (pending.value.has(s.type)) return; // 이미 처리 중이면 무시(더블클릭 방지)
   const next = !s.enabled;
   s.enabled = next; // 낙관적
+  pending.value = new Set(pending.value).add(s.type);
   try {
     await updateNotificationSetting(s.type, next);
   } catch (e) {
     s.enabled = !next; // 롤백
     error.value = e.message;
+  } finally {
+    const p = new Set(pending.value);
+    p.delete(s.type);
+    pending.value = p;
   }
 }
 </script>
@@ -55,7 +62,8 @@ async function toggle(s) {
           role="switch"
           :aria-checked="s.enabled"
           :aria-label="s.label"
-          class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          :disabled="pending.has(s.type)"
+          class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-60"
           :class="s.enabled ? 'bg-brand-600' : 'bg-line'"
           @click="toggle(s)"
         >
