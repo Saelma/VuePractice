@@ -215,6 +215,28 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
 > `ShippingPolicy` 는 **global** 에 있다: 장바구니(주문 전 미리보기)와 주문(부과)이 둘 다 읽어야 하는데
 > 이미 `order → cart` 의존이 있어 order 에 두면 `cart → order` 로 **순환**이 된다.
 >
+> **배송지 주소록(2026-07-24, V18)**: 배송지는 `member.ship_*` 5컬럼 = **회원당 하나**였는데(V11),
+> 별칭을 붙인 여러 주소(`member_address`)로 늘리고 그중 하나를 기본 배송지로 둔다.
+> **기본 배송지는 회원당 최대 하나**이고 그 보장은 앱이 아니라 **DB**가 한다 —
+> Oracle에 부분 유니크 인덱스가 없어 `CASE WHEN is_default=1 THEN member_id END`의
+> **함수 기반 유니크 인덱스**로 같은 효과를 낸다(주문번호 유니크 V15와 같은 "최종 방어선" 성격).
+> 그래서 서비스는 "옛 기본 해제 → **flush** → 새 기본 지정" 순서를 지켜야 한다. 순서가 뒤집히면 ORA-00001이다.
+>
+> `member_address.member_id`에는 **진짜 FK를 건다**(`ON DELETE CASCADE`). `member_coupon.member_id`가
+> "FK 아님(느슨한 참조)"인 것과 다른데, 그건 **도메인 간** 참조라 경계 때문에 느슨하게 뒀고
+> 이건 **member 도메인 안**이라 MSA로 쪼개도 member와 함께 움직이기 때문이다.
+> CASCADE가 없으면 주소가 있는 회원은 **탈퇴 자체가 FK 위반으로 실패**한다.
+>
+> ⚠ **첫 번째 "순수 추가가 아닌" 마이그레이션**이라 expand/contract로 나눴다 —
+> **V18은 추가만**(테이블 신설 + 값 복사), `member.ship_*` **DROP은 V19**(신 코드 배포 뒤).
+> `ddl-auto=validate`라 한 번에 DROP하면 통합 테스트가 Flyway를 공유 espdb에 적용하는 순간
+> **운영 구 jar가 재기동 불가**가 된다(V6 닉네임 UNIQUE 사고의 강화판 — 그건 신규 가입만 막았지만
+> 컬럼 DROP은 기존 조회를 통째로 깬다). 그 사이 이중 진실이 되지 않게 **Member 엔티티에서 매핑을 걷어냈다**
+> — 규율이 아니라 구조로 막는다(validate는 매핑 안 된 여분 컬럼을 문제 삼지 않는다).
+> `MemberResponse.ship*`는 **응답 계약을 유지**한 채 출처만 주소록의 기본 항목으로 바꿨다.
+>
+> ⚠ `orders.ship_*`는 무관하다 — 그건 주문 시점 **스냅샷**이고, 주소록을 고쳐도 과거 주문은 그대로다.
+>
 > **주문 상태**: `ORDERED → PAID → SHIPPED → DELIVERED` (+CANCELLED, ORDERED·PAID만). 취소 시 재고 복원.
 > 2026-07-16에 SHIPPED까지 만들고, **2026-07-23에 배송 추적(V13)** 을 붙이며 DELIVERED를 추가했다.
 > 네 시점이 모두 DB에 기록된다(`created_at`·`paid_at`·`shipped_at`·`delivered_at` + `cancelled_at`) —
