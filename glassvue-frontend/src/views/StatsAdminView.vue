@@ -16,6 +16,8 @@ import EmptyState from '../components/EmptyState.vue';
 const data = ref(null);
 const loading = ref(true);
 const error = ref('');
+/** 커서가 올라간 날. 값은 차트 헤더에 표시한다(막대 옆 툴팁은 잘린다 — 템플릿 주석 참조). */
+const hovered = ref(null);
 
 const maxDaily = computed(() => {
   if (!data.value?.daily?.length) return 0;
@@ -99,26 +101,51 @@ onMounted(async () => {
         <div class="card mt-8 p-5">
           <div class="flex flex-wrap items-baseline justify-between gap-2">
             <h2 class="section-title">최근 30일 상품매출</h2>
-            <span class="muted">최대 {{ priceText(maxDaily) }}</span>
+            <!--
+              hover 값을 **막대 옆이 아니라 여기** 보여준다.
+              막대 30칸이면 한 칸이 20px 남짓이라, 툴팁을 막대에 붙이면 양끝 칸에서 가로로 잘린다.
+              게다가 차트가 overflow-x-auto 안에 있어서 막대 위로 띄우면 세로로도 잘린다
+              (한 축이 visible이 아니면 다른 축도 auto가 되는 CSS 규칙 — 2026-07-24에 실제로 겪었다).
+            -->
+            <span v-if="hovered" class="text-sm tabular-nums text-ink-900">
+              <strong>{{ hovered.date }}</strong>
+              · {{ priceText(hovered.itemSales) }}
+              · {{ hovered.orderCount }}건
+              <span v-if="hovered.shippingSales > 0" class="text-ink-500">
+                (배송비 {{ priceText(hovered.shippingSales) }})
+              </span>
+            </span>
+            <span v-else class="muted">막대에 커서를 올리면 그날 매출이 보입니다 · 최대 {{ priceText(maxDaily) }}</span>
           </div>
 
           <!-- 막대는 CSS만으로 그린다. 차트 라이브러리를 하나 더 넣을 만한 복잡도가 아니다. -->
           <div class="mt-5 overflow-x-auto">
             <div class="flex min-w-[640px] items-end gap-1" style="height: 160px">
+              <!--
+                hover 대상은 막대가 아니라 **칸 전체**다. 매출 0인 날은 막대 높이가 0이라
+                막대에만 걸면 커서를 올릴 수 없고, 낮은 막대도 조준하기 어렵다.
+                터치에서도 되도록 click을 같이 받는다.
+              -->
               <div
                 v-for="d in data.daily"
                 :key="d.date"
-                class="group relative flex flex-1 flex-col items-center justify-end"
+                class="flex flex-1 cursor-default flex-col items-center justify-end rounded-t transition-colors"
+                :class="hovered?.date === d.date ? 'bg-brand-100' : 'hover:bg-canvas'"
                 style="height: 100%"
+                @mouseenter="hovered = d"
+                @mouseleave="hovered = null"
+                @click="hovered = d"
               >
+                <!--
+                  선택된 막대가 **진해져야** 한다. brand-700은 이 팔레트에서 hover용으로 더 밝은 색이라
+                  (index.css 주석: "검정 버튼은 밝아지는 쪽이 자연스럽다") 그걸 쓰면 강조가 거꾸로 된다.
+                  대신 불투명도로 가른다 — 평소 70%, 선택되면 100%.
+                -->
                 <div
-                  class="w-full rounded-t bg-brand-600/80 transition-colors group-hover:bg-brand-600"
+                  class="w-full rounded-t bg-brand-600 transition-opacity"
+                  :class="hovered?.date === d.date ? 'opacity-100' : 'opacity-70'"
                   :style="{ height: barHeight(d.itemSales, maxDaily) + '%' }"
                 ></div>
-                <!-- 값은 hover로만 — 30칸에 숫자를 다 적으면 읽을 수 없다 -->
-                <span
-                  class="pointer-events-none absolute -top-6 hidden whitespace-nowrap rounded bg-ink-900 px-1.5 py-0.5 text-xs text-white group-hover:block"
-                >{{ d.date }} · {{ priceText(d.itemSales) }} · {{ d.orderCount }}건</span>
               </div>
             </div>
             <div class="mt-2 flex min-w-[640px] gap-1">
