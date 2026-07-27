@@ -10,7 +10,8 @@ package com.glassvue.domain.notification.entity;
 public enum NotificationType {
 
     ORDER("주문 알림"),   // 주문 생성·배송완료·취소 (구매자 대상)
-    STOCK("재고 알림");   // 재고 부족 (관리자 대상)
+    STOCK("재고 알림"),   // 재고 부족 (관리자 대상)
+    RESTOCK("재입고 알림"); // 품절 상품 재입고 (신청한 구매자 대상, B-9)
 
     private final String label;
 

@@ -57,6 +57,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/points/**").authenticated()
                         // 알림(목록·SSE 스트림·설정)도 개인 것이라 로그인 필요. 스트림도 이 매처로 인증된다.
                         .requestMatchers("/api/notifications/**").authenticated()
+                        // 재입고 알림 신청도 개인 것 — 매처가 없으면 남의 신청 목록이 열린다(B-9).
+                        .requestMatchers("/api/restock/**").authenticated()
                         // 관리자 전용 API는 경로로 모아 한 줄로 막는다 — 엔드포인트가 늘어도 권한 설정을
                         // 빠뜨릴 수 없다(개별 매처를 잊는 사고 방지). /api/orders/** 보다 먼저 와야 한다.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

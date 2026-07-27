@@ -37,6 +37,13 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
     int increaseStock(@Param("id") UUID id, @Param("qty") long qty);
 
     /**
+     * 한 상품의 <b>총재고</b>(옵션 재고 합) — 재입고 판단(상품 총재고 0→양수)용.
+     * 옵션이 없거나 전부 0이면 0. 벌크 UPDATE 직후 읽어도 되도록 스칼라 집계로 뽑는다(1차 캐시 우회).
+     */
+    @Query("select coalesce(sum(v.stock), 0) from ProductVariant v where v.productId = :productId")
+    long sumStockByProduct(@Param("productId") UUID productId);
+
+    /**
      * 차감 직후의 재고 스냅샷 — 재고 부족 알림 판단용.
      *
      * <p>상품명·옵션명을 함께 뽑아 알림이 "무선키보드 (검정/M) 재고 3" 처럼 어느 옵션인지 말할 수 있게 한다.

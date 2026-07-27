@@ -7,6 +7,7 @@ import com.glassvue.domain.catalog.dto.VariantRequest;
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
 import com.glassvue.domain.catalog.entity.ProductVariant;
+import com.glassvue.domain.catalog.event.StockReplenishedEvent;
 import com.glassvue.domain.catalog.event.StockRunningLowEvent;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
@@ -69,6 +70,7 @@ public class ProductCommandService {
         Category category = findCategory(req.categoryId());
         UUID oldGroupId = product.getImageGroupId();
         UUID imageGroupId = imageService.createGroup(req.imageIds());
+        long stockBefore = variantRepository.sumStockByProduct(id); // 옵션 교체 전 총재고(재입고 판단용)
         product.update(req.name(), req.description(), req.price(), req.listPrice(),
                 req.status(), imageGroupId, category);
 
@@ -81,6 +83,11 @@ public class ProductCommandService {
         saveVariants(id, req.variants());
 
         imageService.deleteGroup(oldGroupId);
+
+        // 관리자 재고 편집도 재입고 경로다 — 실제 이커머스에서 품절이 풀리는 주된 경로.
+        // 옵션을 통째로 교체하므로 옵션이 아니라 상품 총재고 0→양수로 판단한다. sumStockByProduct 는
+        // JPQL 이라 위 save 들을 flush 한 뒤의 값을 본다(새 옵션 반영).
+        publishIfReplenished(id, stockBefore, product.getName());
     }
 
     @CacheEvict(cacheNames = "products:list", allEntries = true)
@@ -130,12 +137,29 @@ public class ProductCommandService {
                         s.stock(), catalogProperties.lowStockThreshold())));
     }
 
-    /** 주문 취소 시 재고 복원 — 옵션 단위. 옵션이 삭제됐거나 정보가 없으면 조용히 무시. */
+    /** 주문 취소·반품 시 재고 복원 — 옵션 단위. 옵션이 삭제됐거나 정보가 없으면 조용히 무시. */
     @CacheEvict(cacheNames = "products:list", allEntries = true)
     public void increaseStock(UUID variantId, long quantity) {
         if (variantId == null) {
             return;
         }
-        variantRepository.increaseStock(variantId, quantity);
+        if (variantRepository.increaseStock(variantId, quantity) == 0) {
+            return; // 옵션이 이미 삭제됨(관리자 편집 등) — 복원할 대상이 없다
+        }
+        // 이 옵션 증가로 상품 총재고가 0→양수가 됐으면 재입고. 상품 총재고에서 방금 더한 양을 빼면
+        // 증가 직전 총재고이므로, 그게 0이었는지로 "품절이 풀렸는지"를 판단한다(옵션 여러 개여도 한 번만 발행).
+        variantRepository.findStockSnapshot(variantId).ifPresent(s ->
+                publishIfReplenished(s.productId(), variantRepository.sumStockByProduct(s.productId()) - quantity,
+                        s.productName()));
+    }
+
+    /** 상품 총재고가 {@code stockBefore}(0)에서 지금 양수가 됐으면 재입고 이벤트를 낸다. */
+    private void publishIfReplenished(UUID productId, long stockBefore, String productName) {
+        if (stockBefore != 0) {
+            return; // 원래 재고가 있었으면 "재입고"가 아니다
+        }
+        if (variantRepository.sumStockByProduct(productId) > 0) {
+            eventPublisher.publishEvent(new StockReplenishedEvent(productId, productName));
+        }
     }
 }

@@ -10,9 +10,11 @@ import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discount
 import { addToCart } from '../api/cart';
 import { authState, isLoggedIn } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
+import { loadRestockIds } from '../stores/restock';
 import { pushRecentlyViewed } from '../stores/recentlyViewed';
 import StarRating from '../components/StarRating.vue';
 import WishlistButton from '../components/WishlistButton.vue';
+import RestockButton from '../components/RestockButton.vue';
 import ProductReviews from '../components/ProductReviews.vue';
 import ProductInquiries from '../components/ProductInquiries.vue';
 
@@ -44,6 +46,12 @@ const mainImage = computed(() => images.value[selected.value] ?? images.value[0]
 /** 담기 전에 얼마인지 바로 보이게 — 옵션 가격 × 수량. 옵션 미선택이면 기본가로 미리 보여준다. */
 const unitPrice = computed(() => selectedVariant.value?.price ?? product.value?.price ?? 0);
 const lineTotal = computed(() => unitPrice.value * (qty.value || 1));
+
+/**
+ * 상품 전체가 품절이면 재입고 알림 신청을 권한다(B-9). 부분 품절(다른 옵션은 살 수 있음)은
+ * 신청 대상이 아니다 — 재입고 이벤트가 상품 총재고 0→양수에서만 나므로 기준을 맞춘다.
+ */
+const soldOutAll = computed(() => product.value?.totalStock === 0);
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
 
 async function onAddToCart() {
@@ -65,7 +73,10 @@ async function onAddToCart() {
 }
 
 onMounted(async () => {
-  if (isLoggedIn.value) loadWishlistIds(); // 하트를 채우려면 내 찜 id가 필요하다
+  if (isLoggedIn.value) {
+    loadWishlistIds(); // 하트를 채우려면 내 찜 id가 필요하다
+    loadRestockIds(); // 재입고 버튼 상태(신청함/안함)를 채운다
+  }
   try {
     product.value = await getProduct(props.id);
     pushRecentlyViewed(product.value); // 홈 "최근 본 상품" 에 남긴다(localStorage, B-8)
@@ -246,6 +257,12 @@ async function onDelete() {
               <p class="text-sm text-ink-500">구매하려면 로그인이 필요해요.</p>
               <!-- 비로그인에게도 하트는 보여준다. 누르면 로그인으로 보내므로 유입 경로가 된다. -->
               <WishlistButton :product-id="id" size="md" class="mt-3" />
+            </div>
+
+            <!-- 상품 전체가 품절이면 재입고 알림 신청 (B-9). 다시 들어오면(총재고 0→양수) 알림이 온다. -->
+            <div v-if="soldOutAll" class="mt-4 rounded-lg border border-line bg-canvas p-4">
+              <p class="mb-3 text-sm text-ink-700">지금은 품절이에요. 다시 들어오면 알려드릴게요.</p>
+              <RestockButton :product-id="id" />
             </div>
 
             <!-- 보조 행동 -->
