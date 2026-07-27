@@ -173,6 +173,7 @@ updated_at  TIMESTAMP   ← BaseTimeEntity
 member          회원 · 인증 (게시판 5단계 로그인이 시작점)          ✅
   └▶ catalog    상품 · 카테고리 · **옵션(variant)**   (재고가 옵션마다)   ✅
        ├▶ wishlist 찜            (테이블 — 로그아웃해도 남는다)      ✅ 2026-07-24
+       ├▶ restock  재입고 알림 신청 (상품 총재고 0→양수에 반응)        ✅ 2026-07-27
        ├▶ point    적립금·회원등급  (배송완료 적립, 이력이 원장)       ✅ 2026-07-24
        └▶ cart  장바구니          (Redis 활용)                      ✅
             └▶ orders / order_item   주문 · 결제상태(PAID/SHIPPED)   ✅ 2026-07-16
@@ -304,6 +305,16 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
 > → **"내가 찜한 상품 id 집합"을 주는 API**(`GET /api/wishlist/product-ids`)를 따로 두고 **화면이 합친다.**
 > 도메인 순환을 피하는 세 번째 수단인 셈이다(이벤트·비정규화·클라이언트 조인).
 >
+> **재입고 알림 (2026-07-27, V28)**: `restock_subscription` 테이블(회원·상품 한 쌍) — 위시리스트와 같은 모양.
+> 품절 상품에 "재입고되면 알림 받기"를 저장하고, 상품이 다시 들어오면 신청자에게 인앱 알림(V26)을 보낸 뒤
+> 그 상품 구독을 **소진**한다(일회성). 버튼 상태도 찜과 같은 방식(`GET /api/restock/product-ids` + 화면 합성)이라
+> 도메인 순환을 피한다.
+> ⚠ **단위가 옵션이 아니라 상품**이다. 관리자 상품 편집이 옵션(`product_variant`)을 delete+재삽입하며
+> `variant.id` 가 매번 새로 생겨, 옵션 id 로 구독을 걸면 편집 한 번에 전부 고아가 된다. 그래서 (member, product)
+> 로 잡고 재입고 판정도 **상품 총재고 0→양수**로 한다(`StockReplenishedEvent`). 3층 이벤트 중 **핸들러를
+> restock 도메인에 둔다**(재고부족은 notification 이 받지만 재입고는 구독 생명주기=notify+소진이 restock 관심사).
+> catalog→(event)→restock→notification 으로 순환 없음.
+>
 > 추가·해제는 **멱등**이다 — 화면이 토글이라 사용자가 중복을 의도할 수 없고, 중복 요청은 더블클릭·재시도
 > 같은 사고다. 거기서 409 를 주면 원인은 안 보이고 화면 상태만 어긋난다. DB 의
 > `UNIQUE(member_id, product_id)` 가 최종 방어선. 조회 인덱스는 **따로 만들지 않는다** — 그 유니크
@@ -421,7 +432,7 @@ Spring Boot ──(로그)──┐
 | ~~**HTTPS** (nginx TLS 종단)~~ | ✅ **완료** 2026-07-16 — self-signed(SAN IP), 80→443 리다이렉트 (§6.0) |
 | **Sentry** (에러추적) | ⏸ 보류 — 관측/MSA 단계에 관측 스택과 함께 (모노레포 단계엔 오버엔지니어링, 2026-07-16 재판단) |
 | **Spring Batch** | 대량·재시작 배치 작업이 생길 때 (§6.0) |
-| ApplicationEventPublisher (스프링 내부 이벤트) | ✅ **도입 시작**(2026-07-16). **3층 구조**: ①`DomainEvent`(global/messaging 마커 인터페이스, 이벤트가 implements) ②`OrderEventListener`(어댑터 — `@TransactionalEventListener` AFTER_COMMIT + **`@Async`** 수신·위임만) ③`OrderNotificationHandler`(진짜 주체 — 로직). `OrderPlacedEvent`(checkout 발행) → 리스너 → 핸들러. order는 구독자를 모름. 비동기는 `AsyncConfig`(바운드 풀). 인프로세스 @Async는 best-effort → 유실 금지는 아웃박스/RabbitMQ. **MSA 시 리스너 자리에 RabbitMQ 컨슈머, Handler는 재사용**<br>**2026-07-20 확장**: `OrderCancelledEvent`(cancel 발행, Placed와 대칭) + **`StockRunningLowEvent`** 추가. 재고 이벤트는 **catalog가 발행 주체** — 재고는 catalog 소유이고 주문 외 경로(관리자 수정 등)로 줄어도 같은 알림이 나가야 하므로. 덕분에 order는 재고 알림의 존재를 모르고 `OrderService`는 무수정(fan-out 실증: 주문 1건 → Handler 2개가 각각 `event-*` 스레드에서 반응). 임계치는 `catalog.low-stock-threshold`(기본 5, 0=품절 포함). **재고 복원은 이벤트로 빼지 않는다** — 취소 처리의 일부(동기 성공 필수)지 best-effort 후처리가 아님<br>**2026-07-20 확장 2**: **`ReviewRatingChangedEvent`**(review 발행, 작성·수정·삭제) → catalog `ReviewEventListener` → `RatingSyncHandler`가 `product.avg_rating`/`review_count` 비정규화 갱신 + `products:list` 캐시 evict. **이벤트를 쓴 이유는 성능이 아니라 순환 회피** — catalog가 review를 조회하면 기존 `review → catalog`와 합쳐져 도메인 순환이 되고 MSA 분리가 깨진다. 그래서 **집계값을 이벤트 페이로드에 실어 보낸다**(`productId`만 보내면 구독자가 review를 되물어야 해서 순환이 되살아남). 결과: 상품 목록이 조인·추가쿼리 **0회**로 별점을 읽고, 의존 방향은 `review → catalog` 한쪽뿐 |
+| ApplicationEventPublisher (스프링 내부 이벤트) | ✅ **도입 시작**(2026-07-16). **3층 구조**: ①`DomainEvent`(global/messaging 마커 인터페이스, 이벤트가 implements) ②`OrderEventListener`(어댑터 — `@TransactionalEventListener` AFTER_COMMIT + **`@Async`** 수신·위임만) ③`OrderNotificationHandler`(진짜 주체 — 로직). `OrderPlacedEvent`(checkout 발행) → 리스너 → 핸들러. order는 구독자를 모름. 비동기는 `AsyncConfig`(바운드 풀). 인프로세스 @Async는 best-effort → 유실 금지는 아웃박스/RabbitMQ. **MSA 시 리스너 자리에 RabbitMQ 컨슈머, Handler는 재사용**<br>**2026-07-20 확장**: `OrderCancelledEvent`(cancel 발행, Placed와 대칭) + **`StockRunningLowEvent`** 추가. 재고 이벤트는 **catalog가 발행 주체** — 재고는 catalog 소유이고 주문 외 경로(관리자 수정 등)로 줄어도 같은 알림이 나가야 하므로. 덕분에 order는 재고 알림의 존재를 모르고 `OrderService`는 무수정(fan-out 실증: 주문 1건 → Handler 2개가 각각 `event-*` 스레드에서 반응). 임계치는 `catalog.low-stock-threshold`(기본 5, 0=품절 포함). **재고 복원은 이벤트로 빼지 않는다** — 취소 처리의 일부(동기 성공 필수)지 best-effort 후처리가 아님<br>**2026-07-27 확장**: **`StockReplenishedEvent`**(재입고, B-9/V28) — `StockRunningLowEvent` 와 대칭으로 **catalog 가 발행 주체**. 상품 **총재고 0→양수** 전환 시 발행하며 경로는 셋(주문취소·반품복원=`increaseStock`, 관리자 재고편집=`update`). 구독자는 **restock 도메인**의 `RestockEventListener`→`RestockNotificationHandler`(신청자에게 RESTOCK 알림 + 구독 소진). 재고부족(STOCK)은 notification 이 받지만 재입고는 구독 생명주기를 소유한 restock 이 받는다(catalog→restock→notification, 순환 없음). 단위가 옵션이 아니라 상품인 이유는 §5 restock 참조<br>**2026-07-20 확장 2**: **`ReviewRatingChangedEvent`**(review 발행, 작성·수정·삭제) → catalog `ReviewEventListener` → `RatingSyncHandler`가 `product.avg_rating`/`review_count` 비정규화 갱신 + `products:list` 캐시 evict. **이벤트를 쓴 이유는 성능이 아니라 순환 회피** — catalog가 review를 조회하면 기존 `review → catalog`와 합쳐져 도메인 순환이 되고 MSA 분리가 깨진다. 그래서 **집계값을 이벤트 페이로드에 실어 보낸다**(`productId`만 보내면 구독자가 review를 되물어야 해서 순환이 되살아남). 결과: 상품 목록이 조인·추가쿼리 **0회**로 별점을 읽고, 의존 방향은 `review → catalog` 한쪽뿐 |
 | Spring Modulith (도메인 경계 검증) | 도메인이 늘어 경계 규칙을 테스트로 강제하고 싶을 때 |
 | Docker | 첫 서비스 분리를 시작할 때 (k8s 제외, compose까지) |
 | 컨테이너 모니터링 (Portainer/ctop + cAdvisor→Grafana) | Docker 전환과 세트. Docker Desktop은 서버엔 제외 |
