@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { isLoggedIn, authState, isAdminRole } from '../stores/auth';
+import { isLoggedIn, authState, isAdminRole, isSuperAdminRole } from '../stores/auth';
 import { loadMe } from '../api/auth';
 import HomeView from '../views/HomeView.vue';
 import NoticeListView from '../views/NoticeListView.vue';
@@ -18,6 +18,7 @@ import CategoryAdminView from '../views/CategoryAdminView.vue';
 import StatsAdminView from '../views/StatsAdminView.vue';
 import MemberAdminView from '../views/MemberAdminView.vue';
 import MemberDetailAdminView from '../views/MemberDetailAdminView.vue';
+import AuditLogAdminView from '../views/AuditLogAdminView.vue';
 import CartView from '../views/CartView.vue';
 import WishlistView from '../views/WishlistView.vue';
 import CheckoutView from '../views/CheckoutView.vue';
@@ -49,6 +50,8 @@ const routes = [
   { path: '/admin/stats', name: 'stats-admin', component: StatsAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members', name: 'member-admin', component: MemberAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members/:id', name: 'member-admin-detail', component: MemberDetailAdminView, props: true, meta: { requiresAdmin: true } },
+  // 감사 이력은 최상위 관리자만 — 조작 당사자(ADMIN)가 자기 이력을 보는 구조를 막는다.
+  { path: '/admin/audit', name: 'audit-admin', component: AuditLogAdminView, meta: { requiresSuperAdmin: true } },
   { path: '/cart', name: 'cart', component: CartView, meta: { requiresAuth: true } },
   { path: '/wishlist', name: 'wishlist', component: WishlistView, meta: { requiresAuth: true } },
   { path: '/checkout', name: 'checkout', component: CheckoutView, meta: { requiresAuth: true } },
@@ -74,7 +77,7 @@ const router = createRouter({
 
 // 로그인 필요 경로 가드
 router.beforeEach(async (to) => {
-  const needsAuth = to.meta.requiresAuth || to.meta.requiresAdmin;
+  const needsAuth = to.meta.requiresAuth || to.meta.requiresAdmin || to.meta.requiresSuperAdmin;
   // 토큰은 있는데 내 정보가 아직 안 실렸으면(새로고침·URL 직접 진입) 먼저 로드해 역할을 확정한다.
   // App.vue의 loadMe는 mount 이후라 초기 네비게이션에는 늦다 — 안 기다리면 관리자가 admin 경로를
   // 직접 열 때 user가 null이라 아래 역할 체크에서 자기 화면인데도 튕긴다.
@@ -84,6 +87,10 @@ router.beforeEach(async (to) => {
   // 관리자 경로는 권한이 없으면(비로그인 포함) **로그인 유도 없이** 상품 목록으로 보낸다 —
   // 관리 화면의 존재 자체를 노출하지 않는다(사용자 요청, 2026-07-28).
   if (to.meta.requiresAdmin && !isAdminRole(authState.user?.role)) {
+    return { path: '/products' };
+  }
+  // 최상위 관리자 전용 경로(감사 이력)는 SUPER_ADMIN 이 아니면(일반 ADMIN·비로그인 포함) 상품 목록으로.
+  if (to.meta.requiresSuperAdmin && !isSuperAdminRole(authState.user?.role)) {
     return { path: '/products' };
   }
   // 그 외 로그인 필요 경로: 비로그인 → 로그인(원래 경로로 복귀하도록 redirect 보존)

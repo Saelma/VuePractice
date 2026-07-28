@@ -17,6 +17,13 @@ export function isAdminRole(role) {
 }
 export const isAdmin = computed(() => isAdminRole(state.user?.role));
 
+// 최상위 관리자(SUPER_ADMIN) 전용 판별. 감사 이력 조회처럼 ADMIN 도 못 보는 화면·가드에 쓴다.
+// (백엔드 SecurityConfig 의 /api/admin/audit/** = hasRole('SUPER_ADMIN') 과 같은 경계.)
+export function isSuperAdminRole(role) {
+  return role === 'SUPER_ADMIN';
+}
+export const isSuperAdmin = computed(() => isSuperAdminRole(state.user?.role));
+
 export function setTokens(access, refresh) {
   state.access = access;
   state.refresh = refresh;

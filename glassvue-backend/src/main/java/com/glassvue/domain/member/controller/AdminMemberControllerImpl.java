@@ -52,7 +52,7 @@ public class AdminMemberControllerImpl implements AdminMemberController {
     public ResponseEntity<ApiResponse<AdminMemberResponse>> suspend(
             @LoginUser AuthUser admin, @PathVariable UUID memberId) {
         return ResponseEntity.ok(ApiResponse.ok(
-                memberAdminCommandService.suspend(admin.id(), admin.role(), memberId)));
+                memberAdminCommandService.suspend(admin, memberId)));
     }
 
     @Override
@@ -60,7 +60,7 @@ public class AdminMemberControllerImpl implements AdminMemberController {
     public ResponseEntity<ApiResponse<AdminMemberResponse>> unsuspend(
             @LoginUser AuthUser admin, @PathVariable UUID memberId) {
         return ResponseEntity.ok(ApiResponse.ok(
-                memberAdminCommandService.unsuspend(admin.id(), admin.role(), memberId)));
+                memberAdminCommandService.unsuspend(admin, memberId)));
     }
 
     @Override
@@ -69,6 +69,6 @@ public class AdminMemberControllerImpl implements AdminMemberController {
             @LoginUser AuthUser admin, @PathVariable UUID memberId,
             @Valid @RequestBody RoleChangeRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(
-                memberAdminCommandService.changeRole(admin.id(), admin.role(), memberId, request.role())));
+                memberAdminCommandService.changeRole(admin, memberId, request.role())));
     }
 }

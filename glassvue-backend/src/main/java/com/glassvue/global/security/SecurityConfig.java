@@ -59,6 +59,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/notifications/**").authenticated()
                         // 재입고 알림 신청도 개인 것 — 매처가 없으면 남의 신청 목록이 열린다(B-9).
                         .requestMatchers("/api/restock/**").authenticated()
+                        // 감사 이력 조회는 최상위 관리자만 — 조작 당사자(ADMIN)가 자기 이력을 보는 구조를 막는다.
+                        // /api/admin/** 의 ADMIN 규칙보다 반드시 먼저 와야 좁은 규칙이 적용된다.
+                        .requestMatchers("/api/admin/audit/**").hasRole("SUPER_ADMIN")
                         // 관리자 전용 API는 경로로 모아 한 줄로 막는다 — 엔드포인트가 늘어도 권한 설정을
                         // 빠뜨릴 수 없다(개별 매처를 잊는 사고 방지). /api/orders/** 보다 먼저 와야 한다.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
