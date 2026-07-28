@@ -6,6 +6,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getCart, updateCartItem, removeCartItem, clearCart } from '../api/cart';
+import { setCartCount } from '../stores/cart';
 import { priceText, hasDiscount, discountRate } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
 import EmptyState from '../components/EmptyState.vue';
@@ -18,6 +19,7 @@ const loading = ref(true);
 async function load() {
   try {
     cart.value = await getCart();
+    setCartCount(cart.value.totalQuantity); // 헤더 🛒 배지 동기화(수량변경·삭제·비우기 모두 여기 거친다)
   } catch (e) {
     error.value = e.message;
   } finally {

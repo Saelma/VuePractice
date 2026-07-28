@@ -13,6 +13,7 @@ import { useRouter } from 'vue-router';
 import { fetchWishlist } from '../api/wishlist';
 import { removeWishlist } from '../api/wishlist';
 import { addToCart } from '../api/cart';
+import { loadCartCount } from '../stores/cart';
 import { priceText, statusText, hasDiscount, discountRate } from '../api/product';
 import { wishlistState } from '../stores/wishlist';
 import StarRating from '../components/StarRating.vue';
@@ -43,6 +44,7 @@ async function onAddToCart(item) {
   try {
     await addToCart(item.productId, 1);
     msg.value = `'${item.name}'을(를) 장바구니에 담았어요.`;
+    loadCartCount(true); // 헤더 🛒 배지 갱신
   } catch (e) {
     error.value = e.message;
   } finally {

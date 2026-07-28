@@ -19,6 +19,7 @@ import { fetchNotices } from '../api/notice';
 import { fetchOrders, orderStatusText, orderStatusClass } from '../api/order';
 import { fetchPointAccount, gradeText } from '../api/point';
 import { addToCart } from '../api/cart';
+import { loadCartCount } from '../stores/cart';
 import { isLoggedIn } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
 import { recentlyViewed } from '../stores/recentlyViewed';
@@ -98,6 +99,7 @@ async function reorder() {
     reorderMsg.value = '품절되었거나 판매가 끝난 상품이라 담지 못했어요.';
     return;
   }
+  loadCartCount(true); // 헤더 🛒 배지 갱신(여러 건 담았으니 한 번만)
   const skipped = items.length - added;
   if (skipped) {
     // 일부만 담긴 경우 — 장바구니로 넘어가면 왜 적은지 알 수 없으니 먼저 알린다.

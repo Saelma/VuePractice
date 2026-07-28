@@ -8,6 +8,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getCart } from '../api/cart';
 import { checkout as apiCheckout } from '../api/order';
+import { setCartCount } from '../stores/cart';
 import { updateShippingAddress } from '../api/member';
 import { priceText } from '../api/product';
 import { fetchMyCoupons } from '../api/coupon';
@@ -119,6 +120,7 @@ async function submit() {
     if (saveAsDefault.value) {
       await updateShippingAddress(address).catch(() => {});
     }
+    setCartCount(0); // 주문 완료 = 장바구니 비워짐 → 헤더 🛒 배지 즉시 0
     router.push(`/orders/${orderId}`);
   } catch (e) {
     error.value = e.message;

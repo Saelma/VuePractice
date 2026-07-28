@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discountRate } from '../api/product';
 import { addToCart } from '../api/cart';
+import { loadCartCount } from '../stores/cart';
 import { authState, isLoggedIn, isAdmin } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
 import { loadRestockIds } from '../stores/restock';
@@ -66,6 +67,7 @@ async function onAddToCart() {
   try {
     await addToCart(selectedVariant.value.id, qty.value);
     cartMsg.value = '장바구니에 담았어요.';
+    loadCartCount(true); // 헤더 🛒 배지 갱신
   } catch (e) {
     error.value = e.message;
   }

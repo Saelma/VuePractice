@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRouter } from 'vue-router';
 import { authState, isLoggedIn } from './stores/auth';
 import { loadMe } from './api/auth';
 import { connectNotifications, disconnectNotifications } from './stores/notifications';
+import { cartState, loadCartCount, clearCartCount } from './stores/cart';
 import NotificationBell from './components/NotificationBell.vue';
 import NotificationToaster from './components/NotificationToaster.vue';
 import AdminMenu from './components/AdminMenu.vue';
@@ -16,14 +17,27 @@ onMounted(() => {
   // 저장된 토큰으로 내 정보 갱신. 라우터 가드가 보호 경로 진입 때 이미 로드했으면(authState.user 존재)
   // 중복 /me 요청을 피한다 — 공개 경로로 처음 들어온 경우엔 여기서 채운다(헤더 닉네임·관리자 nav용).
   if (!authState.user) loadMe();
-  if (isLoggedIn.value) connectNotifications(); // 이미 로그인 상태면 알림 스트림 연결
+  if (isLoggedIn.value) {
+    connectNotifications(); // 이미 로그인 상태면 알림 스트림 연결
+    loadCartCount(); // 🛒 배지 초기값
+  }
 });
 
-// 로그인/로그아웃에 맞춰 알림 스트림을 붙이고 뗀다(로그아웃 시 다음 사용자에게 안 새게 끊는다).
+// 로그인/로그아웃에 맞춰 알림 스트림·장바구니 배지를 붙이고 뗀다(로그아웃 시 다음 사용자에게 안 새게).
 watch(isLoggedIn, (loggedIn) => {
-  if (loggedIn) connectNotifications();
-  else disconnectNotifications();
+  if (loggedIn) {
+    connectNotifications();
+    loadCartCount(true);
+  } else {
+    disconnectNotifications();
+    clearCartCount();
+  }
 });
+
+/** 로고 클릭 — 홈으로 가되 이미 홈이면 라우팅이 없어 밋밋하니 맨 위로 스크롤(사용자 지적, 2026-07-28). */
+function onLogo() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 /** 헤더 전역 검색 — 상품 목록으로 이름 쿼리를 넘긴다. 목록 화면이 ?name= 을 읽어 필터한다(B-8). */
 function onSearch() {
@@ -40,7 +54,7 @@ const year = new Date().getFullYear();
     <header class="sticky top-0 z-40 border-b border-line bg-surface/85 backdrop-blur">
       <div class="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:px-6">
         <div class="flex items-center gap-7">
-          <RouterLink to="/" class="text-lg font-bold tracking-tight text-ink-900">Glassvue</RouterLink>
+          <RouterLink to="/" class="text-lg font-bold tracking-tight text-ink-900" @click="onLogo">Glassvue</RouterLink>
           <nav class="flex items-center gap-5 text-sm">
             <!-- 「홈」 링크는 뺐다 — 로고(Glassvue)가 이미 "/" 로 간다(중복, 2026-07-28) -->
             <RouterLink to="/products" class="nav-link">상품</RouterLink>
@@ -69,10 +83,14 @@ const year = new Date().getFullYear();
             <!-- 장바구니는 결제 핵심 동선이라 밖에 아이콘으로 남긴다(찜·주문내역·설정·로그아웃은 계정 메뉴로) -->
             <RouterLink
               to="/cart"
-              class="flex h-9 w-9 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-canvas"
-              aria-label="장바구니"
+              class="relative flex h-9 w-9 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-canvas"
+              :aria-label="`장바구니${cartState.count ? ` ${cartState.count}개` : ''}`"
             >
               <span class="text-lg" aria-hidden="true">🛒</span>
+              <span
+                v-if="cartState.count > 0"
+                class="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-brand-600 px-1 text-center text-[10px] font-bold leading-4 text-white"
+              >{{ cartState.count > 99 ? '99+' : cartState.count }}</span>
             </RouterLink>
             <span class="hidden h-4 w-px bg-line sm:block"></span>
             <AccountMenu />
