@@ -28,6 +28,8 @@ public enum ErrorCode {
     UNAUTHENTICATED("AUTH-401U", HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     INVALID_TOKEN("AUTH-401T", HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 토큰입니다."),
     PASSWORD_MISMATCH("AUTH-400P", HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),
+    // 비밀번호 재설정 토큰이 없거나 만료·이미 사용됨(단발성). 토큰 유무를 자세히 알려주지 않는다.
+    INVALID_RESET_TOKEN("AUTH-400R", HttpStatus.BAD_REQUEST, "재설정 링크가 유효하지 않거나 만료되었습니다."),
     ACCESS_DENIED("AUTH-403", HttpStatus.FORBIDDEN, "권한이 없습니다."),
 
     // 배송지 주소록 (2026-07-24)

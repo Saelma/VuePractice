@@ -2,6 +2,9 @@ package com.glassvue.domain.auth.controller;
 
 import com.glassvue.domain.auth.dto.LoginRequest;
 import com.glassvue.domain.auth.dto.MemberResponse;
+import com.glassvue.domain.auth.dto.PasswordResetConfirmRequest;
+import com.glassvue.domain.auth.dto.PasswordResetRequest;
+import com.glassvue.domain.auth.dto.PasswordResetResponse;
 import com.glassvue.domain.auth.dto.RefreshRequest;
 import com.glassvue.domain.auth.dto.SignupRequest;
 import com.glassvue.domain.auth.dto.TokenResponse;
@@ -32,4 +35,10 @@ public interface AuthController {
 
     @Operation(summary = "내 정보")
     ResponseEntity<ApiResponse<MemberResponse>> me(@Parameter(hidden = true) AuthUser user);
+
+    @Operation(summary = "비밀번호 재설정 요청 (아이디로 재설정 링크 발급)")
+    ResponseEntity<ApiResponse<PasswordResetResponse>> requestPasswordReset(@Valid PasswordResetRequest request);
+
+    @Operation(summary = "비밀번호 재설정 확정 (토큰 + 새 비밀번호)")
+    ResponseEntity<ApiResponse<Void>> confirmPasswordReset(@Valid PasswordResetConfirmRequest request);
 }

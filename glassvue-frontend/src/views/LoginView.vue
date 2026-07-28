@@ -50,6 +50,10 @@ async function onSubmit() {
           <button type="button" class="btn btn-primary w-full" :disabled="loading" @click="onSubmit">
             {{ loading ? '로그인 중…' : '로그인' }}
           </button>
+
+          <RouterLink to="/forgot-password" class="text-center text-sm text-ink-500 underline underline-offset-2">
+            비밀번호를 잊으셨나요?
+          </RouterLink>
         </div>
       </div>
 

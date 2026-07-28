@@ -67,6 +67,15 @@ jwt:
   access-token-validity-ms: 1800000
   refresh-token-validity-ms: 1209600000
 
+# --- 비밀번호 재설정 ---
+# expose-token: 재설정 요청 응답에 토큰을 실을지. 메일/SMS 발송 채널이 없는 현 단계라
+#   dev 프로파일에서만 true로 켜 화면에서 링크를 바로 본다. 운영은 반드시 false —
+#   true면 아이디만 알면 남의 비밀번호를 바꿀 수 있다(application-dev.yml에서만 오버라이드).
+auth:
+  password-reset:
+    expose-token: false
+    token-validity-ms: 1800000
+
 # 조회수: Redis 누적분을 DB에 반영하는 주기(ms)
 notice:
   view-count:

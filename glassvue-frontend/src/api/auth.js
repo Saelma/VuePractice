@@ -7,6 +7,17 @@ export function signup(payload) {
   return apiPost('/api/auth/signup', payload);
 }
 
+// 비밀번호 재설정 요청 — 아이디로 재설정 토큰(링크) 발급.
+// 응답의 token은 dev에서만 채워진다(운영은 null; 실제로는 메일/SMS로 링크가 나가야 함).
+export function requestPasswordReset(loginId) {
+  return apiPost('/api/auth/password-reset/request', { loginId });
+}
+
+// 토큰 + 새 비밀번호로 실제 변경. 성공 후에는 새 비밀번호로 다시 로그인해야 한다.
+export function confirmPasswordReset(token, newPassword) {
+  return apiPost('/api/auth/password-reset/confirm', { token, newPassword });
+}
+
 export async function login(payload) {
   const tokens = await apiPost('/api/auth/login', payload);
   setTokens(tokens.accessToken, tokens.refreshToken);

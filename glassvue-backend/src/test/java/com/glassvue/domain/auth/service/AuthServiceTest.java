@@ -17,6 +17,7 @@ import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProperties;
 import com.glassvue.global.security.JwtProvider;
+import com.glassvue.global.security.PasswordResetTokenStore;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
 import java.util.Optional;
@@ -41,6 +42,7 @@ class AuthServiceTest {
     @Mock JwtProperties jwtProperties;
     @Mock RefreshTokenStore refreshTokenStore;
     @Mock TokenBlacklist tokenBlacklist;
+    @Mock PasswordResetTokenStore passwordResetTokenStore;
     @InjectMocks AuthService service;
 
     private Member member() {
@@ -118,5 +120,43 @@ class AuthServiceTest {
         when(jwtProvider.parse("RT")).thenReturn(claims);
         when(refreshTokenStore.matches(mid, "RT")).thenReturn(false);
         assertErrorCode(() -> service.refresh("RT"), ErrorCode.INVALID_TOKEN);
+    }
+
+    @Test
+    @DisplayName("재설정 요청: 있는 아이디 → 토큰 발급 후 반환")
+    void requestReset_existing() {
+        Member m = member();
+        when(memberRepository.findByLoginId("kim")).thenReturn(Optional.of(m));
+        when(passwordResetTokenStore.issue(m.getId())).thenReturn("RESET-TOKEN");
+        assertThat(service.requestPasswordReset("kim")).contains("RESET-TOKEN");
+        verify(passwordResetTokenStore).issue(m.getId());
+    }
+
+    @Test
+    @DisplayName("재설정 요청: 없는 아이디 → empty, 토큰 발급 안 함(열거 방지)")
+    void requestReset_absent() {
+        when(memberRepository.findByLoginId("nope")).thenReturn(Optional.empty());
+        assertThat(service.requestPasswordReset("nope")).isEmpty();
+        verify(passwordResetTokenStore, never()).issue(any());
+    }
+
+    @Test
+    @DisplayName("재설정 확정: 유효 토큰 → 비번 변경 + 리프레시 삭제")
+    void confirmReset_ok() {
+        Member m = member();
+        when(passwordResetTokenStore.consume("RESET-TOKEN")).thenReturn(m.getId());
+        when(memberRepository.findById(m.getId())).thenReturn(Optional.of(m));
+        when(passwordEncoder.encode("newpw12345")).thenReturn("NEWENC");
+        service.confirmPasswordReset("RESET-TOKEN", "newpw12345");
+        assertThat(m.getPassword()).isEqualTo("NEWENC");
+        verify(refreshTokenStore).delete(m.getId());
+    }
+
+    @Test
+    @DisplayName("재설정 확정: 무효/만료 토큰 → INVALID_RESET_TOKEN, 변경 안 함")
+    void confirmReset_invalidToken() {
+        when(passwordResetTokenStore.consume("BAD")).thenReturn(null);
+        assertErrorCode(() -> service.confirmPasswordReset("BAD", "newpw12345"), ErrorCode.INVALID_RESET_TOKEN);
+        verify(refreshTokenStore, never()).delete(any());
     }
 }

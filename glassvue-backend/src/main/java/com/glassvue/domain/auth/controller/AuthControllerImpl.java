@@ -2,6 +2,9 @@ package com.glassvue.domain.auth.controller;
 
 import com.glassvue.domain.auth.dto.LoginRequest;
 import com.glassvue.domain.auth.dto.MemberResponse;
+import com.glassvue.domain.auth.dto.PasswordResetConfirmRequest;
+import com.glassvue.domain.auth.dto.PasswordResetRequest;
+import com.glassvue.domain.auth.dto.PasswordResetResponse;
 import com.glassvue.domain.auth.dto.RefreshRequest;
 import com.glassvue.domain.auth.dto.SignupRequest;
 import com.glassvue.domain.auth.dto.TokenResponse;
@@ -9,6 +12,7 @@ import com.glassvue.domain.auth.service.AuthService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.security.LoginUser;
+import com.glassvue.global.security.PasswordResetProperties;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthControllerImpl implements AuthController {
 
     private final AuthService authService;
+    private final PasswordResetProperties passwordResetProperties;
 
     @Override
     @PostMapping("/signup")
@@ -58,5 +63,24 @@ public class AuthControllerImpl implements AuthController {
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<MemberResponse>> me(@LoginUser AuthUser user) {
         return ResponseEntity.ok(ApiResponse.ok(authService.me(user.id())));
+    }
+
+    @Override
+    @PostMapping("/password-reset/request")
+    public ResponseEntity<ApiResponse<PasswordResetResponse>> requestPasswordReset(
+            @Valid @RequestBody PasswordResetRequest request) {
+        // 열거 공격 방지 — 아이디 존재 여부와 무관하게 항상 200.
+        // 토큰은 발송 채널이 없는 dev에서만 응답에 실어 화면에서 링크를 확인한다(운영은 항상 null).
+        String token = authService.requestPasswordReset(request.loginId()).orElse(null);
+        String exposed = passwordResetProperties.exposeToken() ? token : null;
+        return ResponseEntity.ok(ApiResponse.ok(PasswordResetResponse.of(exposed)));
+    }
+
+    @Override
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<ApiResponse<Void>> confirmPasswordReset(
+            @Valid @RequestBody PasswordResetConfirmRequest request) {
+        authService.confirmPasswordReset(request.token(), request.newPassword());
+        return ResponseEntity.ok(ApiResponse.ok());
     }
 }
