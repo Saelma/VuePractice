@@ -64,6 +64,7 @@ B-4·B-5·B-6·B-7·B-8·**B-9·B-10** 처리 완료(아래 「완료」).
 | **HSTS / mkcert** | 도메인 + Let's Encrypt 도입 시. IP 접속엔 HSTS 가 애초에 무효 |
 | **리뷰 목록 캐시** | P6SPY 로 실제 병목이 측정될 때. 도구는 이미 검증됨(2026-07-23) |
 | **알림 Handler 실발송** | 임계치 재알림 스팸을 먼저 해결해야 한다 |
+| **비밀번호 재설정 링크 실발송 (SMTP)** | B-10 을 온전하게 만드는 남은 반쪽. **토큰 발급·검증·저장(Redis `auth:reset:`)은 이미 완성** — SMTP 는 컨트롤러의 `expose-token` 게이트(`AuthControllerImpl.requestPasswordReset`) 자리에 "토큰으로 링크 만들어 메일 발송" 한 줄을 끼우면 된다. `Member` 에 email 컬럼 추가가 선행(현재 없음). 발송 전까진 dev 노출 + 운영은 Redis 수동조회로 검증(`redis-cli --scan 'auth:reset:*'`) |
 | **`DB_PASSWORD` 강화**(현재 7자) | 도메인·외부 노출 단계에서. `.env`·DB계정·백업(Notion) 셋을 함께 맞춰야 한다 |
 | **Docker·RabbitMQ·관측 스택(Alloy/Loki/Prometheus/Grafana)·Spring Batch·OpenSearch** | MSA 단계 |
 | **선착순 한정 쿠폰 발급 (Redis 기반)** | 아래 참고 — MSA 단계 + 동시성이 실제로 생길 때 |
