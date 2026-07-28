@@ -156,12 +156,17 @@ const chips = computed(() => {
     <div class="grid gap-6 lg:grid-cols-[220px_1fr]">
       <!-- 좌: 필터 사이드바 (모바일에선 접힘) -->
       <aside>
-        <button
-          type="button"
-          class="btn btn-secondary w-full lg:hidden"
-          :aria-expanded="filterOpen"
-          @click="filterOpen = !filterOpen"
-        >필터 {{ filterOpen ? '닫기' : '열기' }}</button>
+        <!-- 좁은 화면에서만 보이는 필터 토글. ⚠ lg:hidden 을 .btn 에 직접 걸면 안 먹는다 —
+             .btn 은 언레이어드라 display:inline-flex 가 utilities 레이어의 lg:hidden 을 이긴다(index.css 참고).
+             그래서 바깥 div(언레이어드 아님)에 lg:hidden 을 걸어 데스크톱에서 확실히 감춘다. -->
+        <div class="lg:hidden">
+          <button
+            type="button"
+            class="btn btn-secondary w-full"
+            :aria-expanded="filterOpen"
+            @click="filterOpen = !filterOpen"
+          >필터 {{ filterOpen ? '닫기' : '열기' }}</button>
+        </div>
 
         <div :class="filterOpen ? 'mt-3 block' : 'hidden lg:block'" class="space-y-6 lg:sticky lg:top-20">
           <!-- 카테고리: 즉시 적용 -->
