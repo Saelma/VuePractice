@@ -76,6 +76,21 @@ public class PointService {
                 .map(PointHistoryResponse::from));
     }
 
+    // --- 관리자용(B-11 회원 상세) — myAccount/myHistory 와 같은 조회지만 "남의 계정을 본다"는 의미를
+    //     이름으로 분리한다. member 도메인이 아니라 point 가 자기 데이터를 소유해 admin 으로 노출한다. ---
+
+    /** 관리자 — 특정 회원의 적립금·등급. */
+    @Transactional(readOnly = true)
+    public PointAccountResponse accountOf(UUID memberId) {
+        return myAccount(memberId);
+    }
+
+    /** 관리자 — 특정 회원의 적립금 이력(페이징). */
+    @Transactional(readOnly = true)
+    public PageResponse<PointHistoryResponse> historyOf(UUID memberId, Pageable pageable) {
+        return myHistory(memberId, pageable);
+    }
+
     /**
      * 주문에서 적립금 사용 — <b>검증과 차감을 한 번에</b> 한다.
      *

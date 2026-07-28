@@ -148,6 +148,17 @@ public class OrderService {
     }
 
     /**
+     * 특정 회원의 주문 목록(관리자, B-11 회원 상세). {@code scopedTo} 가 memberId 로 범위를 좁히고
+     * status 필터는 유지하므로, status=RETURN_REQUESTED/RETURNED 로 그 회원의 <b>반품 이력</b>도 본다.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<AdminOrderResponse> adminOrdersOf(
+            UUID memberId, OrderSearchCondition condition, Pageable pageable) {
+        Page<Order> page = orderRepository.search(condition.scopedTo(memberId), pageable);
+        return PageResponse.from(page.map(AdminOrderResponse::from));
+    }
+
+    /**
      * 관리자용 상태별 주문 건수. 화면 상단 탭에 "발송 대기 N건"처럼 띄워
      * 필터를 바꿔보지 않고도 할 일이 얼마나 남았는지 알 수 있게 한다.
      * 건수가 0인 상태도 키는 항상 포함한다(탭이 사라지면 오히려 헷갈린다).

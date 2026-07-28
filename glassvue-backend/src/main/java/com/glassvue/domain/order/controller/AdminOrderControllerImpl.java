@@ -10,8 +10,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -37,5 +39,12 @@ public class AdminOrderControllerImpl implements AdminOrderController {
     @GetMapping("/counts")
     public ResponseEntity<ApiResponse<Map<OrderStatus, Long>>> counts() {
         return ResponseEntity.ok(ApiResponse.ok(orderService.adminOrderCounts()));
+    }
+
+    @Override
+    @GetMapping("/by-member/{memberId}")
+    public ResponseEntity<ApiResponse<PageResponse<AdminOrderResponse>>> byMember(
+            @PathVariable UUID memberId, OrderSearchCondition condition, Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(orderService.adminOrdersOf(memberId, condition, pageable)));
     }
 }

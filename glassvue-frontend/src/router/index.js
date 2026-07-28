@@ -15,6 +15,8 @@ import ProductFormView from '../views/ProductFormView.vue';
 import OrderAdminView from '../views/OrderAdminView.vue';
 import CategoryAdminView from '../views/CategoryAdminView.vue';
 import StatsAdminView from '../views/StatsAdminView.vue';
+import MemberAdminView from '../views/MemberAdminView.vue';
+import MemberDetailAdminView from '../views/MemberDetailAdminView.vue';
 import CartView from '../views/CartView.vue';
 import WishlistView from '../views/WishlistView.vue';
 import CheckoutView from '../views/CheckoutView.vue';
@@ -44,6 +46,8 @@ const routes = [
   { path: '/products/:id/edit', name: 'product-edit', component: ProductFormView, props: true, meta: { requiresAdmin: true } },
   { path: '/admin/categories', name: 'category-admin', component: CategoryAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/stats', name: 'stats-admin', component: StatsAdminView, meta: { requiresAdmin: true } },
+  { path: '/admin/members', name: 'member-admin', component: MemberAdminView, meta: { requiresAdmin: true } },
+  { path: '/admin/members/:id', name: 'member-admin-detail', component: MemberDetailAdminView, props: true, meta: { requiresAdmin: true } },
   { path: '/cart', name: 'cart', component: CartView, meta: { requiresAuth: true } },
   { path: '/wishlist', name: 'wishlist', component: WishlistView, meta: { requiresAuth: true } },
   { path: '/checkout', name: 'checkout', component: CheckoutView, meta: { requiresAuth: true } },

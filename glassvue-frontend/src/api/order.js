@@ -21,6 +21,11 @@ export function fetchAdminOrders({ status = null, buyer = null, orderNo = null, 
   return apiGet('/api/admin/orders', { status, buyer, orderNo, page, size });
 }
 
+// 특정 회원의 주문 목록(관리자, B-11 회원 상세). status=RETURN_REQUESTED/RETURNED 로 반품만 추린다.
+export function fetchAdminMemberOrders(memberId, { status = null, page = 0, size = 10 } = {}) {
+  return apiGet(`/api/admin/orders/by-member/${memberId}`, { status, page, size });
+}
+
 /** 상태 필터 SelectBox용 — '전체'는 value=null로 두어 파라미터가 빠지게 한다. */
 export const ORDER_STATUS_OPTIONS = [
   { value: null, text: '전체' },

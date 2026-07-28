@@ -6,8 +6,10 @@ import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.Map;
+import java.util.UUID;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
@@ -24,4 +26,11 @@ public interface AdminOrderController {
     @Operation(summary = "상태별 주문 건수 (관리자)",
             description = "화면 상단 요약용. 필터를 바꿔보지 않고도 발송 대기가 몇 건인지 알 수 있다.")
     ResponseEntity<ApiResponse<Map<OrderStatus, Long>>> counts();
+
+    @Operation(summary = "특정 회원의 주문 목록 (관리자, B-11 회원 상세)",
+            description = "회원 관리에서 그 회원의 주문·반품을 본다. status=RETURN_REQUESTED/RETURNED 로 반품만 추린다.")
+    ResponseEntity<ApiResponse<PageResponse<AdminOrderResponse>>> byMember(
+            @Parameter(description = "회원 id") UUID memberId,
+            @ParameterObject OrderSearchCondition condition,
+            @ParameterObject Pageable pageable);
 }

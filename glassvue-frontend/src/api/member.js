@@ -1,5 +1,24 @@
-import { apiPatch, apiDelete } from './client';
+import { apiGet, apiPatch, apiDelete } from './client';
 import { setUser, clearSession } from '../stores/auth';
+
+// --- 관리자 회원 조회 (B-11) ---
+// 회원 목록/검색·기본상세만 여기. 그 회원의 주문은 api/order, 적립금은 api/point 의 admin 함수로 붙인다
+// (백엔드도 도메인별로 소유 — member 는 order/point 를 참조하지 않는다).
+
+/** 회원 목록·검색(loginId·nickname·email 부분일치). 정렬 미지정 시 최신 가입 순. */
+export function fetchAdminMembers({ keyword = null, page = 0, size = 10 } = {}) {
+  return apiGet('/api/admin/members', { keyword, page, size });
+}
+
+/** 회원 기본상세. */
+export function fetchAdminMember(memberId) {
+  return apiGet(`/api/admin/members/${memberId}`);
+}
+
+export const ROLE_LABEL = { USER: '일반', ADMIN: '관리자' };
+export function roleText(role) {
+  return ROLE_LABEL[role] || role || '';
+}
 
 export async function changeNickname(nickname) {
   const me = await apiPatch('/api/members/me/nickname', { nickname });

@@ -16,6 +16,19 @@ export function fetchPointHistory({ page = 0, size = 20 } = {}) {
   return apiGet('/api/points/me/history', { page, size });
 }
 
+// --- 관리자 조회 (B-11 회원 상세) — 특정 회원의 적립금·등급·이력. point 도메인이 소유해 admin 으로 노출. ---
+export function fetchAdminMemberPointAccount(memberId) {
+  return apiGet(`/api/admin/points/${memberId}/account`);
+}
+export function fetchAdminMemberPointHistory(memberId, { page = 0, size = 10 } = {}) {
+  return apiGet(`/api/admin/points/${memberId}/history`, { page, size });
+}
+
+export const POINT_TYPE_LABEL = { EARN: '적립', USE: '사용', ADJUST: '조정', REFUND: '환불' };
+export function pointTypeText(type) {
+  return POINT_TYPE_LABEL[type] || type || '';
+}
+
 export const GRADE_LABEL = {
   BRONZE: '브론즈',
   SILVER: '실버',
