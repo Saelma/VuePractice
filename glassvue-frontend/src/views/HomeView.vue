@@ -25,7 +25,7 @@ import { loadWishlistIds } from '../stores/wishlist';
 import { recentlyViewed } from '../stores/recentlyViewed';
 import ProductCard from '../components/ProductCard.vue';
 
-const SECTION_SIZE = 4;
+const SECTION_SIZE = 8;
 
 const router = useRouter();
 const categories = ref([]);
@@ -110,7 +110,7 @@ async function reorder() {
 </script>
 
 <template>
-  <section class="page space-y-12">
+  <section class="page space-y-10">
     <!-- 히어로 (정적). near-black 강조색 카드 — 장식이 아니라 첫인상 대비용. -->
     <div class="rounded-card bg-brand-600 px-6 py-14 text-white sm:px-12 sm:py-20">
       <p class="text-xs font-medium uppercase tracking-widest text-white/60">Glassvue Store</p>
@@ -191,7 +191,7 @@ async function reorder() {
     </section>
 
     <!-- 로딩 스켈레톤(섹션 하나 분량) -->
-    <div v-if="loading" class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+    <div v-if="loading" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       <div v-for="n in 4" :key="n" class="overflow-hidden rounded-card border border-line bg-surface shadow-card">
         <div class="skeleton aspect-square rounded-none"></div>
         <div class="space-y-2 p-4">
@@ -211,7 +211,7 @@ async function reorder() {
             더보기 →
           </RouterLink>
         </div>
-        <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <ProductCard v-for="p in popular" :key="p.id" :product="p" />
         </div>
       </section>
@@ -224,7 +224,7 @@ async function reorder() {
             더보기 →
           </RouterLink>
         </div>
-        <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <ProductCard v-for="p in fresh" :key="p.id" :product="p" />
         </div>
       </section>
@@ -235,7 +235,7 @@ async function reorder() {
           <h2 class="section-title">할인 중</h2>
           <RouterLink to="/products" class="text-sm text-ink-500 hover:text-ink-900">더보기 →</RouterLink>
         </div>
-        <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <ProductCard v-for="p in discounted" :key="p.id" :product="p" />
         </div>
       </section>

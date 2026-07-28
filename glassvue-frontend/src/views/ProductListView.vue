@@ -255,7 +255,7 @@ const chips = computed(() => {
         <div v-if="error" class="alert-error">{{ error }}</div>
 
         <!-- 로딩 스켈레톤 -->
-        <div v-else-if="loading" class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div v-else-if="loading" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <div v-for="n in 6" :key="n" class="overflow-hidden rounded-card bg-surface shadow-card">
             <div class="skeleton aspect-square rounded-none"></div>
             <div class="space-y-2 p-4">
@@ -279,7 +279,7 @@ const chips = computed(() => {
         </EmptyState>
 
         <!-- 카드 그리드 (카드는 홈과 공유하는 ProductCard 컴포넌트) -->
-        <div v-else class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div v-else class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <ProductCard v-for="p in items" :key="p.id" :product="p" />
         </div>
 
