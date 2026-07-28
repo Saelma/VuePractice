@@ -1,11 +1,14 @@
 package com.glassvue.domain.member.controller;
 
 import com.glassvue.domain.member.dto.AdminMemberResponse;
+import com.glassvue.domain.member.dto.RoleChangeRequest;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
@@ -23,4 +26,20 @@ public interface AdminMemberController {
     @Operation(summary = "회원 기본상세",
             description = "기본정보만. 그 회원의 적립금·등급은 /api/admin/points, 주문·반품은 /api/admin/orders 로 붙인다.")
     ResponseEntity<ApiResponse<AdminMemberResponse>> detail(@Parameter(description = "회원 id") UUID memberId);
+
+    @Operation(summary = "회원 정지",
+            description = "정지되면 로그인·토큰갱신·주문이 막힌다. 자기 계정은 정지할 수 없다(락아웃 방지).")
+    ResponseEntity<ApiResponse<AdminMemberResponse>> suspend(
+            @Parameter(hidden = true) AuthUser admin, @Parameter(description = "회원 id") UUID memberId);
+
+    @Operation(summary = "회원 정지 해제")
+    ResponseEntity<ApiResponse<AdminMemberResponse>> unsuspend(
+            @Parameter(hidden = true) AuthUser admin, @Parameter(description = "회원 id") UUID memberId);
+
+    @Operation(summary = "회원 역할 변경 (USER↔ADMIN)",
+            description = "자기 계정은 변경할 수 없다(스스로 강등해 락아웃되는 것 방지).")
+    ResponseEntity<ApiResponse<AdminMemberResponse>> changeRole(
+            @Parameter(hidden = true) AuthUser admin,
+            @Parameter(description = "회원 id") UUID memberId,
+            @Valid RoleChangeRequest request);
 }

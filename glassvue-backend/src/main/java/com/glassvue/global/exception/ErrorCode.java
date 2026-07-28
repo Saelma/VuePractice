@@ -32,6 +32,10 @@ public enum ErrorCode {
     INVALID_RESET_TOKEN("AUTH-400R", HttpStatus.BAD_REQUEST, "재설정 링크가 유효하지 않거나 만료되었습니다."),
     ACCESS_DENIED("AUTH-403", HttpStatus.FORBIDDEN, "권한이 없습니다."),
 
+    // 회원 정지 · 관리자 조작 (2026-07-28, B-11 후속)
+    ACCOUNT_SUSPENDED("AUTH-403S", HttpStatus.FORBIDDEN, "정지된 계정입니다. 관리자에게 문의하세요."),
+    CANNOT_MODIFY_SELF("MEMBER-400S", HttpStatus.BAD_REQUEST, "자기 계정은 정지·역할변경할 수 없습니다."),
+
     // 배송지 주소록 (2026-07-24)
     // 남의 주소는 403이 아니라 404로 답한다 — 존재 여부 자체를 알려주지 않는다(쿠폰과 같은 판단).
     ADDRESS_NOT_FOUND("ADDRESS-404", HttpStatus.NOT_FOUND, "배송지를 찾을 수 없습니다."),

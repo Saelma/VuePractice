@@ -75,6 +75,7 @@ function fmt(v) {
       <DxColumn data-field="nickname" caption="닉네임" :width="160" />
       <DxColumn data-field="email" caption="이메일" :calculate-display-value="(r) => r.email || '—'" />
       <DxColumn data-field="role" caption="역할" :width="90" alignment="center" cell-template="roleCell" />
+      <DxColumn data-field="suspended" caption="상태" :width="90" alignment="center" cell-template="statusCell" />
       <DxColumn data-field="createdAt" caption="가입일" :width="170" :calculate-display-value="(r) => fmt(r.createdAt)" />
       <DxColumn caption="처리" :width="90" alignment="center" cell-template="actionCell" />
 
@@ -84,6 +85,12 @@ function fmt(v) {
       <template #roleCell="{ data }">
         <span class="badge" :class="data.data.role === 'ADMIN' ? 'badge-neutral' : 'bg-canvas text-ink-400'">
           {{ roleText(data.data.role) }}
+        </span>
+      </template>
+
+      <template #statusCell="{ data }">
+        <span class="badge" :class="data.data.suspended ? 'badge-danger' : 'badge-success'">
+          {{ data.data.suspended ? '정지' : '활성' }}
         </span>
       </template>
 

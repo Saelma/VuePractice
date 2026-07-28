@@ -6,11 +6,14 @@
  * admin 조회**를 프론트에서 합친 것이다 — member(기본), point(적립금), order(주문). 백엔드에서 한 도메인이
  * 다른 도메인을 참조하지 않게(order 가 이미 member 를 참조해 반대 방향은 순환) 조합을 여기서 한다.
  */
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
-import { fetchAdminMember, roleText } from '../api/member';
+import { authState } from '../stores/auth';
+import {
+  fetchAdminMember, roleText, suspendMember, unsuspendMember, changeMemberRole,
+} from '../api/member';
 import { fetchAdminMemberPointAccount, fetchAdminMemberPointHistory, gradeText, pointTypeText } from '../api/point';
 import { fetchAdminMemberOrders, ORDER_STATUS_OPTIONS, orderStatusText, orderStatusClass } from '../api/order';
 import { priceText } from '../api/product';
@@ -22,6 +25,9 @@ const memberId = route.params.id;
 const error = ref('');
 const member = ref(null);
 const point = ref(null);
+const busy = ref(false);
+// 자기 계정은 정지·강등 못 한다(서버도 400으로 막지만 화면에서 버튼을 숨긴다 — 락아웃 방지).
+const isSelf = computed(() => member.value?.id === authState.user?.id);
 const orderStatus = ref(null); // 주문 상태 필터(반품만 보기 = RETURN_REQUESTED/RETURNED)
 const orderGridRef = ref(null);
 
@@ -60,6 +66,27 @@ const pointStore = new CustomStore({
   },
 });
 
+async function toggleSuspend() {
+  const t = member.value;
+  const verb = t.suspended ? '정지 해제' : '정지';
+  const warn = t.suspended ? '' : ' 로그인·주문이 막히고 기존 세션도 곧 끊깁니다.';
+  if (!window.confirm(`${t.nickname}님을 ${verb}할까요?${warn}`)) return;
+  error.value = ''; busy.value = true;
+  try {
+    member.value = t.suspended ? await unsuspendMember(t.id) : await suspendMember(t.id);
+  } catch (e) { error.value = e.message; } finally { busy.value = false; }
+}
+
+async function toggleRole() {
+  const t = member.value;
+  const next = t.role === 'ADMIN' ? 'USER' : 'ADMIN';
+  if (!window.confirm(`${t.nickname}님의 역할을 ${roleText(next)}(으)로 바꿀까요?`)) return;
+  error.value = ''; busy.value = true;
+  try {
+    member.value = await changeMemberRole(t.id, next);
+  } catch (e) { error.value = e.message; } finally { busy.value = false; }
+}
+
 function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
 }
@@ -79,7 +106,7 @@ function signedPoint(n) {
     <div v-if="error" class="alert-error mb-4">{{ error }}</div>
 
     <div v-if="member" class="grid gap-4 md:grid-cols-2">
-      <!-- 기본정보 -->
+      <!-- 기본정보 + 관리 -->
       <div class="card p-5">
         <h2 class="section-title mb-3">기본 정보</h2>
         <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
@@ -88,8 +115,33 @@ function signedPoint(n) {
           <dt class="text-ink-500">이메일</dt><dd class="text-ink-900">{{ member.email || '—' }}</dd>
           <dt class="text-ink-500">역할</dt>
           <dd><span class="badge" :class="member.role === 'ADMIN' ? 'badge-neutral' : 'bg-canvas text-ink-400'">{{ roleText(member.role) }}</span></dd>
+          <dt class="text-ink-500">상태</dt>
+          <dd>
+            <span class="badge" :class="member.suspended ? 'badge-danger' : 'badge-success'">
+              {{ member.suspended ? '정지됨' : '활성' }}
+            </span>
+          </dd>
           <dt class="text-ink-500">가입일</dt><dd class="text-ink-900">{{ fmt(member.createdAt) }}</dd>
         </dl>
+
+        <!-- 관리: 자기 계정은 조작 불가(락아웃 방지)라 버튼을 숨기고 안내만 -->
+        <div class="mt-4 border-t border-line pt-4">
+          <template v-if="isSelf">
+            <p class="muted">본인 계정입니다 — 정지·역할 변경은 다른 관리자만 할 수 있습니다.</p>
+          </template>
+          <div v-else class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn btn-sm"
+              :class="member.suspended ? 'btn-secondary' : 'btn-danger'"
+              :disabled="busy"
+              @click="toggleSuspend"
+            >{{ member.suspended ? '정지 해제' : '정지' }}</button>
+            <button type="button" class="btn btn-secondary btn-sm" :disabled="busy" @click="toggleRole">
+              {{ member.role === 'ADMIN' ? '일반으로 강등' : '관리자로 승격' }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- 적립금·등급 -->

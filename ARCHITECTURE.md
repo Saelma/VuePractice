@@ -334,6 +334,14 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
 > — 위시리스트에서 쓴 "클라이언트 조인"과 같은 수단이다. 탈퇴는 하드삭제(`MemberService.withdraw`)라 목록은
 > **현존 회원만**; 탈퇴 회원의 과거 주문은 `order.buyer_nickname` 스냅샷으로 order 쪽에 남는다.
 >
+> **회원 정지·역할변경 (2026-07-28, B-11 후속, V30)**: 위 조회 전용의 **쓰기 후속**. `member.suspended`
+> (boolean, `NUMBER(1)` — 상태가 이진이라 enum CHECK 트랩을 안 진다) + `changeRole`. **정지는 전면 차단**:
+> 로그인·토큰갱신은 auth(`AuthService.login`/`refresh`)가, 주문은 order(`checkout` → `MemberService.isSuspended`
+> 공개 API)가 막는다 — order→member 는 이미 있던 방향이라 순환 없음. 정지 시 refresh 토큰을 지워 기존 세션은
+> access 만료(≤30분) 뒤 끊기고, 그 창의 주문은 checkout 가드가 닫는다. **자기 계정은 조작 불가**(락아웃 방지,
+> `CANNOT_MODIFY_SELF`) — 다른 관리자는 허용해 문제 관리자 강등 여지를 남긴다. 감사는 SLF4J 로그로만(감사
+> 테이블은 후속). 조작 API 는 `/api/admin/members/{id}/suspend·unsuspend·role` — 조회와 같은 컨트롤러, `/api/admin/**` 보호.
+>
 > **배송지 주소록(2026-07-24, V18)**: 배송지는 `member.ship_*` 5컬럼 = **회원당 하나**였는데(V11),
 > 별칭을 붙인 여러 주소(`member_address`)로 늘리고 그중 하나를 기본 배송지로 둔다.
 > **기본 배송지는 회원당 최대 하나**이고 그 보장은 앱이 아니라 **DB**가 한다 —

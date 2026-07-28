@@ -50,6 +50,8 @@ class OrderServiceTest {
     @Mock ApplicationEventPublisher eventPublisher;
     // 적립은 배송완료 때 **동기로** 일어난다(이벤트가 아니다) — 스텁 없이 0을 돌려주면 "적립 없음"이다.
     @Mock com.glassvue.domain.point.service.PointService pointService;
+    // 정지 회원 주문 차단 가드(B-11 후속)용. 기본 false(활성)라 정상 주문 경로엔 영향 없다.
+    @Mock com.glassvue.domain.member.service.MemberService memberService;
     // 설정 객체라 목이 아니라 실제 인스턴스를 넣는다 — 조회 링크 생성은 순수 문자열 조립이고,
     // 목으로 두면 null을 돌려줘 "링크가 안 만들어지는" 경로만 검증하게 된다.
     @Spy DeliveryProperties deliveryProperties = new DeliveryProperties();

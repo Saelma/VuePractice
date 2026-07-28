@@ -1,6 +1,7 @@
 package com.glassvue.domain.member;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -49,13 +50,14 @@ class AdminMemberIntegrationTest {
 
     private String adminLoginId;
     private String userLoginId;
+    private UUID adminId;
     private UUID userId;
 
     @BeforeEach
     void setUp() {
         adminLoginId = "zzadm_" + UUID.randomUUID().toString().substring(0, 8);
         userLoginId = MARK.toLowerCase() + "_" + UUID.randomUUID().toString().substring(0, 8);
-        member(adminLoginId, "ZZ회원관리자" + suffix(), Role.ADMIN);
+        adminId = member(adminLoginId, "ZZ회원관리자" + suffix(), Role.ADMIN);
         userId = member(userLoginId, MARK + "-대상회원", Role.USER);
         // 대상 회원의 주문 2건(by-member 조회가 그 회원 것만 집는지 확인)
         saveOrder();
@@ -155,5 +157,62 @@ class AdminMemberIntegrationTest {
                         .header("Authorization", login(adminLoginId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isArray());
+    }
+
+    // ---------- 정지 / 역할 변경 (B-11 후속) ----------
+
+    @Test
+    @DisplayName("정지: USER → 403 / 관리자 → 200 정지됨 → 정지된 계정 로그인 403(AUTH-403S) → 해제 후 로그인 복구")
+    void suspend_blocksLogin_thenUnsuspend() throws Exception {
+        // USER는 남을 정지 못 함
+        mockMvc.perform(post("/api/admin/members/" + userId + "/suspend")
+                        .header("Authorization", login(userLoginId)))
+                .andExpect(status().isForbidden());
+        // 관리자가 정지
+        mockMvc.perform(post("/api/admin/members/" + userId + "/suspend")
+                        .header("Authorization", login(adminLoginId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.suspended").value(true));
+        // 정지된 계정은 비번이 맞아도 로그인 불가
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"" + userLoginId + "\",\"password\":\"" + PW + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("AUTH-403S"));
+        // 해제하면 다시 로그인 가능
+        mockMvc.perform(post("/api/admin/members/" + userId + "/unsuspend")
+                        .header("Authorization", login(adminLoginId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.suspended").value(false));
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"" + userLoginId + "\",\"password\":\"" + PW + "\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("자기 자신 정지 → 400 (MEMBER-400S, 락아웃 방지)")
+    void suspend_self_rejected() throws Exception {
+        mockMvc.perform(post("/api/admin/members/" + adminId + "/suspend")
+                        .header("Authorization", login(adminLoginId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-400S"));
+    }
+
+    @Test
+    @DisplayName("역할 변경: 관리자 → 200 USER→ADMIN / USER → 403 / 자기 자신 → 400")
+    void changeRole() throws Exception {
+        mockMvc.perform(patch("/api/admin/members/" + userId + "/role")
+                        .header("Authorization", login(userLoginId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"ADMIN\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/admin/members/" + userId + "/role")
+                        .header("Authorization", login(adminLoginId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"ADMIN\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.role").value("ADMIN"));
+        mockMvc.perform(patch("/api/admin/members/" + adminId + "/role")
+                        .header("Authorization", login(adminLoginId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"USER\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-400S"));
     }
 }

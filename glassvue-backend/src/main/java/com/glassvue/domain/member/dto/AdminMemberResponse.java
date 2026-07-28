@@ -19,10 +19,12 @@ public record AdminMemberResponse(
         String nickname,
         @Schema(description = "이메일(아직 수집 경로가 없어 대개 null)", nullable = true) String email,
         Role role,
+        boolean suspended,
         Instant createdAt
 ) {
     public static AdminMemberResponse from(Member m) {
         return new AdminMemberResponse(
-                m.getId(), m.getLoginId(), m.getNickname(), m.getEmail(), m.getRole(), m.getCreatedAt());
+                m.getId(), m.getLoginId(), m.getNickname(), m.getEmail(), m.getRole(),
+                m.isSuspended(), m.getCreatedAt());
     }
 }

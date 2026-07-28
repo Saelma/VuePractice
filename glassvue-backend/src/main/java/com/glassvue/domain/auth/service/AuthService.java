@@ -69,6 +69,11 @@ public class AuthService {
         if (!passwordEncoder.matches(req.password(), member.getPassword())) {
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
+        // 비번은 맞아도 정지된 계정은 로그인 불가(B-11 후속). 비번 검증 뒤에 둔 이유: 계정 열거를
+        // 막으려면 존재/비번 여부를 먼저 통과한 뒤에야 정지 사실을 드러내야 한다.
+        if (member.isSuspended()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+        }
         return issueTokens(member);
     }
 
@@ -85,6 +90,11 @@ public class AuthService {
         }
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        // 정지 회원은 갱신도 막는다 — 정지 시 refresh 토큰을 지우므로 대개 위 matches 에서 걸리지만,
+        // 경합(정지 직전 발급된 토큰)까지 확실히 끊는다.
+        if (member.isSuspended()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+        }
         return issueTokens(member);
     }
 

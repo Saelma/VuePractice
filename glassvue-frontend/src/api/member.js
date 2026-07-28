@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiDelete } from './client';
+import { apiGet, apiPost, apiPatch, apiDelete } from './client';
 import { setUser, clearSession } from '../stores/auth';
 
 // --- 관리자 회원 조회 (B-11) ---
@@ -18,6 +18,18 @@ export function fetchAdminMember(memberId) {
 export const ROLE_LABEL = { USER: '일반', ADMIN: '관리자' };
 export function roleText(role) {
   return ROLE_LABEL[role] || role || '';
+}
+
+// --- 관리자 회원 조작 (B-11 후속) — 정지/해제·역할변경. 응답은 갱신된 회원(AdminMemberResponse). ---
+// ⚠ 자기 계정은 서버가 400(MEMBER-400S)으로 막는다(락아웃 방지). 화면도 자기 행은 버튼을 숨긴다.
+export function suspendMember(memberId) {
+  return apiPost(`/api/admin/members/${memberId}/suspend`);
+}
+export function unsuspendMember(memberId) {
+  return apiPost(`/api/admin/members/${memberId}/unsuspend`);
+}
+export function changeMemberRole(memberId, role) {
+  return apiPatch(`/api/admin/members/${memberId}/role`, { role });
 }
 
 export async function changeNickname(nickname) {

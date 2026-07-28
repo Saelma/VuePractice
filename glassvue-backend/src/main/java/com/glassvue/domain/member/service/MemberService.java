@@ -41,6 +41,12 @@ public class MemberService {
         return memberRepository.findIdsByRole(Role.ADMIN);
     }
 
+    /** 정지 여부 — 주문(order) 도메인이 정지 회원의 주문을 막을 때 쓰는 공개 API(B-11 후속). */
+    @Transactional(readOnly = true)
+    public boolean isSuspended(UUID memberId) {
+        return find(memberId).isSuspended();
+    }
+
     public MemberResponse changeNickname(UUID memberId, String nickname) {
         Member member = find(memberId);
         // 닉네임은 유니크. 본인은 제외해 같은 값 재저장은 허용하고, 남이 쓰는 값이면 막는다.

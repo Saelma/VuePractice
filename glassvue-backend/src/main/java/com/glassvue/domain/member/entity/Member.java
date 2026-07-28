@@ -35,6 +35,11 @@ public class Member extends BaseTimeEntity {
     @Column(unique = true, length = 255)
     private String email;
 
+    // 회원 정지(B-11 후속, 2026-07-28, V30). 정지되면 로그인·토큰갱신·주문이 막힌다(관리자만 조작).
+    // NUMBER(1) DEFAULT 0 — 기존 회원은 활성(false).
+    @Column(nullable = false)
+    private boolean suspended;
+
     // --- 기본 배송지는 여기 없다 (2026-07-24, V18) ---
     //
     // V11~V17 동안은 ship_recipient·ship_phone·ship_zipcode·ship_address1·ship_address2 5컬럼이
@@ -64,5 +69,19 @@ public class Member extends BaseTimeEntity {
 
     public void updateEmail(String email) {
         this.email = email;
+    }
+
+    // --- 관리자 조작(B-11 후속) ---
+
+    public void changeRole(Role role) {
+        this.role = role;
+    }
+
+    public void suspend() {
+        this.suspended = true;
+    }
+
+    public void unsuspend() {
+        this.suspended = false;
     }
 }

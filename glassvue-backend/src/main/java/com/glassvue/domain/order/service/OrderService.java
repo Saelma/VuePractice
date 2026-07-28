@@ -7,6 +7,7 @@ import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.coupon.service.CouponService;
 import com.glassvue.domain.point.service.PointService;
 import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.domain.order.dto.AdminOrderResponse;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderResponse;
@@ -54,6 +55,7 @@ public class OrderService {
     private final ShippingPolicy shippingPolicy;
     private final CouponService couponService;
     private final PointService pointService;
+    private final MemberService memberService; // 정지 회원 주문 차단(B-11 후속) — member 공개 API
 
     /**
      * 장바구니 → 주문 생성. 재고 원자적 차감 + 카트 비우기.
@@ -64,6 +66,11 @@ public class OrderService {
     @Transactional
     public UUID checkout(AuthUser user, OrderCreateRequest req) {
         UUID memberId = user.id();
+        // 정지 회원은 주문 불가(B-11 후속, 전면 차단). 로그인·갱신도 막지만, access 만료 전(≤30분)
+        // 남은 토큰으로 주문하는 창까지 여기서 닫는다.
+        if (memberService.isSuspended(memberId)) {
+            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+        }
         CartResponse cart = cartService.getCart(memberId);
         if (cart.items().isEmpty()) {
             throw new BusinessException(ErrorCode.CART_EMPTY);

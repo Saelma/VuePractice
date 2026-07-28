@@ -123,6 +123,30 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("로그인: 정지된 계정 → ACCOUNT_SUSPENDED (비번은 맞아도)")
+    void login_suspended() {
+        Member m = member();
+        m.suspend();
+        when(memberRepository.findByLoginId("kim")).thenReturn(Optional.of(m));
+        when(passwordEncoder.matches("pw", "HASH")).thenReturn(true);
+        assertErrorCode(() -> service.login(new LoginRequest("kim", "pw")), ErrorCode.ACCOUNT_SUSPENDED);
+    }
+
+    @Test
+    @DisplayName("재발급: 정지된 계정 → ACCOUNT_SUSPENDED")
+    void refresh_suspended() {
+        UUID mid = UUID.randomUUID();
+        Member m = member();
+        m.suspend();
+        io.jsonwebtoken.Claims claims = org.mockito.Mockito.mock(io.jsonwebtoken.Claims.class);
+        when(claims.getSubject()).thenReturn(mid.toString());
+        when(jwtProvider.parse("RT")).thenReturn(claims);
+        when(refreshTokenStore.matches(mid, "RT")).thenReturn(true);
+        when(memberRepository.findById(mid)).thenReturn(Optional.of(m));
+        assertErrorCode(() -> service.refresh("RT"), ErrorCode.ACCOUNT_SUSPENDED);
+    }
+
+    @Test
     @DisplayName("재설정 요청: 있는 아이디 → 토큰 발급 후 반환")
     void requestReset_existing() {
         Member m = member();
