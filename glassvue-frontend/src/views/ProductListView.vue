@@ -256,7 +256,7 @@ const chips = computed(() => {
 
         <!-- 로딩 스켈레톤 -->
         <div v-else-if="loading" class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          <div v-for="n in 6" :key="n" class="overflow-hidden rounded-card border border-line bg-surface shadow-card">
+          <div v-for="n in 6" :key="n" class="overflow-hidden rounded-card bg-surface shadow-card">
             <div class="skeleton aspect-square rounded-none"></div>
             <div class="space-y-2 p-4">
               <div class="skeleton h-3 w-16"></div>

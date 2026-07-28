@@ -23,10 +23,10 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
     <WishlistButton :product-id="product.id" class="absolute right-3 top-3 z-10" />
     <button
       type="button"
-      class="group w-full overflow-hidden rounded-card border border-line bg-surface text-left shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      class="group w-full overflow-hidden rounded-card bg-surface text-left shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
       @click="router.push(`/products/${product.id}`)"
     >
-      <div class="aspect-square overflow-hidden bg-canvas">
+      <div class="relative aspect-square overflow-hidden bg-canvas">
         <img
           v-if="thumbOf(product)"
           :src="thumbOf(product)"
@@ -34,6 +34,12 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
           class="h-full w-full object-cover transition duration-300 group-hover:scale-105"
         />
         <div v-else class="flex h-full items-center justify-center text-3xl text-ink-400">🖼️</div>
+
+        <!-- 할인율은 이미지 좌상단 뱃지로(커머스 관례 — 컬리·29CM·무신사). 가격줄은 깔끔하게. -->
+        <span
+          v-if="hasDiscount(product)"
+          class="absolute left-2 top-2 rounded-control bg-danger px-1.5 py-0.5 text-xs font-bold text-white tabular-nums"
+        >{{ discountRate(product) }}%</span>
       </div>
 
       <div class="p-4">
@@ -41,10 +47,9 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
         <h3 class="mt-0.5 line-clamp-1 text-sm font-medium text-ink-900">{{ product.name }}</h3>
         <div class="mt-2 flex items-end justify-between gap-2">
           <div class="min-w-0">
-            <!-- 할인 중이면 정가를 취소선으로 위에, 판매가를 아래에. 정가가 없으면 판매가만 보인다. -->
+            <!-- 할인율은 이미지 뱃지로 옮겼다. 여기선 정가 취소선(위) + 판매가(아래)만. 정가 없으면 판매가만. -->
             <span v-if="hasDiscount(product)" class="muted block tabular-nums line-through">{{ priceText(product.listPrice) }}</span>
             <span class="text-lg font-semibold tabular-nums text-ink-900">{{ priceText(product.price) }}</span>
-            <span v-if="hasDiscount(product)" class="ml-1 text-sm font-semibold text-danger">{{ discountRate(product) }}%</span>
           </div>
           <StarRating :model-value="product.averageRating" :count="product.reviewCount" size="sm" />
         </div>
