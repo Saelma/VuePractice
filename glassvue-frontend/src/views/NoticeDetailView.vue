@@ -5,7 +5,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getNotice, deleteNotice, increaseView } from '../api/notice';
-import { isLoggedIn, authState } from '../stores/auth';
+import { isLoggedIn, authState, isAdminRole } from '../stores/auth';
 
 const props = defineProps({ id: { type: String, required: true } });
 const router = useRouter();
@@ -18,7 +18,7 @@ const loading = ref(true);
 const isOwner = computed(
   () =>
     isLoggedIn.value &&
-    (notice.value?.authorId === authState.user?.id || authState.user?.role === 'ADMIN'),
+    (notice.value?.authorId === authState.user?.id || isAdminRole(authState.user?.role)),
 );
 
 onMounted(async () => {

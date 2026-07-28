@@ -1,14 +1,13 @@
 <script setup>
 import { computed, ref, onMounted, watch } from 'vue';
 import { RouterLink, RouterView, useRouter } from 'vue-router';
-import { authState, isLoggedIn } from './stores/auth';
+import { authState, isLoggedIn, isAdmin } from './stores/auth';
 import { logout as apiLogout, loadMe } from './api/auth';
 import { connectNotifications, disconnectNotifications } from './stores/notifications';
 import NotificationBell from './components/NotificationBell.vue';
 import NotificationToaster from './components/NotificationToaster.vue';
 
 const router = useRouter();
-const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 const searchQuery = ref('');
 
 onMounted(() => {

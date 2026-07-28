@@ -8,7 +8,7 @@ import { useRouter } from 'vue-router';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discountRate } from '../api/product';
 import { addToCart } from '../api/cart';
-import { authState, isLoggedIn } from '../stores/auth';
+import { authState, isLoggedIn, isAdmin } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
 import { loadRestockIds } from '../stores/restock';
 import { pushRecentlyViewed } from '../stores/recentlyViewed';
@@ -24,7 +24,6 @@ const router = useRouter();
 const product = ref(null);
 const error = ref('');
 const loading = ref(true);
-const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 const qty = ref(1);
 const cartMsg = ref('');
 

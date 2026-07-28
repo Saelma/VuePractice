@@ -12,7 +12,7 @@ import {
 import { priceText, hasDiscount, discountRate } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
 import { addressText } from '../api/shipping';
-import { authState } from '../stores/auth';
+import { authState, isAdmin } from '../stores/auth';
 
 const props = defineProps({ id: { type: String, required: true } });
 const router = useRouter();
@@ -20,7 +20,6 @@ const router = useRouter();
 const order = ref(null);
 const error = ref('');
 const loading = ref(true);
-const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 // 결제·취소는 역할이 아니라 **소유 여부**로 갈린다 — 백엔드 pay/cancel이 findByIdAndMemberId로
 // 본인만 허용하는 것과 같은 규칙. 관리자도 직접 구매하므로 !isAdmin으로 가르면
 // 자기 주문인데 버튼이 사라진다(2026-07-20 실제로 발생한 버그).

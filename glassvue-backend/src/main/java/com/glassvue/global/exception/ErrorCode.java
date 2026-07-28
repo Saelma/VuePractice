@@ -35,6 +35,10 @@ public enum ErrorCode {
     // 회원 정지 · 관리자 조작 (2026-07-28, B-11 후속)
     ACCOUNT_SUSPENDED("AUTH-403S", HttpStatus.FORBIDDEN, "정지된 계정입니다. 관리자에게 문의하세요."),
     CANNOT_MODIFY_SELF("MEMBER-400S", HttpStatus.BAD_REQUEST, "자기 계정은 정지·역할변경할 수 없습니다."),
+    // 최상위 관리자(2026-07-28) — 관리자 조작은 SUPER_ADMIN 전용, SUPER_ADMIN 계정은 아무도 못 건드린다.
+    SUPER_ADMIN_ONLY("MEMBER-403A", HttpStatus.FORBIDDEN, "관리자 계정의 정지·역할변경은 최상위 관리자만 할 수 있습니다."),
+    CANNOT_MODIFY_SUPER_ADMIN("MEMBER-403S", HttpStatus.FORBIDDEN, "최상위 관리자 계정은 정지·변경할 수 없습니다."),
+    CANNOT_GRANT_SUPER_ADMIN("MEMBER-400A", HttpStatus.BAD_REQUEST, "최상위 관리자 권한은 이 API로 부여할 수 없습니다."),
 
     // 배송지 주소록 (2026-07-24)
     // 남의 주소는 403이 아니라 404로 답한다 — 존재 여부 자체를 알려주지 않는다(쿠폰과 같은 판단).

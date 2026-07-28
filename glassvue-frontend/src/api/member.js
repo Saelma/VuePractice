@@ -15,7 +15,7 @@ export function fetchAdminMember(memberId) {
   return apiGet(`/api/admin/members/${memberId}`);
 }
 
-export const ROLE_LABEL = { USER: '일반', ADMIN: '관리자' };
+export const ROLE_LABEL = { USER: '일반', ADMIN: '관리자', SUPER_ADMIN: '최상위 관리자' };
 export function roleText(role) {
   return ROLE_LABEL[role] || role || '';
 }

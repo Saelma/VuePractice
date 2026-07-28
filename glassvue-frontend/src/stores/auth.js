@@ -10,6 +10,13 @@ const state = reactive({
 export const authState = state;
 export const isLoggedIn = computed(() => !!state.access);
 
+// 관리자 판별은 한 곳에서. SUPER_ADMIN(최상위 관리자)은 ADMIN 을 포함하므로 관리 UI·가드를 그대로 통과한다.
+// (백엔드 Role.authorities 와 같은 규칙 — 흩어진 role==='ADMIN' 비교가 super 를 놓치지 않게 여기로 모은다.)
+export function isAdminRole(role) {
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
+}
+export const isAdmin = computed(() => isAdminRole(state.user?.role));
+
 export function setTokens(access, refresh) {
   state.access = access;
   state.refresh = refresh;

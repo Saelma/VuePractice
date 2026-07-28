@@ -5,7 +5,7 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxCheckBox } from 'devextreme-vue/check-box';
 import { getNotice, createNotice, updateNotice } from '../api/notice';
-import { authState } from '../stores/auth';
+import { authState, isAdminRole } from '../stores/auth';
 
 // id가 있으면 수정, 없으면 작성. 작성자는 서버가 로그인 유저로 지정한다.
 const props = defineProps({ id: { type: String, default: null } });
@@ -21,7 +21,7 @@ onMounted(async () => {
   if (isEdit.value) {
     try {
       const n = await getNotice(props.id);
-      if (n.authorId !== authState.user?.id && authState.user?.role !== 'ADMIN') {
+      if (n.authorId !== authState.user?.id && !isAdminRole(authState.user?.role)) {
         error.value = '본인 글만 수정할 수 있습니다.';
         blocked.value = true;
         return;

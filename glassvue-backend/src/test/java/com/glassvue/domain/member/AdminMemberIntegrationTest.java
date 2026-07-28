@@ -50,15 +50,19 @@ class AdminMemberIntegrationTest {
 
     private String adminLoginId;
     private String userLoginId;
+    private String superLoginId;
     private UUID adminId;
     private UUID userId;
+    private UUID superId;
 
     @BeforeEach
     void setUp() {
         adminLoginId = "zzadm_" + UUID.randomUUID().toString().substring(0, 8);
         userLoginId = MARK.toLowerCase() + "_" + UUID.randomUUID().toString().substring(0, 8);
+        superLoginId = "zzsuper_" + UUID.randomUUID().toString().substring(0, 8);
         adminId = member(adminLoginId, "ZZ회원관리자" + suffix(), Role.ADMIN);
         userId = member(userLoginId, MARK + "-대상회원", Role.USER);
+        superId = member(superLoginId, "ZZ최상위" + suffix(), Role.SUPER_ADMIN);
         // 대상 회원의 주문 2건(by-member 조회가 그 회원 것만 집는지 확인)
         saveOrder();
         saveOrder();
@@ -198,21 +202,59 @@ class AdminMemberIntegrationTest {
     }
 
     @Test
-    @DisplayName("역할 변경: 관리자 → 200 USER→ADMIN / USER → 403 / 자기 자신 → 400")
-    void changeRole() throws Exception {
-        mockMvc.perform(patch("/api/admin/members/" + userId + "/role")
-                        .header("Authorization", login(userLoginId))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"ADMIN\"}"))
-                .andExpect(status().isForbidden());
+    @DisplayName("역할 변경은 SUPER_ADMIN 전용: 일반관리자 → 403(MEMBER-403A) / SUPER → 200 / SUPER 자기자신 → 400")
+    void changeRole_superOnly() throws Exception {
+        // 일반 관리자는 역할 변경 불가
         mockMvc.perform(patch("/api/admin/members/" + userId + "/role")
                         .header("Authorization", login(adminLoginId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"ADMIN\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-403A"));
+        // 최상위 관리자는 USER→ADMIN 가능
+        mockMvc.perform(patch("/api/admin/members/" + userId + "/role")
+                        .header("Authorization", login(superLoginId))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"ADMIN\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.role").value("ADMIN"));
-        mockMvc.perform(patch("/api/admin/members/" + adminId + "/role")
-                        .header("Authorization", login(adminLoginId))
+        // 자기 자신은 SUPER 여도 불가
+        mockMvc.perform(patch("/api/admin/members/" + superId + "/role")
+                        .header("Authorization", login(superLoginId))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"USER\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("MEMBER-400S"));
+    }
+
+    @Test
+    @DisplayName("SUPER_ADMIN 부여는 API로 불가 → 400(MEMBER-400A)")
+    void changeRole_grantSuper_rejected() throws Exception {
+        mockMvc.perform(patch("/api/admin/members/" + userId + "/role")
+                        .header("Authorization", login(superLoginId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"SUPER_ADMIN\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-400A"));
+    }
+
+    @Test
+    @DisplayName("관리자 정지는 SUPER_ADMIN 전용: 일반관리자가 ADMIN 정지 → 403(MEMBER-403A) / SUPER → 200")
+    void suspend_admin_superOnly() throws Exception {
+        UUID targetAdmin = member("zzadm2_" + UUID.randomUUID().toString().substring(0, 8), "ZZ대상관리자" + suffix(), Role.ADMIN);
+        mockMvc.perform(post("/api/admin/members/" + targetAdmin + "/suspend")
+                        .header("Authorization", login(adminLoginId)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-403A"));
+        mockMvc.perform(post("/api/admin/members/" + targetAdmin + "/suspend")
+                        .header("Authorization", login(superLoginId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.suspended").value(true));
+    }
+
+    @Test
+    @DisplayName("SUPER_ADMIN 대상은 아무도 못 건드림 → 403(MEMBER-403S)")
+    void suspend_superTarget_forbidden() throws Exception {
+        // 일반 관리자든 다른 최상위든 SUPER 대상은 불가(여기선 일반관리자가 시도)
+        mockMvc.perform(post("/api/admin/members/" + superId + "/suspend")
+                        .header("Authorization", login(adminLoginId)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-403S"));
     }
 }

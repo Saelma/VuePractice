@@ -28,6 +28,13 @@ const point = ref(null);
 const busy = ref(false);
 // 자기 계정은 정지·강등 못 한다(서버도 400으로 막지만 화면에서 버튼을 숨긴다 — 락아웃 방지).
 const isSelf = computed(() => member.value?.id === authState.user?.id);
+// 엄격 분리(2026-07-28): 일반 ADMIN 은 USER 만 정지, 역할변경·관리자 정지는 SUPER_ADMIN 전용,
+// SUPER_ADMIN 계정은 아무도 못 건드림. 서버가 최종 방어선이고 화면은 그에 맞춰 버튼을 감춘다.
+const viewerIsSuper = computed(() => authState.user?.role === 'SUPER_ADMIN');
+const targetIsSuper = computed(() => member.value?.role === 'SUPER_ADMIN');
+const canSuspend = computed(() =>
+  !isSelf.value && !targetIsSuper.value && (viewerIsSuper.value || member.value?.role === 'USER'));
+const canChangeRole = computed(() => !isSelf.value && !targetIsSuper.value && viewerIsSuper.value);
 const orderStatus = ref(null); // 주문 상태 필터(반품만 보기 = RETURN_REQUESTED/RETURNED)
 const orderGridRef = ref(null);
 
@@ -124,23 +131,32 @@ function signedPoint(n) {
           <dt class="text-ink-500">가입일</dt><dd class="text-ink-900">{{ fmt(member.createdAt) }}</dd>
         </dl>
 
-        <!-- 관리: 자기 계정은 조작 불가(락아웃 방지)라 버튼을 숨기고 안내만 -->
+        <!-- 관리: 계층·본인에 따라 버튼을 감추고 안내만 (서버가 최종 방어선) -->
         <div class="mt-4 border-t border-line pt-4">
-          <template v-if="isSelf">
-            <p class="muted">본인 계정입니다 — 정지·역할 변경은 다른 관리자만 할 수 있습니다.</p>
+          <p v-if="isSelf" class="muted">본인 계정입니다 — 정지·역할 변경은 다른 관리자만 할 수 있습니다.</p>
+          <p v-else-if="targetIsSuper" class="muted">최상위 관리자 계정은 정지·역할 변경할 수 없습니다.</p>
+          <template v-else>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-if="canSuspend"
+                type="button"
+                class="btn btn-sm"
+                :class="member.suspended ? 'btn-secondary' : 'btn-danger'"
+                :disabled="busy"
+                @click="toggleSuspend"
+              >{{ member.suspended ? '정지 해제' : '정지' }}</button>
+              <button
+                v-if="canChangeRole"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="busy"
+                @click="toggleRole"
+              >{{ member.role === 'ADMIN' ? '일반으로 강등' : '관리자로 승격' }}</button>
+            </div>
+            <p v-if="!canSuspend && !canChangeRole" class="muted">
+              관리자 계정은 최상위 관리자만 정지·역할 변경할 수 있습니다.
+            </p>
           </template>
-          <div v-else class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="btn btn-sm"
-              :class="member.suspended ? 'btn-secondary' : 'btn-danger'"
-              :disabled="busy"
-              @click="toggleSuspend"
-            >{{ member.suspended ? '정지 해제' : '정지' }}</button>
-            <button type="button" class="btn btn-secondary btn-sm" :disabled="busy" @click="toggleRole">
-              {{ member.role === 'ADMIN' ? '일반으로 강등' : '관리자로 승격' }}
-            </button>
-          </div>
         </div>
       </div>
 

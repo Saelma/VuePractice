@@ -38,8 +38,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (role != null && !blacklist.contains(claims.getId())) {
                     String nickname = claims.get("nickname", String.class);
                     AuthUser principal = new AuthUser(UUID.fromString(claims.getSubject()), Role.valueOf(role), nickname);
-                    var authentication = new UsernamePasswordAuthenticationToken(
-                            principal, null, List.of(new SimpleGrantedAuthority(principal.role().authority())));
+                    // SUPER_ADMIN 은 ROLE_ADMIN 도 함께 부여받아 기존 /api/admin/** 를 통과한다(Role.authorities).
+                    var authorities = principal.role().authorities().stream()
+                            .map(SimpleGrantedAuthority::new).toList();
+                    var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
             } catch (Exception e) {

@@ -7,7 +7,7 @@ import {
   fetchProductInquiries, createInquiry, updateInquiry, deleteInquiry, answerInquiry, inquiryStatusText,
   INQUIRY_IMAGE_MAX,
 } from '../api/inquiry';
-import { authState, isLoggedIn } from '../stores/auth';
+import { authState, isLoggedIn, isAdmin } from '../stores/auth';
 import ImageUploader from './ImageUploader.vue';
 import EmptyState from './EmptyState.vue';
 import SkeletonList from './SkeletonList.vue';
@@ -18,7 +18,6 @@ const page = ref({ content: [], page: 0, totalPages: 0, last: true });
 const loading = ref(true);
 const error = ref('');
 
-const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 const myId = computed(() => authState.user?.id);
 function canEdit(q) {
   return q.authorId === myId.value && q.status === 'WAITING';

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { fetchProductReviews, createReview, updateReview, deleteReview, REVIEW_IMAGE_MAX } from '../api/review';
-import { authState, isLoggedIn } from '../stores/auth';
+import { authState, isLoggedIn, isAdmin } from '../stores/auth';
 import StarRating from './StarRating.vue';
 import ImageUploader from './ImageUploader.vue';
 import EmptyState from './EmptyState.vue';
@@ -15,7 +15,6 @@ const page = ref({ content: [], page: 0, totalPages: 0, last: true });
 const loading = ref(true);
 const error = ref('');
 
-const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 const myId = computed(() => authState.user?.id);
 function canManage(r) {
   return isAdmin.value || r.authorId === myId.value;

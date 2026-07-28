@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { isLoggedIn, authState } from '../stores/auth';
+import { isLoggedIn, authState, isAdminRole } from '../stores/auth';
 import { loadMe } from '../api/auth';
 import HomeView from '../views/HomeView.vue';
 import NoticeListView from '../views/NoticeListView.vue';
@@ -83,7 +83,7 @@ router.beforeEach(async (to) => {
   }
   // 관리자 경로는 권한이 없으면(비로그인 포함) **로그인 유도 없이** 상품 목록으로 보낸다 —
   // 관리 화면의 존재 자체를 노출하지 않는다(사용자 요청, 2026-07-28).
-  if (to.meta.requiresAdmin && authState.user?.role !== 'ADMIN') {
+  if (to.meta.requiresAdmin && !isAdminRole(authState.user?.role)) {
     return { path: '/products' };
   }
   // 그 외 로그인 필요 경로: 비로그인 → 로그인(원래 경로로 복귀하도록 redirect 보존)

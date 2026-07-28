@@ -14,14 +14,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 관리자 회원 조작(B-11 후속) — 정지/해제 · 역할변경.
+ * 관리자 회원 조작(B-11 후속) — 정지/해제 · 역할변경. 권한은 <b>엄격 분리</b>(2026-07-28):
  *
- * <p><b>자기 자신은 조작 못 한다</b>(사용자 결정) — 관리자가 자기 계정을 강등·정지하면 그 자리에서
- * 락아웃된다. 다른 관리자에 대한 조작은 허용하되(문제 관리자 강등 여지) 모두 로그로 남긴다.
- * 감사 테이블은 아직 없어 SLF4J 로만 남긴다(별도 감사 로그는 BACKLOG 후속).
+ * <ul>
+ *   <li>자기 자신은 조작 불가(락아웃 방지, {@code CANNOT_MODIFY_SELF}).
+ *   <li>SUPER_ADMIN 계정은 <b>아무도</b> 정지·변경 못 함({@code CANNOT_MODIFY_SUPER_ADMIN}).
+ *   <li>관리자(ADMIN) 계정의 정지, 그리고 <b>모든 역할 변경</b>은 SUPER_ADMIN 만({@code SUPER_ADMIN_ONLY}).
+ *       일반 ADMIN 은 일반 회원(USER)만 정지/해제할 수 있다.
+ *   <li>역할 변경으로 SUPER_ADMIN 을 <b>부여할 수 없다</b>({@code CANNOT_GRANT_SUPER_ADMIN}) — 최상위는
+ *       배포 후 별도 데이터 작업으로만 정한다.
+ * </ul>
  *
- * <p>정지 시 그 회원의 refresh 토큰을 지운다 — 이미 로그인된 세션이 access 만료(≤30분) 뒤 갱신에
- * 실패해 끊긴다. 그 30분 창에서도 로그인·주문은 각 도메인 가드(Auth·Order)가 막는다(전면 차단).
+ * <p>{@code actingRole} 은 JWT 클레임(=AuthUser)에서 온다. 감사는 SLF4J 로만(감사 테이블은 후속).
  */
 @Slf4j
 @Service
@@ -32,34 +36,49 @@ public class MemberAdminCommandService {
     private final MemberRepository memberRepository;
     private final RefreshTokenStore refreshTokenStore;
 
-    public AdminMemberResponse suspend(UUID actingAdminId, UUID targetId) {
-        Member member = target(actingAdminId, targetId);
+    public AdminMemberResponse suspend(UUID actingId, Role actingRole, UUID targetId) {
+        Member member = authorize(actingId, actingRole, targetId, false);
         member.suspend();
         refreshTokenStore.delete(targetId); // 기존 세션 무효화(갱신 차단)
-        log.info("Member suspended: target={} by admin={}", targetId, actingAdminId);
+        log.info("Member suspended: target={} by admin={}", targetId, actingId);
         return AdminMemberResponse.from(member);
     }
 
-    public AdminMemberResponse unsuspend(UUID actingAdminId, UUID targetId) {
-        Member member = target(actingAdminId, targetId);
+    public AdminMemberResponse unsuspend(UUID actingId, Role actingRole, UUID targetId) {
+        Member member = authorize(actingId, actingRole, targetId, false);
         member.unsuspend();
-        log.info("Member unsuspended: target={} by admin={}", targetId, actingAdminId);
+        log.info("Member unsuspended: target={} by admin={}", targetId, actingId);
         return AdminMemberResponse.from(member);
     }
 
-    public AdminMemberResponse changeRole(UUID actingAdminId, UUID targetId, Role role) {
-        Member member = target(actingAdminId, targetId);
-        member.changeRole(role);
-        log.info("Member role changed to {}: target={} by admin={}", role, targetId, actingAdminId);
+    public AdminMemberResponse changeRole(UUID actingId, Role actingRole, UUID targetId, Role newRole) {
+        if (newRole == Role.SUPER_ADMIN) {
+            throw new BusinessException(ErrorCode.CANNOT_GRANT_SUPER_ADMIN);
+        }
+        Member member = authorize(actingId, actingRole, targetId, true); // 역할변경은 항상 SUPER_ADMIN 전용
+        member.changeRole(newRole);
+        log.info("Member role changed to {}: target={} by admin={}", newRole, targetId, actingId);
         return AdminMemberResponse.from(member);
     }
 
-    /** 대상 회원을 찾되, 자기 자신이면 거부한다(락아웃 방지). */
-    private Member target(UUID actingAdminId, UUID targetId) {
-        if (actingAdminId.equals(targetId)) {
+    /**
+     * 대상 회원을 찾고 권한을 검증한다.
+     *
+     * @param superOnly 대상이 USER 여도 SUPER_ADMIN 만 허용(역할변경용). false 면 대상이 ADMIN 일 때만 SUPER 요구.
+     */
+    private Member authorize(UUID actingId, Role actingRole, UUID targetId, boolean superOnly) {
+        if (actingId.equals(targetId)) {
             throw new BusinessException(ErrorCode.CANNOT_MODIFY_SELF);
         }
-        return memberRepository.findById(targetId)
+        Member target = memberRepository.findById(targetId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (target.getRole() == Role.SUPER_ADMIN) {
+            throw new BusinessException(ErrorCode.CANNOT_MODIFY_SUPER_ADMIN);
+        }
+        boolean needsSuper = superOnly || target.getRole() == Role.ADMIN;
+        if (needsSuper && actingRole != Role.SUPER_ADMIN) {
+            throw new BusinessException(ErrorCode.SUPER_ADMIN_ONLY);
+        }
+        return target;
     }
 }

@@ -339,8 +339,20 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
 > 로그인·토큰갱신은 auth(`AuthService.login`/`refresh`)가, 주문은 order(`checkout` → `MemberService.isSuspended`
 > 공개 API)가 막는다 — order→member 는 이미 있던 방향이라 순환 없음. 정지 시 refresh 토큰을 지워 기존 세션은
 > access 만료(≤30분) 뒤 끊기고, 그 창의 주문은 checkout 가드가 닫는다. **자기 계정은 조작 불가**(락아웃 방지,
-> `CANNOT_MODIFY_SELF`) — 다른 관리자는 허용해 문제 관리자 강등 여지를 남긴다. 감사는 SLF4J 로그로만(감사
-> 테이블은 후속). 조작 API 는 `/api/admin/members/{id}/suspend·unsuspend·role` — 조회와 같은 컨트롤러, `/api/admin/**` 보호.
+> `CANNOT_MODIFY_SELF`). 감사는 SLF4J 로그로만(감사 테이블은 후속). 조작 API 는
+> `/api/admin/members/{id}/suspend·unsuspend·role` — 조회와 같은 컨트롤러, `/api/admin/**` 보호.
+>
+> **최상위 관리자 SUPER_ADMIN (2026-07-28, V31)**: 위 정지/역할을 **계층화**했다(사용자 요청 — 처음엔 관리자끼리
+> 서로 정지·강등이 가능해 위험). Role 에 SUPER_ADMIN 을 더하고 **엄격 분리**: 일반 ADMIN 은 USER 만 정지,
+> **역할 변경과 관리자 정지는 SUPER_ADMIN 전용**, SUPER_ADMIN 계정은 아무도 못 건드린다(자기 포함). ⚠ 인가는
+> **경로가 아니라 서비스 계층**에서 판단한다 — SUPER_ADMIN 은 `Role.authorities()` 로 `ROLE_ADMIN` 을 함께
+> 받아 기존 `/api/admin/**`(hasRole('ADMIN'))를 그대로 통과하고, "관리자 조작은 SUPER만" 은
+> `MemberAdminCommandService` 가 `actingRole`(JWT)로 가른다. SUPER 부여는 API로 불가(`CANNOT_GRANT_SUPER_ADMIN`),
+> 오직 데이터로만. **V31**은 role 의 CHECK 를 시스템 이름이라 **동적으로 찾아 DROP**(`search_condition_vc` 조회)한 뒤
+> named `ck_member_role`(USER/ADMIN/SUPER_ADMIN)로 재생성 — enum CHECK 트랩(orders.status 사고)의 정석 대응이다.
+> ⚠ 특정 계정 승격(김기현팀)은 **신 jar 배포 후** 별도 UPDATE — 구 jar 는 SUPER_ADMIN 을 enum 으로 못 읽어
+> 그 회원 로딩이 깨지므로 순서가 반대면 안 된다. 프론트의 `role==='ADMIN'` 비교는 `stores/auth` 의
+> `isAdminRole`(SUPER 포함)로 모았다(흩어진 비교가 SUPER 를 관리 UI에서 배제하지 않도록).
 >
 > **배송지 주소록(2026-07-24, V18)**: 배송지는 `member.ship_*` 5컬럼 = **회원당 하나**였는데(V11),
 > 별칭을 붙인 여러 주소(`member_address`)로 늘리고 그중 하나를 기본 배송지로 둔다.
