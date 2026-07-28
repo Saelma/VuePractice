@@ -2,7 +2,7 @@
 
 > **이 문서가 답하는 질문: "무엇을 만들 것인가."**
 > 설계·근거는 `ARCHITECTURE.md`, 일하는 방식은 `WORKING-AGREEMENTS.md`,
-> 그날 한 일은 `YYYY-MM-DD-handoff.md`. 여기엔 **아직 없는 기능**만 적는다.
+> 그날 한 일은 `handoffs/YYYY-MM-DD-handoff.md`. 여기엔 **아직 없는 기능**만 적는다.
 >
 > **왜 따로 만들었나 (2026-07-23)**: 같은 갭 목록을 하루에 **두 번** 코드에서 다시 뽑았다.
 > 재생성 비용이 반복해서 발생하면 문서로 만드는 게 맞다. 게다가 이 목록이 그날 핸드오프 안에
@@ -166,26 +166,26 @@ tabular-nums + Pretendard. `index.css` 한 곳으로 전 관리 그리드(회원
 
 | 항목 | 완료일 | 근거 |
 |---|---|---|
-| **A-1. 배송 추적** — 운송장(택배사·송장번호) + `DELIVERED` 상태 + 진행 스텝 4단계 | 2026-07-23 | V13 · `2026-07-23-handoff.md` §8 |
-| **A-2. 배송비** — 정책은 설정(`glassvue.shipping`), 부과 금액은 주문 스냅샷 | 2026-07-23 | V14 · `2026-07-23-handoff.md` §10 |
-| **A-3. 사람이 읽는 주문번호** — `yyyyMMdd`(KST) + 전역 시퀀스, 기존 25건 백필 | 2026-07-23 | V15 · `2026-07-23-handoff.md` §11 |
-| **B-7. 정가 / 할인가** — `price` 의미 유지 + `list_price` 추가, 주문에도 정가 스냅샷 | 2026-07-23 | V16 · `2026-07-23-handoff.md` §12 |
-| **B-4. 쿠폰** — 상품합계 → 쿠폰할인 → 배송비 순, 무료배송은 할인 전 기준 | 2026-07-23 | V17 · `2026-07-23-handoff.md` §13 |
-| **B-5. 배송지 주소록** — 별칭 붙은 여러 주소 + 기본 배송지(DB 유니크), 주문서에서 선택 | 2026-07-24 | V18 · `2026-07-24-handoff.md` §3 |
-| **B-6. 위시리스트(찜)** — 테이블 저장(로그아웃해도 남는다), 찜 여부는 id 집합 API 로 | 2026-07-24 | V19 · `2026-07-24-handoff.md` §4 |
-| **B-5-2. `member.ship_*` DROP** — expand/contract 의 contract 단계. 코드 변경 0, 배포 불필요 | 2026-07-24 | V20 · `2026-07-24-handoff.md` §5 |
-| **C-11. 관리자 매출 통계** — paid_at · 상태 열거 · KST 기준. 상품매출과 배송비 분리 | 2026-07-24 | 마이그레이션 없음 · `2026-07-24-handoff.md` §6 |
-| **C-10. 적립금·회원 등급** — 배송완료 적립(회수 로직 없음), 이력이 원장, 주문서에서 사용 | 2026-07-24 | V21 · `2026-07-24-handoff.md` §7 |
-| **C-8. 상품 옵션** — 단일 옵션 목록 + 가격차, 재고가 옵션마다, 취소 시 그 옵션 복원 | 2026-07-24 | V22·V23 · `2026-07-24-handoff.md` §8 |
-| **C-9. 반품·교환(반품)** — 배송완료 반품 → 승인 시 적립금 환불 + 적립 회수 + 등급 재산정 | 2026-07-24 | V24 · `2026-07-24-handoff.md` §9 |
-| **B-8. 메인 홈(스토어프론트)** — 인기순=`sold_count` 비정규화, HomeView·ProductCard, 공지 `/notices` 이전 + **보강 4종**(전역 검색·푸터·최근 본 상품[계정별]·로그인 개인화). 배포·검증 완료 | 2026-07-24 | V25 · `2026-07-24-handoff.md` §10 |
-| **인앱 알림 시스템** (B-9 상위) — 자체 SSE(FCM 아님), stub 핸들러→실제 알림, 벨·토스트·전체페이지·타입별 on/off 설정. 배포·브라우저 검증 완료(2026-07-27) | 2026-07-24 | V26·V27 · `2026-07-24-handoff.md` §11 |
-| **B-9. 재입고 알림** — `StockReplenishedEvent`(상품 총재고 0→양수: 주문취소·반품·관리자 재고편집) → restock 도메인이 구독자에게 RESTOCK 알림 + 구독 소진. 구독은 **상품 단위**(variant.id 불안정 회피). 품절 상품에 "재입고되면 알림 받기" | 2026-07-27 | V28 · `2026-07-27-handoff.md` |
-| **B-10. 비밀번호 재설정** — 아이디로 단발성 토큰 발급(Redis `auth:reset:`, 30분 TTL, getAndDelete) → 새 비번. 열거 방지(없는 아이디도 200) + 변경 시 refresh 폐기. 발송 채널이 없어 링크는 **dev 프로파일만** 응답 노출(`auth.password-reset.expose-token`, 운영 false). 마이그레이션 없음(Redis) | 2026-07-28 | 마이그레이션 없음 · `2026-07-28-handoff.md` |
-| **B-11. 관리자 회원 관리** — 회원 목록·검색(loginId·nickname·email) + 회원 상세(기본정보·적립금/등급·주문·반품·적립금이력). **조회 전용**(정지/역할변경 제외). ⚠ 도메인 격리: order 가 이미 member.Role 을 참조해 facade(member→order)는 순환 → **각 도메인이 자기 admin 조회를 소유**(member·order `/by-member`·point admin 엔드포인트)하고 **프론트가 상세를 조합**. 탈퇴=하드삭제라 목록은 현존 회원만. 마이그레이션 없음 | 2026-07-28 | 마이그레이션 없음 · `2026-07-28-handoff.md` |
-| **회원 정지 · 역할변경** (B-11 후속) — `member.suspended`(V30, boolean) + `changeRole`. **전면 차단**: 정지 시 로그인·토큰갱신(Auth)·주문(Order 가드) 막고 refresh 토큰 삭제. **자기 자신 조작 불가**(락아웃 방지). 엔드포인트 `POST /api/admin/members/{id}/suspend·unsuspend`·`PATCH /role`. 정지=boolean(enum CHECK 트랩 회피) | 2026-07-28 | V30 · `2026-07-28-handoff.md` |
-| **관리자 감사 로그** (회원관리 심화) — 관리자 조작(정지·해제·역할변경)을 append-only 로 남기고 **SUPER_ADMIN 만 조회**. 새 도메인 `domain/audit`: member 는 audit 을 직접 부르지 않고 `AdminActionEvent` 발행 → 리스너가 **같은 트랜잭션**에서 저장(감사 실패 시 조작도 롤백). 대상 탈퇴·개명에도 안 깨지게 이름·loginId **스냅샷**. `/api/admin/audit/**` 는 `/api/admin/**` 위에 `hasRole('SUPER_ADMIN')`. V32 순수 추가 | 2026-07-28 | V32 · `2026-07-28-handoff.md` |
-| **최상위 관리자 SUPER_ADMIN** — 정지/역할을 계층화(엄격 분리). 일반 ADMIN 은 USER 만 정지, **역할변경·관리자 정지는 SUPER 전용**, SUPER 계정은 아무도 못 건드림. 김기현팀=SUPER. Role.authorities 로 SUPER 가 ROLE_ADMIN 포함(기존 admin 경로 통과), 계층 판단은 서비스에서. V31 은 role CHECK 를 **동적 DROP**(시스템 이름) 후 named `ck_member_role` 재생성. 승격은 신 jar 배포 후 UPDATE(구 jar 는 SUPER enum 못 읽음) | 2026-07-28 | V31 · `2026-07-28-handoff.md` |
+| **A-1. 배송 추적** — 운송장(택배사·송장번호) + `DELIVERED` 상태 + 진행 스텝 4단계 | 2026-07-23 | V13 · `handoffs/2026-07-23-handoff.md` §8 |
+| **A-2. 배송비** — 정책은 설정(`glassvue.shipping`), 부과 금액은 주문 스냅샷 | 2026-07-23 | V14 · `handoffs/2026-07-23-handoff.md` §10 |
+| **A-3. 사람이 읽는 주문번호** — `yyyyMMdd`(KST) + 전역 시퀀스, 기존 25건 백필 | 2026-07-23 | V15 · `handoffs/2026-07-23-handoff.md` §11 |
+| **B-7. 정가 / 할인가** — `price` 의미 유지 + `list_price` 추가, 주문에도 정가 스냅샷 | 2026-07-23 | V16 · `handoffs/2026-07-23-handoff.md` §12 |
+| **B-4. 쿠폰** — 상품합계 → 쿠폰할인 → 배송비 순, 무료배송은 할인 전 기준 | 2026-07-23 | V17 · `handoffs/2026-07-23-handoff.md` §13 |
+| **B-5. 배송지 주소록** — 별칭 붙은 여러 주소 + 기본 배송지(DB 유니크), 주문서에서 선택 | 2026-07-24 | V18 · `handoffs/2026-07-24-handoff.md` §3 |
+| **B-6. 위시리스트(찜)** — 테이블 저장(로그아웃해도 남는다), 찜 여부는 id 집합 API 로 | 2026-07-24 | V19 · `handoffs/2026-07-24-handoff.md` §4 |
+| **B-5-2. `member.ship_*` DROP** — expand/contract 의 contract 단계. 코드 변경 0, 배포 불필요 | 2026-07-24 | V20 · `handoffs/2026-07-24-handoff.md` §5 |
+| **C-11. 관리자 매출 통계** — paid_at · 상태 열거 · KST 기준. 상품매출과 배송비 분리 | 2026-07-24 | 마이그레이션 없음 · `handoffs/2026-07-24-handoff.md` §6 |
+| **C-10. 적립금·회원 등급** — 배송완료 적립(회수 로직 없음), 이력이 원장, 주문서에서 사용 | 2026-07-24 | V21 · `handoffs/2026-07-24-handoff.md` §7 |
+| **C-8. 상품 옵션** — 단일 옵션 목록 + 가격차, 재고가 옵션마다, 취소 시 그 옵션 복원 | 2026-07-24 | V22·V23 · `handoffs/2026-07-24-handoff.md` §8 |
+| **C-9. 반품·교환(반품)** — 배송완료 반품 → 승인 시 적립금 환불 + 적립 회수 + 등급 재산정 | 2026-07-24 | V24 · `handoffs/2026-07-24-handoff.md` §9 |
+| **B-8. 메인 홈(스토어프론트)** — 인기순=`sold_count` 비정규화, HomeView·ProductCard, 공지 `/notices` 이전 + **보강 4종**(전역 검색·푸터·최근 본 상품[계정별]·로그인 개인화). 배포·검증 완료 | 2026-07-24 | V25 · `handoffs/2026-07-24-handoff.md` §10 |
+| **인앱 알림 시스템** (B-9 상위) — 자체 SSE(FCM 아님), stub 핸들러→실제 알림, 벨·토스트·전체페이지·타입별 on/off 설정. 배포·브라우저 검증 완료(2026-07-27) | 2026-07-24 | V26·V27 · `handoffs/2026-07-24-handoff.md` §11 |
+| **B-9. 재입고 알림** — `StockReplenishedEvent`(상품 총재고 0→양수: 주문취소·반품·관리자 재고편집) → restock 도메인이 구독자에게 RESTOCK 알림 + 구독 소진. 구독은 **상품 단위**(variant.id 불안정 회피). 품절 상품에 "재입고되면 알림 받기" | 2026-07-27 | V28 · `handoffs/2026-07-27-handoff.md` |
+| **B-10. 비밀번호 재설정** — 아이디로 단발성 토큰 발급(Redis `auth:reset:`, 30분 TTL, getAndDelete) → 새 비번. 열거 방지(없는 아이디도 200) + 변경 시 refresh 폐기. 발송 채널이 없어 링크는 **dev 프로파일만** 응답 노출(`auth.password-reset.expose-token`, 운영 false). 마이그레이션 없음(Redis) | 2026-07-28 | 마이그레이션 없음 · `handoffs/2026-07-28-handoff.md` |
+| **B-11. 관리자 회원 관리** — 회원 목록·검색(loginId·nickname·email) + 회원 상세(기본정보·적립금/등급·주문·반품·적립금이력). **조회 전용**(정지/역할변경 제외). ⚠ 도메인 격리: order 가 이미 member.Role 을 참조해 facade(member→order)는 순환 → **각 도메인이 자기 admin 조회를 소유**(member·order `/by-member`·point admin 엔드포인트)하고 **프론트가 상세를 조합**. 탈퇴=하드삭제라 목록은 현존 회원만. 마이그레이션 없음 | 2026-07-28 | 마이그레이션 없음 · `handoffs/2026-07-28-handoff.md` |
+| **회원 정지 · 역할변경** (B-11 후속) — `member.suspended`(V30, boolean) + `changeRole`. **전면 차단**: 정지 시 로그인·토큰갱신(Auth)·주문(Order 가드) 막고 refresh 토큰 삭제. **자기 자신 조작 불가**(락아웃 방지). 엔드포인트 `POST /api/admin/members/{id}/suspend·unsuspend`·`PATCH /role`. 정지=boolean(enum CHECK 트랩 회피) | 2026-07-28 | V30 · `handoffs/2026-07-28-handoff.md` |
+| **관리자 감사 로그** (회원관리 심화) — 관리자 조작(정지·해제·역할변경)을 append-only 로 남기고 **SUPER_ADMIN 만 조회**. 새 도메인 `domain/audit`: member 는 audit 을 직접 부르지 않고 `AdminActionEvent` 발행 → 리스너가 **같은 트랜잭션**에서 저장(감사 실패 시 조작도 롤백). 대상 탈퇴·개명에도 안 깨지게 이름·loginId **스냅샷**. `/api/admin/audit/**` 는 `/api/admin/**` 위에 `hasRole('SUPER_ADMIN')`. V32 순수 추가 | 2026-07-28 | V32 · `handoffs/2026-07-28-handoff.md` |
+| **최상위 관리자 SUPER_ADMIN** — 정지/역할을 계층화(엄격 분리). 일반 ADMIN 은 USER 만 정지, **역할변경·관리자 정지는 SUPER 전용**, SUPER 계정은 아무도 못 건드림. 김기현팀=SUPER. Role.authorities 로 SUPER 가 ROLE_ADMIN 포함(기존 admin 경로 통과), 계층 판단은 서비스에서. V31 은 role CHECK 를 **동적 DROP**(시스템 이름) 후 named `ck_member_role` 재생성. 승격은 신 jar 배포 후 UPDATE(구 jar 는 SUPER enum 못 읽음) | 2026-07-28 | V31 · `handoffs/2026-07-28-handoff.md` |
 
 > ⚠ **C-9 는 반품만.** 교환(다른 옵션·상품으로 재배송)은 "반품 + 새 주문" 이라 금액 정산이 복잡해
 > 뺐다(사용자 결정). **실결제 환불(PG)** 도 여전히 D 대기 — 지금은 적립금 환불이다.
