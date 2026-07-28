@@ -121,7 +121,7 @@ onMounted(() => load(0));
 </script>
 
 <template>
-  <section class="mt-10">
+  <section>
     <header class="mb-4">
       <h2 class="section-title">상품 문의</h2>
     </header>

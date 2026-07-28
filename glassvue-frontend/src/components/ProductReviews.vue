@@ -105,7 +105,7 @@ onMounted(() => load(0));
 </script>
 
 <template>
-  <section class="mt-8">
+  <section>
     <header class="mb-4 flex items-center gap-3">
       <h2 class="section-title">상품 리뷰</h2>
       <StarRating :model-value="summary.averageRating" :count="summary.reviewCount" />

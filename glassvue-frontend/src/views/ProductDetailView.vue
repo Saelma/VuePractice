@@ -331,10 +331,11 @@ async function onDelete() {
         <p v-else class="muted mt-3">등록된 설명이 없어요.</p>
       </section>
 
-      <section id="reviews" ref="reviewSec" class="scroll-mt-28 pt-12">
+      <!-- 섹션 사이는 여백만으로는 안 갈린다 → 구분선(border-t)으로 리뷰·문의 경계를 분명히 긋는다. -->
+      <section id="reviews" ref="reviewSec" class="mt-12 scroll-mt-28 border-t border-line pt-12">
         <ProductReviews :product-id="id" />
       </section>
-      <section id="inquiries" ref="inquirySec" class="scroll-mt-28 pt-12">
+      <section id="inquiries" ref="inquirySec" class="mt-12 scroll-mt-28 border-t border-line pt-12">
         <ProductInquiries :product-id="id" />
       </section>
     </template>
