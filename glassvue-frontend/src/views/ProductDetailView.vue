@@ -3,7 +3,7 @@
  * 상품 상세 — 좌: 이미지 갤러리 / 우: 상품 정보의 2단 구성(DESIGN.md §7).
  * 정보를 한 줄에 늘어놓지 않고 카테고리 → 이름 → 가격 → 별점 → 재고 → 구매 순으로 읽히게 한다.
  */
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discountRate } from '../api/product';
@@ -52,7 +52,43 @@ const lineTotal = computed(() => unitPrice.value * (qty.value || 1));
  * 신청 대상이 아니다 — 재입고 이벤트가 상품 총재고 0→양수에서만 나므로 기준을 맞춘다.
  */
 const soldOutAll = computed(() => product.value?.totalStock === 0);
-const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
+
+/**
+ * 하단 스티키 서브탭(무신사식) — 상세정보·리뷰·문의를 잇는다. 탭을 누르면 해당 섹션으로 스크롤하고,
+ * 스크롤하면 현재 보고 있는 섹션이 탭에 활성 표시된다(IntersectionObserver 스크롤스파이).
+ */
+const detailSec = ref(null);
+const reviewSec = ref(null);
+const inquirySec = ref(null);
+const activeSection = ref('detail');
+let observer = null;
+
+function scrollTo(el) {
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function tabClass(key) {
+  return activeSection.value === key
+    ? 'border-brand-600 font-semibold text-ink-900'
+    : 'border-transparent text-ink-500 hover:text-ink-900';
+}
+function setupSpy() {
+  const map = new Map([
+    [detailSec.value, 'detail'],
+    [reviewSec.value, 'reviews'],
+    [inquirySec.value, 'inquiries'],
+  ]);
+  // 헤더(56px)+서브탭 아래에서 섹션이 상단 40%에 들어오면 활성으로 본다.
+  observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) activeSection.value = map.get(e.target);
+      });
+    },
+    { rootMargin: '-120px 0px -60% 0px', threshold: 0 },
+  );
+  map.forEach((_, el) => el && observer.observe(el));
+}
+onBeforeUnmount(() => observer?.disconnect());
 
 async function onAddToCart() {
   cartMsg.value = ''; error.value = '';
@@ -81,6 +117,8 @@ onMounted(async () => {
   try {
     product.value = await getProduct(props.id);
     pushRecentlyViewed(product.value); // 홈 "최근 본 상품" 에 남긴다(localStorage, B-8)
+    await nextTick(); // 하단 섹션이 렌더된 뒤에 스크롤스파이를 건다
+    setupSpy();
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -156,16 +194,6 @@ async function onDelete() {
               <img :src="img.thumbUrl" :alt="`${product.name} ${i + 1}`" class="h-full w-full object-cover" />
             </button>
           </div>
-
-          <!-- 설명을 좌측에 붙여 갤러리와 한 흐름으로 읽히게 한다(아래로 밀면 위가 비어 보인다) -->
-          <section class="mt-8">
-            <h2 class="section-title">상품 설명</h2>
-            <p
-              v-if="product.description"
-              class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink-700"
-            >{{ product.description }}</p>
-            <p v-else class="muted mt-3">등록된 설명이 없어요.</p>
-          </section>
         </div>
 
         <!-- 우: 구매 패널 — 한 덩어리 카드로 묶고 스크롤을 따라오게 한다 -->
@@ -174,9 +202,14 @@ async function onDelete() {
             <p class="muted">{{ product.categoryName }}</p>
             <h1 class="mt-1 text-xl font-bold tracking-tight text-ink-900">{{ product.name }}</h1>
 
-            <div class="mt-3">
+            <button
+              type="button"
+              class="mt-3 inline-flex rounded-control transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              aria-label="리뷰 보기"
+              @click="scrollTo(reviewSec)"
+            >
               <StarRating :model-value="product.averageRating" :count="product.reviewCount" />
-            </div>
+            </button>
 
             <!-- 할인 중이면 정가(취소선) + 할인율을 함께 보여준다. 아니면 판매가만. -->
             <p v-if="hasDiscount(product)" class="muted mt-4 tabular-nums line-through">{{ priceText(product.listPrice) }}</p>
@@ -200,10 +233,6 @@ async function onDelete() {
                       : product.status === 'SOLD_OUT' ? 'badge-warning' : 'badge-neutral'"
                   >{{ statusText(product.status) }}</span>
                 </dd>
-              </div>
-              <div v-if="product.createdAt" class="flex justify-between gap-4">
-                <dt class="text-ink-500">등록일</dt>
-                <dd class="tabular-nums text-ink-700">{{ fmtDate(product.createdAt) }}</dd>
               </div>
             </dl>
 
@@ -280,12 +309,34 @@ async function onDelete() {
         </div>
       </div>
 
-      <div class="mt-10">
+      <!-- 하단 스티키 서브탭(무신사식) — 헤더(top-0, h-14=56px) 아래에 붙어 상세정보·리뷰·문의를 잇는다.
+           탭 클릭 → 해당 섹션 스크롤, 스크롤 → 현재 섹션이 활성 표시(스크롤스파이). -->
+      <nav
+        class="sticky top-14 z-30 mt-10 flex gap-6 border-b border-line bg-surface/90 backdrop-blur"
+        aria-label="상품 하위 정보"
+      >
+        <button type="button" class="-mb-px border-b-2 py-3 text-sm transition-colors" :class="tabClass('detail')" @click="scrollTo(detailSec)">상세정보</button>
+        <button type="button" class="-mb-px border-b-2 py-3 text-sm transition-colors" :class="tabClass('reviews')" @click="scrollTo(reviewSec)">
+          리뷰 <span class="tabular-nums">{{ product.reviewCount ?? 0 }}</span>
+        </button>
+        <button type="button" class="-mb-px border-b-2 py-3 text-sm transition-colors" :class="tabClass('inquiries')" @click="scrollTo(inquirySec)">문의</button>
+      </nav>
+
+      <section id="detail" ref="detailSec" class="scroll-mt-28 pt-8">
+        <h2 class="section-title">상세정보</h2>
+        <p
+          v-if="product.description"
+          class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink-700"
+        >{{ product.description }}</p>
+        <p v-else class="muted mt-3">등록된 설명이 없어요.</p>
+      </section>
+
+      <section id="reviews" ref="reviewSec" class="scroll-mt-28 pt-12">
         <ProductReviews :product-id="id" />
-      </div>
-      <div class="mt-10">
+      </section>
+      <section id="inquiries" ref="inquirySec" class="scroll-mt-28 pt-12">
         <ProductInquiries :product-id="id" />
-      </div>
+      </section>
     </template>
   </section>
 </template>
