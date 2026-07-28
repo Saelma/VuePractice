@@ -216,7 +216,7 @@ Flyway 가 공유 espdb 에 적용하므로(§5), *배포하기 전에* 운영�
 
 > **위치**: 날짜별 핸드오프는 `docs/handoffs/YYYY-MM-DD-handoff.md` 에 둔다(2026-07-28 분리 —
 > `docs/` 루트에 계속 쌓이면 BACKLOG·WORKING-AGREEMENTS 같은 상시 문서가 파묻힌다). `docs/` 루트에는
-> 상시 문서(WORKING-AGREEMENTS·BACKLOG·DESIGN-BENCHMARK)만, 날짜 문서는 `handoffs/` 하위에.
+> 상시 문서(WORKING-AGREEMENTS·BACKLOG)만, 날짜 문서는 `handoffs/` 하위에.
 
 ### 4-1. 마지막에 `## 이월` 절을 둔다 (필수)
 
