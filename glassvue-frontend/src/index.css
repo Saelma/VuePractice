@@ -217,3 +217,43 @@ body {
 .dx-datagrid-headers {
   border-color: var(--color-line);
 }
+
+/* --- DataGrid 를 우리 무채색 톤으로 (B-12). 색·폰트·여백만 손대고 구조는 dx 기본 존중(DESIGN.md §6). --- */
+.dx-datagrid {
+  color: var(--color-ink-700);
+}
+/* 헤더: 옅은 캔버스 배경 + 보조색 라벨(제목처럼 튀지 않게). */
+.dx-datagrid-headers {
+  background-color: var(--color-canvas);
+  color: var(--color-ink-500);
+}
+.dx-datagrid-headers .dx-header-row > td {
+  font-weight: 600;
+  color: var(--color-ink-500);
+}
+/* 셀 여백을 조금 넉넉히 — 기본은 촘촘해 읽기 답답하다. */
+.dx-datagrid .dx-row > td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  vertical-align: middle;
+}
+.dx-datagrid-rowsview .dx-data-row > td {
+  color: var(--color-ink-700);
+}
+/* 행 hover: dx 기본 파란기 대신 캔버스. */
+.dx-datagrid-rowsview .dx-data-row.dx-row-hover > td {
+  background-color: var(--color-canvas);
+}
+/* 셀 포커스 오버레이: dx 파란 테두리를 무채색으로. */
+.dx-datagrid .dx-datagrid-focus-overlay {
+  border-color: var(--color-brand-600);
+}
+/* 페이저: 선택된 페이지를 near-black 으로(파란 selection 제거). */
+.dx-pager .dx-page.dx-selection,
+.dx-pager .dx-page-sizes .dx-selection {
+  background-color: var(--color-brand-600);
+  color: #fff;
+}
+.dx-pager .dx-page:hover {
+  background-color: var(--color-canvas);
+}
