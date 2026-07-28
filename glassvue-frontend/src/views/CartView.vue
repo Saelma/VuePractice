@@ -3,7 +3,7 @@
  * 장바구니 — 항목 리스트와 결제 요약을 시각적으로 분리한다(DESIGN.md §7).
  * 넓은 화면에서는 요약을 우측 컬럼에 고정해 합계·주문 버튼이 항상 눈에 닿게 한다.
  */
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getCart, updateCartItem, removeCartItem, clearCart } from '../api/cart';
 import { setCartCount } from '../stores/cart';
@@ -15,6 +15,18 @@ const router = useRouter();
 const cart = ref({ items: [], totalQuantity: 0, totalPrice: 0, shippingFee: 0, payAmount: 0, amountUntilFree: 0 });
 const error = ref('');
 const loading = ref(true);
+
+/**
+ * 무료배송 진행률(%). 임계값 = 지금 상품금액 + 무료배송까지 남은 금액(서버가 준 amountUntilFree).
+ * 남은 금액이 0이면 이미 무료배송이라 100%. 텍스트만 있던 안내를 진행바로 시각화한다(컬리식).
+ */
+const freeShipPct = computed(() => {
+  const remaining = cart.value.amountUntilFree || 0;
+  if (remaining <= 0) return 100;
+  const total = cart.value.totalPrice || 0;
+  const threshold = total + remaining;
+  return threshold > 0 ? Math.min(100, Math.round((total / threshold) * 100)) : 0;
+});
 
 async function load() {
   try {
@@ -165,11 +177,21 @@ function goCheckout() {
           </div>
         </dl>
 
-        <!-- 무료배송까지 남은 금액 — 얼마를 더 담아야 하는지 알려주는 게 "배송비 3,000원"보다 유용하다.
-             서버가 계산해 내려준다(화면이 정책을 알 필요가 없다). -->
-        <p v-if="cart.amountUntilFree > 0" class="muted mt-3">
-          {{ priceText(cart.amountUntilFree) }} 더 담으면 <strong class="text-ink-700">무료배송</strong>
-        </p>
+        <!-- 무료배송 진행바 — 얼마나 왔는지 한눈에(컬리식). 남은 금액·임계값은 서버가 계산해 준다. -->
+        <div class="mt-4">
+          <div class="h-1.5 w-full overflow-hidden rounded-full bg-line" role="progressbar"
+               :aria-valuenow="freeShipPct" aria-valuemin="0" aria-valuemax="100" aria-label="무료배송까지 진행률">
+            <div class="h-full rounded-full bg-brand-600 transition-all duration-500" :style="{ width: freeShipPct + '%' }"></div>
+          </div>
+          <p class="muted mt-2">
+            <template v-if="cart.amountUntilFree > 0">
+              <strong class="tabular-nums text-ink-700">{{ priceText(cart.amountUntilFree) }}</strong> 더 담으면 <strong class="text-ink-700">무료배송</strong>
+            </template>
+            <template v-else>
+              <strong class="text-emerald-700">무료배송</strong>이 적용됐어요.
+            </template>
+          </p>
+        </div>
 
         <div class="mt-4 flex items-end justify-between gap-4 border-t border-line pt-4">
           <span class="text-sm font-medium text-ink-700">결제 금액</span>
