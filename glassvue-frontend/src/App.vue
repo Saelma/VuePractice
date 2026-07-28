@@ -2,11 +2,12 @@
 import { computed, ref, onMounted, watch } from 'vue';
 import { RouterLink, RouterView, useRouter } from 'vue-router';
 import { authState, isLoggedIn } from './stores/auth';
-import { logout as apiLogout, loadMe } from './api/auth';
+import { loadMe } from './api/auth';
 import { connectNotifications, disconnectNotifications } from './stores/notifications';
 import NotificationBell from './components/NotificationBell.vue';
 import NotificationToaster from './components/NotificationToaster.vue';
 import AdminMenu from './components/AdminMenu.vue';
+import AccountMenu from './components/AccountMenu.vue';
 
 const router = useRouter();
 const searchQuery = ref('');
@@ -23,11 +24,6 @@ watch(isLoggedIn, (loggedIn) => {
   if (loggedIn) connectNotifications();
   else disconnectNotifications();
 });
-
-async function onLogout() {
-  await apiLogout();
-  router.push('/');
-}
 
 /** 헤더 전역 검색 — 상품 목록으로 이름 쿼리를 넘긴다. 목록 화면이 ?name= 을 읽어 필터한다(B-8). */
 function onSearch() {
@@ -46,8 +42,7 @@ const year = new Date().getFullYear();
         <div class="flex items-center gap-7">
           <RouterLink to="/" class="text-lg font-bold tracking-tight text-ink-900">Glassvue</RouterLink>
           <nav class="flex items-center gap-5 text-sm">
-            <!-- "/"는 모든 경로의 접두사라 기본 active가 항상 켜진다 → 홈은 정확 매칭만 쓴다 -->
-            <RouterLink to="/" class="nav-link" active-class="" exact-active-class="router-link-active">홈</RouterLink>
+            <!-- 「홈」 링크는 뺐다 — 로고(Glassvue)가 이미 "/" 로 간다(중복, 2026-07-28) -->
             <RouterLink to="/products" class="nav-link">상품</RouterLink>
             <RouterLink to="/notices" class="nav-link">공지</RouterLink>
             <!-- 관리자 링크(주문·회원·매출·감사)는 「관리 ▾」 하나로 묶는다 — 메인 nav 번잡 해소(2026-07-28) -->
@@ -70,19 +65,17 @@ const year = new Date().getFullYear();
 
         <div class="flex items-center gap-4 text-sm">
           <template v-if="isLoggedIn">
-            <RouterLink to="/wishlist" class="nav-link">찜</RouterLink>
-            <RouterLink to="/cart" class="nav-link">장바구니</RouterLink>
-            <RouterLink to="/orders" class="nav-link">주문내역</RouterLink>
             <NotificationBell />
-            <span class="hidden h-4 w-px bg-line sm:block"></span>
-            <RouterLink to="/settings" class="hidden text-ink-700 hover:text-ink-900 sm:block">
-              <b class="font-medium">{{ authState.user?.nickname }}</b>
+            <!-- 장바구니는 결제 핵심 동선이라 밖에 아이콘으로 남긴다(찜·주문내역·설정·로그아웃은 계정 메뉴로) -->
+            <RouterLink
+              to="/cart"
+              class="flex h-9 w-9 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-canvas"
+              aria-label="장바구니"
+            >
+              <span class="text-lg" aria-hidden="true">🛒</span>
             </RouterLink>
-            <button
-              type="button"
-              class="rounded-control border border-line px-3 py-1.5 text-ink-700 transition-colors hover:bg-canvas"
-              @click="onLogout"
-            >로그아웃</button>
+            <span class="hidden h-4 w-px bg-line sm:block"></span>
+            <AccountMenu />
           </template>
           <template v-else>
             <RouterLink to="/login" class="nav-link">로그인</RouterLink>
