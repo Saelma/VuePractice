@@ -60,6 +60,11 @@ const routes = [
   // 배송 조회 **예시** 페이지. 실제 택배사 사이트 대신 여기로 보낸다(연습 단계라 외부 의존을 만들지 않는다).
   // 백엔드 설정 glassvue.delivery.default-tracking-url 이 이 경로를 가리킨다.
   { path: '/mock-tracking', name: 'mock-tracking', component: MockTrackingView },
+
+  // 정의되지 않은 경로(오타·삭제된 링크 등). 라우트가 없으면 meta 도 없어 위 가드가 관여를 못 한다
+  // (예: `/admin/member` 처럼 `/admin/members` 오타는 빈 화면으로 "이동은 되는" 구멍이 됐다).
+  // **`/admin/*` 미정의 경로는 관리 화면 존재를 노출하지 않게 `/products`**, 그 외는 홈으로 보낸다.
+  { path: '/:pathMatch(.*)*', name: 'not-found', redirect: (to) => (to.path.startsWith('/admin') ? '/products' : '/') },
 ];
 
 const router = createRouter({
