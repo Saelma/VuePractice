@@ -30,6 +30,11 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private Role role;
 
+    // 이메일은 아직 **수집 경로가 없어** nullable 이다(2026-07-28, V29). 비밀번호 재설정 링크 SMTP
+    // 발송(BACKLOG D)을 붙일 때 가입/설정 폼에서 채운다. 계정 식별자라 유일(uk_member_email).
+    @Column(unique = true, length = 255)
+    private String email;
+
     // --- 기본 배송지는 여기 없다 (2026-07-24, V18) ---
     //
     // V11~V17 동안은 ship_recipient·ship_phone·ship_zipcode·ship_address1·ship_address2 5컬럼이
@@ -55,5 +60,9 @@ public class Member extends BaseTimeEntity {
 
     public void updatePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    public void updateEmail(String email) {
+        this.email = email;
     }
 }
