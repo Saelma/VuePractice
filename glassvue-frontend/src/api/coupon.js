@@ -20,7 +20,14 @@ export function couponDiscountText(c) {
   return c.discountType === 'PERCENT' ? `${c.discountValue}% 할인` : `${priceText(c.discountValue)} 할인`;
 }
 
-/** 쿠폰 생성(관리자). 지금은 화면 없이 API만 — 필요해지면 관리 화면을 붙인다. */
+/** 쿠폰 정의 목록(관리자). 최신 생성순. */
+export function fetchAdminCoupons({ page = 0, size = 50 } = {}) {
+  return apiGet('/api/admin/coupons', { page, size });
+}
+
+export const DISCOUNT_TYPE_LABEL = { FIXED: '정액(원)', PERCENT: '정률(%)' };
+
+/** 쿠폰 생성(관리자). */
 export function createCoupon(payload) {
   return apiPost('/api/admin/coupons', payload);
 }

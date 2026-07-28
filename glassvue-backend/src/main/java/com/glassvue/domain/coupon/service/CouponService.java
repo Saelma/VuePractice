@@ -1,6 +1,7 @@
 package com.glassvue.domain.coupon.service;
 
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
+import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
 import com.glassvue.domain.coupon.entity.Coupon;
 import com.glassvue.domain.coupon.entity.MemberCoupon;
@@ -8,11 +9,15 @@ import com.glassvue.domain.coupon.repository.CouponRepository;
 import com.glassvue.domain.coupon.repository.MemberCouponRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.response.PageResponse;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +49,15 @@ public class CouponService {
                 .build());
         log.info("Coupon created: {} ({})", coupon.getId(), coupon.getName());
         return coupon.getId();
+    }
+
+    /** 쿠폰 정의 목록(관리자). 정렬 미지정 시 최신 생성순. */
+    @Transactional(readOnly = true)
+    public PageResponse<CouponResponse> listAll(Pageable pageable) {
+        Pageable p = pageable.getSort().isSorted() ? pageable
+                : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                        Sort.by(Sort.Direction.DESC, "createdAt"));
+        return PageResponse.from(couponRepository.findAll(p).map(CouponResponse::from));
     }
 
     /** 회원에게 발급(관리자). 같은 쿠폰을 여러 장 주는 것도 허용한다(이벤트 재발급 등). */

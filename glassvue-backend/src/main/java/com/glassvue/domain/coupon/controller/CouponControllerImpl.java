@@ -1,15 +1,18 @@
 package com.glassvue.domain.coupon.controller;
 
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
+import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
 import com.glassvue.domain.coupon.service.CouponService;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.security.LoginUser;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,6 +38,12 @@ public class CouponControllerImpl implements CouponController {
     }
 
     // 관리자 API는 /api/admin/** 아래로 모아 SecurityConfig 한 줄로 막는다(개별 매처를 잊을 수 없게).
+    @Override
+    @GetMapping("/admin/coupons")
+    public ResponseEntity<ApiResponse<PageResponse<CouponResponse>>> list(Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(couponService.listAll(pageable)));
+    }
+
     @Override
     @PostMapping("/admin/coupons")
     public ResponseEntity<ApiResponse<UUID>> create(@Valid @RequestBody CouponCreateRequest request) {

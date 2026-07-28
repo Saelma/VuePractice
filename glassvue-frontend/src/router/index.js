@@ -16,6 +16,7 @@ import ProductDetailView from '../views/ProductDetailView.vue';
 import ProductFormView from '../views/ProductFormView.vue';
 import OrderAdminView from '../views/OrderAdminView.vue';
 import CategoryAdminView from '../views/CategoryAdminView.vue';
+import CouponAdminView from '../views/CouponAdminView.vue';
 import StatsAdminView from '../views/StatsAdminView.vue';
 import MemberAdminView from '../views/MemberAdminView.vue';
 import MemberDetailAdminView from '../views/MemberDetailAdminView.vue';
@@ -50,6 +51,7 @@ const routes = [
   { path: '/products/:id/edit', name: 'product-edit', component: ProductFormView, props: true, meta: { requiresAdmin: true } },
   { path: '/admin/categories', name: 'category-admin', component: CategoryAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/stats', name: 'stats-admin', component: StatsAdminView, meta: { requiresAdmin: true } },
+  { path: '/admin/coupons', name: 'coupon-admin', component: CouponAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members', name: 'member-admin', component: MemberAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members/:id', name: 'member-admin-detail', component: MemberDetailAdminView, props: true, meta: { requiresAdmin: true } },
   // 감사 이력은 최상위 관리자만 — 조작 당사자(ADMIN)가 자기 이력을 보는 구조를 막는다.
