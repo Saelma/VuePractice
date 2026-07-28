@@ -1,0 +1,14 @@
+Pretendard
+Copyright (c) 2021 Kil Hyung-jin (길형진), with Reserved Font Name Pretendard.
+
+이 폰트는 SIL Open Font License, Version 1.1 로 배포됩니다.
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+- 원본/전체 라이선스: https://github.com/orioncactus/pretendard
+- OFL 전문: https://scripts.sil.org/OFL
+
+포함 파일:
+- PretendardVariable.woff2  (Variable, weight 45–920) — dist/web/variable/woff2 에서 가져옴 (v1.3.9)
+
+셀프호스팅 사유: 운영 서버가 LAN 내부라 외부 CDN(Google Fonts 등)이 안 뜬다(DESIGN.md §2).
+그래서 폰트 파일을 저장소에 넣어 /fonts 로 직접 서빙한다.

@@ -35,9 +35,13 @@
 - **얇은 경계, 옅은 그림자.** 두꺼운 보더나 진한 그림자는 낡아 보인다.
 - **움직임은 거들 뿐.** 150~200ms 정도의 hover/focus 전환까지만.
 
-### ⚠ 제약: 웹폰트를 쓰지 않는다
+### ⚠ 제약: 웹폰트는 CDN 금지 — 셀프호스팅만
 운영 서버가 **LAN 내부**라 Google Fonts 같은 외부 CDN이 안 뜬다(뜨더라도 느리다).
-→ **시스템 폰트 스택**을 쓴다. 웹폰트가 필요하면 파일을 저장소에 넣어 `/static`으로 셀프 호스팅한다.
+→ 웹폰트는 **파일을 저장소에 넣어 셀프 호스팅**한다. **Pretendard 적용됨**(2026-07-28):
+`src/assets/fonts/PretendardVariable.woff2`(Variable, 전 weight)를 번들이 `/static` 으로 fingerprint 해 emit,
+`@font-face`(`src/index.css`)로 등록하고 `--font-sans` 최우선에 둔다. 없으면 시스템 스택으로 폴백.
+⚠ **절대 public 경로(`/fonts/..`)로 참조하지 말 것** — rspack CSS 로더가 모듈로 resolve 하려다 빌드가 깨진다.
+OFL 라이선스는 `public/fonts/OFL.txt`(공개 서빙)에 동봉.
 
 ---
 
@@ -81,8 +85,8 @@ Tailwind 4의 CSS-first 설정(`@theme`)에 정의한다. **화면에서 임의 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05);
   --shadow-lift: 0 4px 12px rgb(0 0 0 / 0.08);
 
-  /* 폰트 — 시스템 스택(웹폰트 금지, §2 참고) */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard",
+  /* 폰트 — Pretendard(셀프호스팅) 우선, 폴백은 시스템 스택(§2 참고) */
+  --font-sans: "Pretendard Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard",
                "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
 }
 ```
