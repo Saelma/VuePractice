@@ -1,11 +1,12 @@
 <script setup>
 import { computed, ref, onMounted, watch } from 'vue';
 import { RouterLink, RouterView, useRouter } from 'vue-router';
-import { authState, isLoggedIn, isAdmin, isSuperAdmin } from './stores/auth';
+import { authState, isLoggedIn } from './stores/auth';
 import { logout as apiLogout, loadMe } from './api/auth';
 import { connectNotifications, disconnectNotifications } from './stores/notifications';
 import NotificationBell from './components/NotificationBell.vue';
 import NotificationToaster from './components/NotificationToaster.vue';
+import AdminMenu from './components/AdminMenu.vue';
 
 const router = useRouter();
 const searchQuery = ref('');
@@ -49,10 +50,8 @@ const year = new Date().getFullYear();
             <RouterLink to="/" class="nav-link" active-class="" exact-active-class="router-link-active">홈</RouterLink>
             <RouterLink to="/products" class="nav-link">상품</RouterLink>
             <RouterLink to="/notices" class="nav-link">공지</RouterLink>
-            <RouterLink v-if="isAdmin" to="/admin/orders" class="nav-link">주문 관리</RouterLink>
-            <RouterLink v-if="isAdmin" to="/admin/members" class="nav-link">회원 관리</RouterLink>
-            <RouterLink v-if="isAdmin" to="/admin/stats" class="nav-link">매출</RouterLink>
-            <RouterLink v-if="isSuperAdmin" to="/admin/audit" class="nav-link">감사 이력</RouterLink>
+            <!-- 관리자 링크(주문·회원·매출·감사)는 「관리 ▾」 하나로 묶는다 — 메인 nav 번잡 해소(2026-07-28) -->
+            <AdminMenu />
           </nav>
         </div>
 
