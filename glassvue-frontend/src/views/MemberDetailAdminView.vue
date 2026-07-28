@@ -194,7 +194,7 @@ function signedPoint(n) {
         ref="orderGridRef"
         :data-source="orderStore"
         :remote-operations="true"
-        :show-borders="true"
+        :show-borders="false"
         :column-auto-width="true"
         :hover-state-enabled="true"
         no-data-text="주문이 없습니다."
@@ -222,7 +222,7 @@ function signedPoint(n) {
       <DxDataGrid
         :data-source="pointStore"
         :remote-operations="true"
-        :show-borders="true"
+        :show-borders="false"
         :column-auto-width="true"
         :hover-state-enabled="true"
         no-data-text="적립금 이력이 없습니다."

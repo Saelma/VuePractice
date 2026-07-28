@@ -224,7 +224,7 @@ function fmt(v) {
       ref="gridRef"
       :data-source="store"
       :remote-operations="true"
-      :show-borders="true"
+      :show-borders="false"
       :column-auto-width="true"
       :hover-state-enabled="true"
       :no-data-text="noDataText"
