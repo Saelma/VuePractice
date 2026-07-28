@@ -168,7 +168,15 @@ const chips = computed(() => {
           >필터 {{ filterOpen ? '닫기' : '열기' }}</button>
         </div>
 
-        <div :class="filterOpen ? 'mt-3 block' : 'hidden lg:block'" class="space-y-6 lg:sticky lg:top-20">
+        <!-- 필터 사이드바. 모바일에선 열고 닫을 때 부드럽게 펼쳐진다(높이 애니메이션: grid-rows 0fr↔1fr —
+             display 토글은 CSS 전환이 안 돼 이 방식을 쓴다). 데스크톱(lg)은 항상 펼쳐지고 sticky 라
+             그때만 overflow-visible 로 sticky 를 살린다(overflow-hidden 은 sticky 를 죽인다). -->
+        <div
+          class="grid transition-[grid-template-rows] duration-300 ease-out lg:grid-rows-[1fr]"
+          :class="filterOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
+        >
+          <div class="overflow-hidden lg:overflow-visible">
+            <div class="mt-3 space-y-6 lg:mt-0 lg:sticky lg:top-20">
           <!-- 카테고리: 즉시 적용 -->
           <div>
             <h2 class="field-label mb-2">카테고리</h2>
@@ -220,6 +228,8 @@ const chips = computed(() => {
             <div class="flex gap-2 pt-1">
               <button type="button" class="btn btn-primary flex-1" @click="apply">적용</button>
               <button type="button" class="btn btn-secondary" @click="resetAll">초기화</button>
+            </div>
+          </div>
             </div>
           </div>
         </div>
