@@ -180,6 +180,8 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
                  └▶ review / inquiry  상품 리뷰 · 문의 (게시판 경험 재활용)  ✅ 2026-07-16
                  └▶ 반품(return)  배송완료 반품 → 적립금 환불  ✅ 2026-07-24 (실결제 PG 는 아직)
                  └▶ (로드맵) payment  실제 결제(PG 연동)  ⏸ MSA 단계 + PG사 확정 시
+
+audit           관리자 조작 감사 이력 (append-only, 이벤트로만 유입 — 어느 도메인에도 종속 안 됨)  ✅ 2026-07-28
 ```
 
 > **review / inquiry (2026-07-16 구현)**: 상품에 **느슨한 UUID 참조**(product_id)로 연결, polymorphic FK 없이 별도 테이블.
@@ -339,8 +341,8 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
 > 로그인·토큰갱신은 auth(`AuthService.login`/`refresh`)가, 주문은 order(`checkout` → `MemberService.isSuspended`
 > 공개 API)가 막는다 — order→member 는 이미 있던 방향이라 순환 없음. 정지 시 refresh 토큰을 지워 기존 세션은
 > access 만료(≤30분) 뒤 끊기고, 그 창의 주문은 checkout 가드가 닫는다. **자기 계정은 조작 불가**(락아웃 방지,
-> `CANNOT_MODIFY_SELF`). 감사는 SLF4J 로그로만(감사 테이블은 후속). 조작 API 는
-> `/api/admin/members/{id}/suspend·unsuspend·role` — 조회와 같은 컨트롤러, `/api/admin/**` 보호.
+> `CANNOT_MODIFY_SELF`). 조작 API 는 `/api/admin/members/{id}/suspend·unsuspend·role` — 조회와 같은 컨트롤러,
+> `/api/admin/**` 보호. (조작 이력은 이제 감사 로그에도 남는다 — 아래 audit 도메인.)
 >
 > **최상위 관리자 SUPER_ADMIN (2026-07-28, V31)**: 위 정지/역할을 **계층화**했다(사용자 요청 — 처음엔 관리자끼리
 > 서로 정지·강등이 가능해 위험). Role 에 SUPER_ADMIN 을 더하고 **엄격 분리**: 일반 ADMIN 은 USER 만 정지,
@@ -353,6 +355,17 @@ member          회원 · 인증 (게시판 5단계 로그인이 시작점)     
 > ⚠ 특정 계정 승격(김기현팀)은 **신 jar 배포 후** 별도 UPDATE — 구 jar 는 SUPER_ADMIN 을 enum 으로 못 읽어
 > 그 회원 로딩이 깨지므로 순서가 반대면 안 된다. 프론트의 `role==='ADMIN'` 비교는 `stores/auth` 의
 > `isAdminRole`(SUPER 포함)로 모았다(흩어진 비교가 SUPER 를 관리 UI에서 배제하지 않도록).
+>
+> **관리자 감사 로그 (2026-07-28, V32)**: 위 조작들이 SLF4J 로그로만 흘러가 조회할 수 없던 걸,
+> append-only 테이블(`admin_audit_log`)로 남기고 **SUPER_ADMIN 만 조회**한다. ⚠ **새 도메인 `domain/audit`**
+> 를 따로 뒀다 — 감사는 회원만의 관심사가 아니라(주문·상품 조작도 앞으로 남길 수 있다) 특정 도메인에 종속시키면
+> 안 된다. member 는 audit 을 **직접 부르지 않고** `AdminActionEvent` 를 발행하고(cross-domain 은 이벤트로만),
+> audit 이 리스너(어댑터, 위임만)→CommandService(핸들러, 저장)의 3층으로 받는다. 기본 `@EventListener` 라
+> **발행측 트랜잭션에 합류** — 감사 저장이 실패하면 조작도 롤백되고(감사 무결성), 권한 거부 등으로 조작이
+> 롤백되면 감사도 안 남는다. 대상이 나중에 탈퇴·개명·강등돼도 이력이 깨지지 않게 그 시점의 actor_name·
+> target_login 을 **스냅샷**으로 박는다(FK 없는 느슨한 UUID + 스냅샷 — restock·order 스냅샷과 같은 패턴).
+> 조회 인가는 `/api/admin/audit/**` 를 `/api/admin/**`(ADMIN) **위에** `hasRole('SUPER_ADMIN')` 로 얹어
+> 좁은 규칙이 먼저 매칭되게 한다. 조작당사자(ADMIN)가 자기 이력을 보는 구조를 막는다.
 >
 > **배송지 주소록(2026-07-24, V18)**: 배송지는 `member.ship_*` 5컬럼 = **회원당 하나**였는데(V11),
 > 별칭을 붙인 여러 주소(`member_address`)로 늘리고 그중 하나를 기본 배송지로 둔다.
