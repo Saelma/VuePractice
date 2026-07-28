@@ -40,6 +40,7 @@ async function onLogout() {
       class="absolute right-0 z-50 mt-2 w-40 overflow-hidden rounded-card border border-line bg-surface py-1 shadow-lift"
     >
       <RouterLink to="/orders" class="account-menu-item" @click="open = false">주문내역</RouterLink>
+      <RouterLink to="/benefits" class="account-menu-item" @click="open = false">혜택</RouterLink>
       <RouterLink to="/wishlist" class="account-menu-item" @click="open = false">찜</RouterLink>
       <RouterLink to="/settings" class="account-menu-item" @click="open = false">설정</RouterLink>
       <span class="my-1 block border-t border-line" aria-hidden="true"></span>

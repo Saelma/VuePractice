@@ -129,7 +129,7 @@ async function reorder() {
       <!-- 적립금·등급 -->
       <RouterLink
         v-if="pointAccount"
-        to="/settings"
+        to="/benefits"
         class="card card-link flex items-center justify-between gap-4 p-5"
       >
         <div>

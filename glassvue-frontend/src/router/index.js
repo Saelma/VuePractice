@@ -10,6 +10,7 @@ import SignupView from '../views/SignupView.vue';
 import ForgotPasswordView from '../views/ForgotPasswordView.vue';
 import ResetPasswordView from '../views/ResetPasswordView.vue';
 import MyPageView from '../views/MyPageView.vue';
+import BenefitsView from '../views/BenefitsView.vue';
 import ProductListView from '../views/ProductListView.vue';
 import ProductDetailView from '../views/ProductDetailView.vue';
 import ProductFormView from '../views/ProductFormView.vue';
@@ -37,6 +38,7 @@ const routes = [
   { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView },
   { path: '/reset-password', name: 'reset-password', component: ResetPasswordView },
   { path: '/settings', name: 'settings', component: MyPageView, meta: { requiresAuth: true } },
+  { path: '/benefits', name: 'benefits', component: BenefitsView, meta: { requiresAuth: true } },
   { path: '/notices', name: 'notice-list', component: NoticeListView },
   { path: '/notices/new', name: 'notice-create', component: NoticeFormView, meta: { requiresAuth: true } },
   { path: '/notices/:id', name: 'notice-detail', component: NoticeDetailView, props: true },

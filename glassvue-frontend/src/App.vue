@@ -126,6 +126,7 @@ const year = new Date().getFullYear();
             <RouterLink to="/wishlist" class="text-ink-500 transition-colors hover:text-ink-900">찜</RouterLink>
             <RouterLink to="/cart" class="text-ink-500 transition-colors hover:text-ink-900">장바구니</RouterLink>
             <RouterLink to="/orders" class="text-ink-500 transition-colors hover:text-ink-900">주문내역</RouterLink>
+            <RouterLink to="/benefits" class="text-ink-500 transition-colors hover:text-ink-900">혜택</RouterLink>
             <RouterLink to="/settings" class="text-ink-500 transition-colors hover:text-ink-900">내 정보</RouterLink>
           </nav>
         </div>
