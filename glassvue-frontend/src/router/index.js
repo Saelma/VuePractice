@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { isLoggedIn, authState } from '../stores/auth';
+import { loadMe } from '../api/auth';
 import HomeView from '../views/HomeView.vue';
 import NoticeListView from '../views/NoticeListView.vue';
 import NoticeDetailView from '../views/NoticeDetailView.vue';
@@ -67,12 +68,22 @@ const router = createRouter({
 });
 
 // 로그인 필요 경로 가드
-router.beforeEach((to) => {
-  if ((to.meta.requiresAuth || to.meta.requiresAdmin) && !isLoggedIn.value) {
-    return { path: '/login', query: { redirect: to.fullPath } };
+router.beforeEach(async (to) => {
+  const needsAuth = to.meta.requiresAuth || to.meta.requiresAdmin;
+  // 토큰은 있는데 내 정보가 아직 안 실렸으면(새로고침·URL 직접 진입) 먼저 로드해 역할을 확정한다.
+  // App.vue의 loadMe는 mount 이후라 초기 네비게이션에는 늦다 — 안 기다리면 관리자가 admin 경로를
+  // 직접 열 때 user가 null이라 아래 역할 체크에서 자기 화면인데도 튕긴다.
+  if (needsAuth && isLoggedIn.value && !authState.user) {
+    await loadMe();
   }
+  // 관리자 경로는 권한이 없으면(비로그인 포함) **로그인 유도 없이** 상품 목록으로 보낸다 —
+  // 관리 화면의 존재 자체를 노출하지 않는다(사용자 요청, 2026-07-28).
   if (to.meta.requiresAdmin && authState.user?.role !== 'ADMIN') {
-    return { path: '/products' }; // 관리자 아님 → 상품 목록으로
+    return { path: '/products' };
+  }
+  // 그 외 로그인 필요 경로: 비로그인 → 로그인(원래 경로로 복귀하도록 redirect 보존)
+  if (to.meta.requiresAuth && !isLoggedIn.value) {
+    return { path: '/login', query: { redirect: to.fullPath } };
   }
   return true;
 });

@@ -12,7 +12,9 @@ const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 const searchQuery = ref('');
 
 onMounted(() => {
-  loadMe(); // 저장된 토큰으로 내 정보 갱신
+  // 저장된 토큰으로 내 정보 갱신. 라우터 가드가 보호 경로 진입 때 이미 로드했으면(authState.user 존재)
+  // 중복 /me 요청을 피한다 — 공개 경로로 처음 들어온 경우엔 여기서 채운다(헤더 닉네임·관리자 nav용).
+  if (!authState.user) loadMe();
   if (isLoggedIn.value) connectNotifications(); // 이미 로그인 상태면 알림 스트림 연결
 });
 
