@@ -51,12 +51,13 @@ Tailwind 4의 CSS-first 설정(`@theme`)에 정의한다. **화면에서 임의 
 ```css
 /* src/index.css */
 @theme {
-  /* 강조 — 거의 검정. CTA·활성 상태·포커스에만 */
+  /* 강조 — 순수 무채색 near-black(파란기 없음, 무신사식 검/흰). CTA·활성·포커스에만.
+     ink 그레이와 같은 계열이라 전체 톤이 통일된다(2026-07-28: 기존 gray-800/900 의 남색 틴트 제거). */
   --color-brand-50:  #f5f5f5;
   --color-brand-100: #e5e5e5;
-  --color-brand-500: #1f2937;
-  --color-brand-600: #111827;   /* 기본 CTA */
-  --color-brand-700: #374151;   /* hover — 검정 버튼은 밝아지는 쪽이 자연스럽다 */
+  --color-brand-500: #262626;
+  --color-brand-600: #171717;   /* 기본 CTA — 순수 near-black */
+  --color-brand-700: #404040;   /* hover — 검정 버튼은 밝아지는 쪽이 자연스럽다(=ink-700) */
 
   /* 중립 — 대부분의 UI는 여기서 나온다 (순수 회색) */
   --color-ink-900: #0a0a0a;     /* 제목 */
@@ -76,9 +77,9 @@ Tailwind 4의 CSS-first 설정(`@theme`)에 정의한다. **화면에서 임의 
   --radius-card: 12px;
   --radius-control: 8px;
 
-  /* 그림자 — 아주 옅게. 떠 있는 느낌만 */
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04);
-  --shadow-lift: 0 4px 12px rgb(15 23 42 / 0.08);
+  /* 그림자 — 아주 옅게. 떠 있는 느낌만. 색도 순수 검정(slate 파란기 제거) */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-lift: 0 4px 12px rgb(0 0 0 / 0.08);
 
   /* 폰트 — 시스템 스택(웹폰트 금지, §2 참고) */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard",
@@ -118,7 +119,8 @@ Tailwind 4의 CSS-first 설정(`@theme`)에 정의한다. **화면에서 임의 
 └───────────────────────────────────────────────────────┘
 ```
 
-- **최대폭**: 일반 `max-w-6xl`, 읽는 화면(상세·폼) `max-w-3xl`. 지금처럼 폭 제한 없이 늘어지지 않게.
+- **최대폭**: 일반 `max-w-7xl`(1280px — 넓은 모니터의 양옆 휑함을 줄인다, 2026-07-28), 읽는 화면(상세·폼)
+  `max-w-3xl`. 헤더·메인·푸터가 모두 같은 폭으로 정렬돼야 한다(App.vue).
 - **헤더는 sticky** — 목록을 스크롤해도 이동이 항상 닿는다.
 
 ---

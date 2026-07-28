@@ -52,7 +52,7 @@ const year = new Date().getFullYear();
   <div class="flex min-h-screen flex-col bg-canvas">
     <!-- sticky 헤더: 목록을 스크롤해도 이동이 항상 닿는다 (DESIGN.md §4) -->
     <header class="sticky top-0 z-40 border-b border-line bg-surface/85 backdrop-blur">
-      <div class="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:px-6">
+      <div class="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6">
         <div class="flex items-center gap-7">
           <RouterLink to="/" class="text-lg font-bold tracking-tight text-ink-900" @click="onLogo">Glassvue</RouterLink>
           <nav class="flex items-center gap-5 text-sm">
@@ -106,13 +106,13 @@ const year = new Date().getFullYear();
       </div>
     </header>
 
-    <main class="mx-auto w-full max-w-6xl flex-1">
+    <main class="mx-auto w-full max-w-7xl flex-1">
       <RouterView />
     </main>
 
     <!-- 사이트 푸터 — 커머스 완성도. 정적이고 링크는 전부 내부다(연습 단계라 외부 의존을 만들지 않는다). -->
     <footer class="mt-16 border-t border-line bg-surface">
-      <div class="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6">
         <div class="flex flex-col gap-8 sm:flex-row sm:justify-between">
           <div class="max-w-sm">
             <p class="text-lg font-bold tracking-tight text-ink-900">Glassvue</p>
