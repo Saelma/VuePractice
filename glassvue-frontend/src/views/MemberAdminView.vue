@@ -66,6 +66,7 @@ function fmt(v) {
       :data-source="store"
       :remote-operations="true"
       :show-borders="false"
+      :show-column-lines="false"
       :column-auto-width="true"
       :hover-state-enabled="true"
       no-data-text="회원이 없습니다."

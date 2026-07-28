@@ -228,20 +228,26 @@ body {
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   overflow: hidden;
+  font-variant-numeric: tabular-nums; /* 숫자 열 자릿수 정렬(모던 어드민 표) */
 }
-/* 헤더: 옅은 캔버스 배경 + 보조색 라벨(제목처럼 튀지 않게). */
+/* 헤더: 흰 배경 + 작은 대문자풍 muted 라벨 + 바닥선 하나(Stripe·Linear 스타일). 회색 헤더바의 구식 느낌 제거. */
 .dx-datagrid-headers {
-  background-color: var(--color-canvas);
-  color: var(--color-ink-500);
+  background-color: var(--color-surface);
+  color: var(--color-ink-400);
+  border-bottom: 1px solid var(--color-line);
 }
 .dx-datagrid-headers .dx-header-row > td {
   font-weight: 600;
-  color: var(--color-ink-500);
+  font-size: 0.6875rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase; /* 라틴 라벨에만 작용(한글은 무영향) */
+  color: var(--color-ink-400);
 }
-/* 셀 여백을 조금 넉넉히 — 기본은 촘촘해 읽기 답답하다. */
+/* 행: 넉넉한 높이 + 읽기 좋은 14px. 기본은 촘촘·작아 답답하다. */
 .dx-datagrid .dx-row > td {
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  font-size: 0.875rem;
   vertical-align: middle;
 }
 .dx-datagrid-rowsview .dx-data-row > td {
