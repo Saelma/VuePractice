@@ -15,6 +15,7 @@
 | `nginx/conf.d/glassvue.conf` | `/etc/nginx/conf.d/glassvue.conf` | 실질 설정(TLS·프록시·캐시·보안헤더) |
 | `systemd/glassvue-backend.service` | `/etc/systemd/system/glassvue-backend.service` | |
 | `systemd/oracledb_ESPDB-19c.service.d/override.conf` | `/etc/systemd/system/oracledb_ESPDB-19c.service.d/override.conf` | Oracle 서비스 drop-in — 네트워크 뜬 뒤 시작(아래) |
+| `systemd/mailpit.service` | `/etc/systemd/system/mailpit.service` | 로컬 메일 캐처(개발용) — 아래 별도 절 |
 | `env.example` | `/home/ecstel/work/.env` | **형식만**. 실제 값은 커밋 금지 |
 
 **여기 없는 것**(의도적):
@@ -25,6 +26,8 @@
 - **TLS 개인키** (`/etc/nginx/ssl/glassvue.key`) — 절대 커밋하지 않는다. 아래 재발급 절차로 만든다.
 - **Oracle SysV 스크립트** — `/etc/init.d/oracledb_ESPDB-19c` 는 설치 프로그램이 만든 것이라 손대지 않는다.
   대신 **부팅 순서만 drop-in override** 로 보정한다(위 `override.conf`, 아래 배경 참고).
+- **Mailpit 바이너리** (`/opt/mailpit/mailpit`, 약 27MB) — 유닛만 저장소에 있고 **실행 파일은 없다.**
+  ⚠ 그래서 재구축 시 **유닛은 살아나는데 가리키는 파일이 없어** 기동에 실패한다. 아래 절의 내려받기가 세트다.
 
 ## 반영하는 법 (전부 sudo — CLAUDE.md 상 직접 실행)
 
@@ -78,6 +81,50 @@ sudo restorecon -v /opt/mailpit/mailpit    # usr_t 라벨 확보
 sudo cp infra/systemd/oracledb_ESPDB-19c.service.d/override.conf \
         /etc/systemd/system/oracledb_ESPDB-19c.service.d/
 sudo systemctl daemon-reload
+```
+
+## Mailpit (로컬 메일 캐처) — 개발용
+
+비밀번호 재설정·이메일 인증 메일을 **눈으로 확인하기 위한 도구**다(2026-07-29, B-10/B-14).
+
+| 항목 | 값 | 왜 |
+|---|---|---|
+| SMTP 수신 | `127.0.0.1:1025` | **루프백 고정** — LAN 에서도 안 보인다. nginx 가 프록시하지 않아 외부 경로가 없다 |
+| 웹 UI | `127.0.0.1:8025` | 받은 메일을 여기서 본다. 서버 밖에서 보려면 SSH 포트포워딩 |
+| 보관 | **메모리**(`-d` 없음) | 재시작하면 사라진다. 검증용이라 보존할 이유가 없고 개인정보가 디스크에 안 남는다 |
+| 만료 | `--max-age 7d` | 검증 잔재가 무한정 쌓이지 않게 |
+| 실행 계정 | `ecstel` | 고포트라 root 가 필요 없다 |
+
+**⚠ 밖으로 메일을 보내지 않는다.** 받은 걸 붙잡아 보여줄 뿐이라 실수로 실제 발송이 나갈 일이 없다.
+
+### 운영은 메일을 보내지 않는다 — 그 보장은 앱 쪽에 있다
+
+`application.yml` 에 **`spring.mail` 키 자체가 없어서** 스프링이 `JavaMailSender` 빈을 만들지 않고,
+`Mailer` 가 no-op 이 된다. dev 프로파일(`application-dev.yml`)만 `127.0.0.1:1025` 를 지정한다.
+
+> ⚠ **"기본값을 비워 두면 꺼진다"는 틀렸다**(2026-07-29 실측). `host: ${MAIL_HOST:}` 로 뒀더니
+> 값이 비어도 **프로퍼티는 존재**해서 자동설정이 빈을 만들었고, 빈 host 가 localhost 로 폴백해
+> **:1025 에 실제로 붙었다** — 기본 프로파일로 도는 통합 테스트가 캐처로 메일을 보내며 드러났다.
+> 그래서 키를 아예 두지 않고, `MailerAutoConfigOffTest` 로 고정했다.
+>
+> ⚠ 부작용: Mailpit 이 상시 떠 있으면 `:1025` 에 **듣는 쪽이 생긴다.** 누가 `spring.mail` 을 되살리면
+> 예전처럼 "연결 거부로 조용히 실패"하는 대신 **메일이 조용히 여기로 들어온다.** 그 방어선이 위 테스트다.
+
+### 확인·운용
+
+```bash
+systemctl status mailpit --no-pager | head -5
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8025/     # 200
+ss -lntp | grep -E ':1025|:8025'                                    # 누가 쥐고 있는지
+```
+
+⚠ **포트를 누가 쥐고 있는지까지 봐야 한다.** 손으로 띄운 인스턴스가 살아 있으면 systemd 쪽이
+`address already in use`(`status=1/FAILURE`)로 죽는데, **그때도 `curl :8025` 는 200 이 나온다**
+(옛 프로세스가 응답한다). "떠 있으니 됐다"로 오해하기 딱 좋은 자리다.
+
+서버 밖(개발 PC)에서 웹 UI 를 보려면:
+```bash
+ssh -L 8025:127.0.0.1:8025 ecstel@192.168.50.14   # 이후 브라우저에서 http://localhost:8025
 ```
 
 ## 드리프트 확인
@@ -168,4 +215,7 @@ curl --cacert glassvue.crt https://192.168.50.14/api/products   # 200 이어야 
    → 다만 **재구축 시에는 이 상태가 없다.** 새로 만든 PDB 는 saved state 가 비어 있어
    부팅 후 `MOUNTED` 로 남는다. 재구축 직후 한 번 걸어 둘 것:
    `alter pluggable database all open; alter pluggable database all save state;`
-6. **`.env` 실값 작성** — `env.example` 참고.
+6. **Mailpit 바이너리 배치** — 유닛은 저장소에 있지만 **실행 파일(27MB)은 없다.**
+   `enable` 된 유닛이 없는 파일을 가리켜 기동에 실패하므로, 위 「반영하는 법」의 내려받기 + `/opt` 이동을 함께 한다.
+   ⚠ **홈에 두면 SELinux 가 막는다**(`203/EXEC`) — 반드시 `/opt` + `restorecon`.
+7. **`.env` 실값 작성** — `env.example` 참고.
