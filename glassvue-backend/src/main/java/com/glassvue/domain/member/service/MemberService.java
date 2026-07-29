@@ -59,6 +59,25 @@ public class MemberService {
     }
 
     /**
+     * 이메일 등록·변경(B-13). 기존 회원은 값이 없어(전원 NULL) <b>이 화면이 유일한 수집 경로</b>다.
+     *
+     * <p>⚠ 확인 메일을 보내지 않는다 — 발송 채널(SMTP)이 아직 없다(BACKLOG D). 그래서 지금 저장되는
+     * 주소는 <b>미검증</b>이다. 채널이 붙으면 여기에 "확인 메일 발송 → 확인 전까지 pending" 을 얹어야 한다.
+     * 그때까지는 오타를 걸러낼 방법이 형식 검증뿐이라는 걸 알고 쓴다.
+     */
+    public MemberResponse changeEmail(UUID memberId, String email) {
+        Member member = find(memberId);
+        String normalized = Member.normalizeEmail(email);
+        // 닉네임과 같은 규칙 — 본인은 제외해 같은 값 재저장은 허용하고, 남이 쓰는 값이면 막는다.
+        if (memberRepository.existsByEmailAndIdNot(normalized, memberId)) {
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+        }
+        member.updateEmail(normalized);
+        log.info("Email updated: {}", memberId); // 주소 자체는 로그에 남기지 않는다(개인정보)
+        return withDefaultAddress(member);
+    }
+
+    /**
      * 기본 배송지 저장 — 주문서에 자동으로 채워 넣기 위한 값. 주문에는 복사(스냅샷)된다.
      *
      * <p>2026-07-24(V18)부터 <b>저장 위치가 주소록</b>이다. {@code member.ship_*} 컬럼에 쓰던 것을

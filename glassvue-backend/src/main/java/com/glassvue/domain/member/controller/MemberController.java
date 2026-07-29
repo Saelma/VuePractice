@@ -1,6 +1,7 @@
 package com.glassvue.domain.member.controller;
 
 import com.glassvue.domain.auth.dto.MemberResponse;
+import com.glassvue.domain.member.dto.EmailUpdateRequest;
 import com.glassvue.domain.member.dto.NicknameUpdateRequest;
 import com.glassvue.domain.member.dto.PasswordUpdateRequest;
 import com.glassvue.domain.member.dto.ShippingAddressRequest;
@@ -19,6 +20,13 @@ public interface MemberController {
     ResponseEntity<ApiResponse<MemberResponse>> changeNickname(
             @Parameter(hidden = true) AuthUser user,
             @Valid NicknameUpdateRequest request);
+
+    @Operation(summary = "이메일 등록·변경",
+            description = "비밀번호 재설정 링크를 받을 주소. 기존 회원은 값이 없어 이 API 가 유일한 수집 경로다. "
+                    + "확인 메일은 아직 보내지 않으므로(SMTP 미도입) 저장된 주소는 미검증이다.")
+    ResponseEntity<ApiResponse<MemberResponse>> changeEmail(
+            @Parameter(hidden = true) AuthUser user,
+            @Valid EmailUpdateRequest request);
 
     @Operation(summary = "기본 배송지 저장",
             description = "주문서에 자동으로 채워 넣기 위한 값. 주문에는 이 값을 복사(스냅샷)하므로 나중에 바꿔도 과거 주문의 배송지는 변하지 않는다.")

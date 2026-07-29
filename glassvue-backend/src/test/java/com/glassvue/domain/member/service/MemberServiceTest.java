@@ -95,6 +95,49 @@ class MemberServiceTest {
         assertThat(m.getNickname()).isEqualTo("김철수");
     }
 
+    // ---------- 이메일 등록·변경 (B-13) ----------
+
+    @Test
+    @DisplayName("이메일 변경: 대소문자·공백이 섞여도 소문자 trim 으로 저장된다")
+    void changeEmail_normalizes() {
+        Member m = member();
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(m));
+        when(memberRepository.existsByEmailAndIdNot("hong@example.com", memberId)).thenReturn(false);
+
+        service.changeEmail(memberId, "  Hong@Example.COM  ");
+
+        // ⚠ 검사에 쓴 값과 저장한 값이 같아야 한다 — 어긋나면 유니크 제약이 중복을 못 거른다.
+        assertThat(m.getEmail()).isEqualTo("hong@example.com");
+    }
+
+    @Test
+    @DisplayName("이메일 변경: 남이 쓰는 주소 → DUPLICATE_EMAIL, 반영 안 함")
+    void changeEmail_duplicate() {
+        Member m = member();
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(m));
+        when(memberRepository.existsByEmailAndIdNot("taken@example.com", memberId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.changeEmail(memberId, "Taken@Example.com"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
+        assertThat(m.getEmail()).isNull();
+    }
+
+    @Test
+    @DisplayName("이메일 변경: 본인이 쓰던 같은 주소 재저장은 허용(본인 제외 검사)")
+    void changeEmail_sameValueAllowed() {
+        Member m = member();
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(m));
+        // existsByEmailAndIdNot 이 본인을 제외하므로 false — 닉네임과 같은 규칙
+        when(memberRepository.existsByEmailAndIdNot("mine@example.com", memberId)).thenReturn(false);
+
+        service.changeEmail(memberId, "mine@example.com");
+        service.changeEmail(memberId, "mine@example.com");
+
+        assertThat(m.getEmail()).isEqualTo("mine@example.com");
+    }
+
     @Test
     @DisplayName("없는 회원 → MEMBER_NOT_FOUND")
     void notFound() {

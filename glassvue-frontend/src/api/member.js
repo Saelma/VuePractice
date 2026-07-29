@@ -38,6 +38,17 @@ export async function changeNickname(nickname) {
   return me;
 }
 
+/**
+ * 이메일 등록·변경 (B-13). 응답이 갱신된 회원이라 스토어도 같이 갱신한다
+ * — 설정 화면이 다시 그려질 때 초기값이 옛 값으로 되돌아가지 않게.
+ * ⚠ 서버가 소문자로 정규화해 저장하므로, 화면은 **입력값이 아니라 응답값**을 표시해야 한다.
+ */
+export async function changeEmail(email) {
+  const me = await apiPatch('/api/members/me/email', { email });
+  setUser(me);
+  return me;
+}
+
 /** 기본 배송지 저장. 응답이 갱신된 회원이라 스토어도 같이 갱신해 주문서 자동 채움에 바로 반영된다. */
 export async function updateShippingAddress(address) {
   const me = await apiPatch('/api/members/me/shipping-address', address);

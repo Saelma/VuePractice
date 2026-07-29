@@ -57,7 +57,7 @@ class AuthServiceTest {
     @DisplayName("회원가입: 아이디 중복 → DUPLICATE_LOGIN_ID, 저장 안 함")
     void signup_duplicate() {
         when(memberRepository.existsByLoginId("kim")).thenReturn(true);
-        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉")), ErrorCode.DUPLICATE_LOGIN_ID);
+        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com")), ErrorCode.DUPLICATE_LOGIN_ID);
         verify(memberRepository, never()).save(any());
     }
 
@@ -66,7 +66,7 @@ class AuthServiceTest {
     void signup_duplicateNickname() {
         when(memberRepository.existsByLoginId("kim")).thenReturn(false);
         when(memberRepository.existsByNickname("닉")).thenReturn(true);
-        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉")), ErrorCode.DUPLICATE_NICKNAME);
+        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com")), ErrorCode.DUPLICATE_NICKNAME);
         verify(memberRepository, never()).save(any());
     }
 
@@ -77,7 +77,7 @@ class AuthServiceTest {
         when(memberRepository.existsByNickname("닉")).thenReturn(false);
         when(passwordEncoder.encode("pw")).thenReturn("ENC");
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
-        var res = service.signup(new SignupRequest("kim", "pw", "닉"));
+        var res = service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com"));
         assertThat(res.nickname()).isEqualTo("닉");
         verify(memberRepository).save(any(Member.class));
     }

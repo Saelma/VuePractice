@@ -40,7 +40,7 @@ class AuthFlowIntegrationTest {
     void fullFlow() throws Exception {
         // 1) 회원가입
         mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
-                        "{\"loginId\":\"" + loginId + "\",\"password\":\"password123\",\"nickname\":\"통합테스터\"}"))
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"password123\",\"nickname\":\"통합테스터\",\"email\":\"" + loginId + "@example.com\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.nickname").value("통합테스터"));
 
@@ -78,7 +78,7 @@ class AuthFlowIntegrationTest {
     void passwordResetFlow() throws Exception {
         // 1) 가입
         mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
-                        "{\"loginId\":\"" + loginId + "\",\"password\":\"password123\",\"nickname\":\"재설정테스터\"}"))
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"password123\",\"nickname\":\"재설정테스터\",\"email\":\"" + loginId + "@example.com\"}"))
                 .andExpect(status().isCreated());
 
         // 2) 재설정 토큰 발급(서비스로 직접 — 응답 노출은 dev만)
@@ -118,5 +118,46 @@ class AuthFlowIntegrationTest {
                         "{\"loginId\":\"nobody_" + UUID.randomUUID().toString().substring(0, 8) + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+    }
+
+    // ---------- 이메일 수집 (B-13) ----------
+
+    private String signupBody(String id, String nickname, String email) {
+        return "{\"loginId\":\"" + id + "\",\"password\":\"password123\",\"nickname\":\"" + nickname
+                + "\",\"email\":\"" + email + "\"}";
+    }
+
+    @Test
+    @DisplayName("가입: 이메일 누락 → 400 / 형식 오류 → 400 (신규 가입은 필수)")
+    void signup_emailRequiredAndValidated() throws Exception {
+        String id = "em_" + UUID.randomUUID().toString().substring(0, 8);
+        // 누락 — DB 는 nullable 이지만 API 계층에서 막는다(@NotBlank)
+        mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
+                        "{\"loginId\":\"" + id + "\",\"password\":\"password123\",\"nickname\":\"ZZ이메일없음\"}"))
+                .andExpect(status().isBadRequest());
+        // 형식 오류
+        mockMvc.perform(post("/api/auth/signup").contentType(JSON)
+                        .content(signupBody(id, "ZZ형식오류", "not-an-email")))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("가입: 이메일은 소문자로 정규화되어 저장되고, 대소문자만 다른 주소는 중복(409)")
+    void signup_emailNormalizedAndUnique() throws Exception {
+        String id = "em_" + UUID.randomUUID().toString().substring(0, 8);
+        String upper = "ZZ_" + id.toUpperCase() + "@Example.COM";
+
+        // 대문자로 보내도 응답·저장은 소문자다
+        mockMvc.perform(post("/api/auth/signup").contentType(JSON)
+                        .content(signupBody(id, "ZZ정규화" + id.substring(3), upper)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.email").value(upper.toLowerCase()));
+
+        // ⚠ 여기가 정규화의 값이다 — Oracle UNIQUE 는 대소문자를 구분하므로, 정규화가 없으면
+        // 아래 요청이 "다른 값"으로 통과해 같은 사람의 주소가 두 계정에 들어간다.
+        mockMvc.perform(post("/api/auth/signup").contentType(JSON)
+                        .content(signupBody(id + "b", "ZZ중복" + id.substring(3), upper.toLowerCase())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-409E"));
     }
 }

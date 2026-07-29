@@ -48,11 +48,18 @@ public class AuthService {
         if (memberRepository.existsByNickname(req.nickname())) {
             throw new BusinessException(ErrorCode.DUPLICATE_NICKNAME);
         }
+        // 이메일은 정규화한 값으로 검사하고 그 값을 그대로 저장한다 — 검사와 저장이 어긋나면
+        // 유니크 제약(대소문자 구분)이 중복을 못 걸러낸다(Member.normalizeEmail 주석).
+        String email = Member.normalizeEmail(req.email());
+        if (memberRepository.existsByEmail(email)) {
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+        }
         Member member = Member.builder()
                 .loginId(req.loginId())
                 .password(passwordEncoder.encode(req.password()))
                 .nickname(req.nickname())
                 .role(Role.USER)
+                .email(email)
                 .build();
         memberRepository.save(member);
         // 적립금 계정은 **가입 시** 만든다. 조회할 때 "없으면 만드는" 방식은 읽기가 쓰기를 하게 되고

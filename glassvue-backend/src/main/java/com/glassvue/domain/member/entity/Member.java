@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.util.Locale;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -30,8 +31,15 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private Role role;
 
-    // 이메일은 아직 **수집 경로가 없어** nullable 이다(2026-07-28, V29). 비밀번호 재설정 링크 SMTP
-    // 발송(BACKLOG D)을 붙일 때 가입/설정 폼에서 채운다. 계정 식별자라 유일(uk_member_email).
+    // 이메일(2026-07-28 V29 컬럼 → 2026-07-29 B-13 수집 시작). 계정 식별자라 유일(uk_member_email).
+    //
+    // ⚠ **DB 는 계속 nullable 이다.** 신규 가입은 필수로 받지만(SignupRequest 의 @NotBlank),
+    // 기존 회원은 값이 없어 NOT NULL 을 걸 수 없다 — 채우는 경로가 설정 화면뿐이라 백필할 값도 없다.
+    // "신규는 필수"는 **API 계층의 규칙**이고 스키마 제약이 아니다. 전원이 채워진 뒤에나 NOT NULL 을 검토한다.
+    //
+    // ⚠ 저장 값은 **소문자·trim 으로 정규화**된다(AuthService·MemberService). Oracle UNIQUE 는
+    // 대소문자를 구분해서, 정규화하지 않으면 A@b.com 과 a@b.com 이 둘 다 들어간다 — 같은 사람에게
+    // 메일이 두 번 가거나 재설정 링크가 엉뚱한 계정으로 간다.
     @Column(unique = true, length = 255)
     private String email;
 
@@ -51,12 +59,15 @@ public class Member extends BaseTimeEntity {
     // 그동안 "신 코드는 member.ship_* 에 쓰지 않는다" 를 규율이 아니라 **구조로** 보장한다 —
     // 필드가 없으면 쓸 방법이 없다. ddl-auto=validate 는 매핑되지 않은 여분 컬럼을 문제 삼지 않는다.
 
+    // email 은 builder 에서 선택이다 — 테스트 픽스처처럼 이메일이 무의미한 자리가 많고,
+    // "신규 가입은 필수" 규칙은 SignupRequest 검증이 이미 책임진다(여기서 또 막으면 이중 규칙).
     @Builder
-    private Member(String loginId, String password, String nickname, Role role) {
+    private Member(String loginId, String password, String nickname, Role role, String email) {
         this.loginId = loginId;
         this.password = password;
         this.nickname = nickname;
         this.role = role;
+        this.email = email;
     }
 
     public void updateNickname(String nickname) {
@@ -69,6 +80,17 @@ public class Member extends BaseTimeEntity {
 
     public void updateEmail(String email) {
         this.email = email;
+    }
+
+    /**
+     * 이메일 정규화 — trim + 소문자(B-13). <b>저장과 중복검사가 반드시 같은 형태를 써야</b> 하므로
+     * 규칙을 한 곳에 둔다(가입은 AuthService, 변경은 MemberService — 두 곳이 각자 정규화하면 어긋난다).
+     *
+     * <p>⚠ {@link Locale#ROOT} 를 명시한다. 기본 로케일이 터키어면 {@code "I".toLowerCase()} 가
+     * 점 없는 'ı' 가 돼(터키 I 문제) 같은 주소가 서버 설정에 따라 다른 값으로 저장된다.
+     */
+    public static String normalizeEmail(String email) {
+        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
     }
 
     // --- 관리자 조작(B-11 후속) ---

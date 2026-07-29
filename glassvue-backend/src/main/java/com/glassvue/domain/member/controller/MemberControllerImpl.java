@@ -1,6 +1,7 @@
 package com.glassvue.domain.member.controller;
 
 import com.glassvue.domain.auth.dto.MemberResponse;
+import com.glassvue.domain.member.dto.EmailUpdateRequest;
 import com.glassvue.domain.member.dto.NicknameUpdateRequest;
 import com.glassvue.domain.member.dto.PasswordUpdateRequest;
 import com.glassvue.domain.member.dto.ShippingAddressRequest;
@@ -31,6 +32,14 @@ public class MemberControllerImpl implements MemberController {
             @LoginUser AuthUser user,
             @Valid @RequestBody NicknameUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(memberService.changeNickname(user.id(), request.nickname())));
+    }
+
+    @Override
+    @PatchMapping("/me/email")
+    public ResponseEntity<ApiResponse<MemberResponse>> changeEmail(
+            @LoginUser AuthUser user,
+            @Valid @RequestBody EmailUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(memberService.changeEmail(user.id(), request.email())));
     }
 
     @Override

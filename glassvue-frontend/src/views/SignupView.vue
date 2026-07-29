@@ -5,13 +5,17 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { signup, login } from '../api/auth';
 
 const router = useRouter();
-const form = reactive({ loginId: '', password: '', nickname: '' });
+const form = reactive({ loginId: '', password: '', nickname: '', email: '' });
 const error = ref('');
 const loading = ref(false);
 
+// 서버(@Email)와 같은 것을 막자는 게 아니라, 왕복 없이 오타를 먼저 걸러 주자는 것.
+// 최종 판정은 서버가 한다 — 여기 규칙이 서버보다 엄격하면 정상 주소가 화면에서 막힌다.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 async function onSubmit() {
   error.value = '';
-  if (!form.loginId || !form.password || !form.nickname) {
+  if (!form.loginId || !form.password || !form.nickname || !form.email) {
     error.value = '모든 항목을 입력하세요.';
     return;
   }
@@ -23,9 +27,18 @@ async function onSubmit() {
     error.value = '비밀번호는 8자 이상이어야 합니다.';
     return;
   }
+  if (!EMAIL_RE.test(form.email.trim())) {
+    error.value = '이메일 형식이 올바르지 않습니다.';
+    return;
+  }
   loading.value = true;
   try {
-    await signup({ loginId: form.loginId, password: form.password, nickname: form.nickname });
+    await signup({
+      loginId: form.loginId,
+      password: form.password,
+      nickname: form.nickname,
+      email: form.email.trim(),
+    });
     await login({ loginId: form.loginId, password: form.password }); // 가입 후 자동 로그인
     router.push('/');
   } catch (e) {
@@ -58,7 +71,12 @@ async function onSubmit() {
           </label>
           <label class="field">
             <span class="field-label">닉네임</span>
-            <DxTextBox v-model:value="form.nickname" @enter-key="onSubmit" />
+            <DxTextBox v-model:value="form.nickname" />
+          </label>
+          <label class="field">
+            <span class="field-label">이메일</span>
+            <DxTextBox v-model:value="form.email" mode="email" @enter-key="onSubmit" />
+            <span class="muted">비밀번호를 잊었을 때 재설정 링크를 받을 주소입니다.</span>
           </label>
 
           <button type="button" class="btn btn-primary w-full" :disabled="loading" @click="onSubmit">

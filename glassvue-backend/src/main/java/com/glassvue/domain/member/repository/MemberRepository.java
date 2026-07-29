@@ -38,4 +38,13 @@ public interface MemberRepository extends JpaRepository<Member, UUID> {
 
     /** 닉네임 변경 시 본인은 제외하고 중복을 검사한다(같은 값으로 재저장 허용). */
     boolean existsByNicknameAndIdNot(String nickname, UUID id);
+
+    /**
+     * 이메일 중복 검사(B-13). ⚠ <b>소문자로 정규화된 값</b>이 들어온다고 가정한다 —
+     * 저장 시점에 {@code toLowerCase} 하므로 여기서 다시 lower 를 걸지 않는다(인덱스를 타야 한다).
+     */
+    boolean existsByEmail(String email);
+
+    /** 이메일 변경 시 본인 제외(같은 값 재저장 허용 — 닉네임과 같은 규칙). */
+    boolean existsByEmailAndIdNot(String email, UUID id);
 }

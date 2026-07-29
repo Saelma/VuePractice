@@ -3,7 +3,7 @@ import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { authState } from '../stores/auth';
-import { changeNickname, changePassword, withdraw } from '../api/member';
+import { changeNickname, changeEmail, changePassword, withdraw } from '../api/member';
 import AddressBook from '../components/AddressBook.vue';
 import NotificationSettings from '../components/NotificationSettings.vue';
 
@@ -42,6 +42,32 @@ async function onPassword() {
   }
 }
 
+// 이메일(B-13) — 기존 회원은 값이 없어(null) 이 화면이 유일한 수집 경로다.
+const email = reactive({
+  value: authState.user?.email || '',
+  msg: '', err: '', loading: false,
+});
+// 서버(@Email)가 최종 판정한다. 여기 규칙이 더 엄격하면 정상 주소가 화면에서 막히므로 느슨하게.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function onEmail() {
+  email.msg = ''; email.err = '';
+  const v = email.value.trim();
+  if (!v) { email.err = '이메일을 입력하세요.'; return; }
+  if (!EMAIL_RE.test(v)) { email.err = '이메일 형식이 올바르지 않습니다.'; return; }
+  email.loading = true;
+  try {
+    const me = await changeEmail(v);
+    // 서버가 소문자로 정규화하므로 입력값이 아니라 응답값을 되비춘다(예: A@B.com → a@b.com).
+    email.value = me.email || '';
+    email.msg = '이메일이 저장되었습니다.';
+  } catch (e) {
+    email.err = e.message;
+  } finally {
+    email.loading = false;
+  }
+}
+
 async function onWithdraw() {
   if (!window.confirm('정말 탈퇴할까요? 되돌릴 수 없습니다.')) return;
   try {
@@ -68,6 +94,23 @@ async function onWithdraw() {
       </label>
       <button type="button" class="btn btn-secondary self-start" :disabled="nick.loading" @click="onNickname">
         {{ nick.loading ? '변경 중…' : '닉네임 변경' }}
+      </button>
+    </div>
+
+    <!-- 이메일 (B-13, 2026-07-29) — 기존 회원은 값이 없어 여기가 유일한 수집 경로다. -->
+    <div class="card mt-8 flex flex-col gap-3 p-5">
+      <h2 class="section-title">이메일</h2>
+      <p v-if="!authState.user?.email" class="text-sm text-ink-700">
+        아직 등록된 이메일이 없습니다. 등록해 두면 비밀번호를 잊었을 때 재설정 링크를 받을 수 있습니다.
+      </p>
+      <p v-if="email.err" class="alert-error">{{ email.err }}</p>
+      <p v-if="email.msg" class="alert-success">{{ email.msg }}</p>
+      <label class="field">
+        <span class="field-label">이메일</span>
+        <DxTextBox v-model:value="email.value" mode="email" @enter-key="onEmail" />
+      </label>
+      <button type="button" class="btn btn-secondary self-start" :disabled="email.loading" @click="onEmail">
+        {{ email.loading ? '저장 중…' : (authState.user?.email ? '이메일 변경' : '이메일 등록') }}
       </button>
     </div>
 

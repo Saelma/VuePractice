@@ -135,7 +135,7 @@ class PointFlowIntegrationTest {
         String loginId = "ptnew_" + UUID.randomUUID().toString().substring(0, 8);
         mockMvc.perform(post("/api/auth/signup").contentType(JSON)
                         .content("{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW
-                                + "\",\"nickname\":\"ZZ신규" + loginId.substring(6) + "\"}"))
+                                + "\",\"nickname\":\"ZZ신규" + loginId.substring(6) + "\",\"email\":\"" + loginId + "@example.com\"}"))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/points/me").header("Authorization", login(loginId)))
