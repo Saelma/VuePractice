@@ -177,6 +177,12 @@ Flyway 가 공유 espdb 에 적용하므로(§5), *배포하기 전에* 운영�
       python3 -c "import glob,xml.etree.ElementTree as ET;
       print(sum(int(ET.parse(p).getroot().get('skipped')) for p in glob.glob('build/test-results/test/*.xml')))"
       ```
+- [ ] ⚠ **메일이 얽힌 기능은 "운영에서 브라우저 확인"이 통하지 않는다**(2026-07-29).
+      운영은 `application.yml` 에 `spring.mail` 키가 없어 **발송 자체가 꺼져 있다** — 배포 후
+      「인증메일 보내기」를 눌러도 200 이 나올 뿐 **메일은 오지 않고, 그게 정상이다.**
+      → 운영에서 볼 것은 **상태 표시**(「미인증」 배지 등)까지고, **발송 관통은 dev + 로컬 캐처**에서 본다.
+      절차는 `README.md` 「메일 흐름을 브라우저로 보기」(dev 백엔드 `:8084` + `API_TARGET` 으로 프론트 연결).
+      ⚠ 이 예외를 모르면 **"메일이 안 온다"를 버그로 오해**한다 — 실제로 그렇게 물어볼 만한 자리다.
 - [ ] **테스트는 운영과 다른 Redis DB 를 쓴다**(`spring.data.redis.database`, build.gradle 의 systemProperty).
       > **사고 (2026-07-29)**: 조회수 통합 테스트가 몇 날 며칠 간헐 실패했다. 이월 메모에는 *"테스트마다
       > Redis 키 clear 로 고칠 수 있다"* 고 적혀 있었지만 **그 테스트엔 이미 `@AfterEach` 정리가 있었다.**
