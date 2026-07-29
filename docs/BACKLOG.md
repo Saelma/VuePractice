@@ -64,6 +64,18 @@ tabular-nums + Pretendard. `index.css` 한 곳으로 전 관리 그리드(회원
 - **일부 선행 완료**: 관리자 **쿠폰 관리 화면**(`/admin/coupons` 생성·목록·발급 + `GET /api/admin/coupons`)과
   고객 **혜택 허브**(`/benefits` 쿠폰함 신설)는 2026-07-28 완료(핸드오프 §13). 남은 B-12 = 회원·주문 DataGrid 개선.
 
+### B-14. 이메일 소유 인증 (확인 메일) — 후보, 크기 중
+
+**B-13 이 남긴 구멍이고, B-10 완성이 그 조건을 풀었다.** 지금 저장되는 이메일은 **미검증**이다 —
+형식만 맞으면 저장되므로 오타가 있으면 **재설정 링크가 남의 주소로 간다.** 발송 채널이 없을 땐
+어쩔 수 없었지만, 2026-07-29 로컬 캐처가 붙어 **확인 메일을 보낼 수 있게 됐다.**
+
+- 범위: 이메일 등록·변경 시 **확인 토큰 발송**(Redis, `auth:email-verify:` — `auth:reset:` 과 같은 방식)
+  → 링크 클릭 시 확정. `member.email_verified` 컬럼(V34) + 미인증 표시 UI.
+- ⚠ **정책 결정이 먼저다**: 미인증 주소로 **재설정 링크를 보낼 것인가**. 안 보내면 안전하지만
+  오타 낸 사람은 계정을 영영 못 찾는다. 보내면 지금과 같은 위험이 남는다. 착수 시 확정.
+- ⚠ 기존 회원(수집 이전 가입)은 전부 미인증 상태로 시작한다 — B-13 의 nullable 과 같은 성격.
+
 ### B-13. 이메일 수집 — ✅ **완료 (2026-07-29)**
 
 근거: `handoffs/2026-07-29-handoff.md` §5. 아래 「완료」 표에도 넣었다.
@@ -106,7 +118,6 @@ tabular-nums + Pretendard. `index.css` 한 곳으로 전 관리 그리드(회원
 | **HSTS / mkcert** | 도메인 + Let's Encrypt 도입 시. IP 접속엔 HSTS 가 애초에 무효 |
 | **리뷰 목록 캐시** | P6SPY 로 실제 병목이 측정될 때. 도구는 이미 검증됨(2026-07-23) |
 | **알림 Handler 실발송** | 임계치 재알림 스팸을 먼저 해결해야 한다 |
-| **비밀번호 재설정 링크 실발송 (SMTP)** | B-10 을 온전하게 만드는 남은 반쪽. **토큰 발급·검증·저장(Redis `auth:reset:`)은 완성**, **`member.email` 컬럼 V29(2026-07-28)**, **~~이메일 수집~~ 도 B-13(2026-07-29)으로 완료** — 신규 가입은 필수, 기존 회원은 `/settings`. **남은 건 발송 하나**: 컨트롤러의 `expose-token` 게이트(`AuthControllerImpl.requestPasswordReset`) 자리에 "토큰으로 링크 만들어 **메일 발송**".<br>⚠ 붙일 때 함께 볼 것 — ①**기존 회원은 email 이 여전히 null** 일 수 있다(수집은 자발적) → 발송 대상이 없을 때의 동작 ②지금 저장된 주소는 **미검증**이다(확인 메일을 안 보낸다) → "확인 메일 → 확인 전 pending" 을 얹을지. 발송 전까진 dev 노출 + 운영은 Redis 수동조회(`redis-cli --scan 'auth:reset:*'`) |
 | **`DB_PASSWORD` 강화** | ⚠ **현재 값이 짧다**(길이는 여기 적지 않는다 — 적으면 탐색 범위를 좁혀 준다, 2026-07-29). 바꿀 때 `.env`·DB 계정·백업본 셋을 함께 맞춰야 한다. 저장소 공개를 한다면 **그 전에** 처리할 것 |
 | **Docker·RabbitMQ·관측 스택(Alloy/Loki/Prometheus/Grafana)·Spring Batch·OpenSearch** | MSA 단계 |
 | **선착순 한정 쿠폰 발급 (Redis 기반)** | 아래 참고 — MSA 단계 + 동시성이 실제로 생길 때 |
@@ -211,7 +222,8 @@ tabular-nums + Pretendard. `index.css` 한 곳으로 전 관리 그리드(회원
 | **회원 정지 · 역할변경** (B-11 후속) — `member.suspended`(V30, boolean) + `changeRole`. **전면 차단**: 정지 시 로그인·토큰갱신(Auth)·주문(Order 가드) 막고 refresh 토큰 삭제. **자기 자신 조작 불가**(락아웃 방지). 엔드포인트 `POST /api/admin/members/{id}/suspend·unsuspend`·`PATCH /role`. 정지=boolean(enum CHECK 트랩 회피) | 2026-07-28 | V30 · `handoffs/2026-07-28-handoff.md` |
 | **관리자 감사 로그** (회원관리 심화) — 관리자 조작(정지·해제·역할변경)을 append-only 로 남기고 **SUPER_ADMIN 만 조회**. 새 도메인 `domain/audit`: member 는 audit 을 직접 부르지 않고 `AdminActionEvent` 발행 → 리스너가 **같은 트랜잭션**에서 저장(감사 실패 시 조작도 롤백). 대상 탈퇴·개명에도 안 깨지게 이름·loginId **스냅샷**. `/api/admin/audit/**` 는 `/api/admin/**` 위에 `hasRole('SUPER_ADMIN')`. V32 순수 추가 | 2026-07-28 | V32 · `handoffs/2026-07-28-handoff.md` |
 | **최상위 관리자 SUPER_ADMIN** — 정지/역할을 계층화(엄격 분리). 일반 ADMIN 은 USER 만 정지, **역할변경·관리자 정지는 SUPER 전용**, SUPER 계정은 아무도 못 건드림. 운영자ID=SUPER. Role.authorities 로 SUPER 가 ROLE_ADMIN 포함(기존 admin 경로 통과), 계층 판단은 서비스에서. V31 은 role CHECK 를 **동적 DROP**(시스템 이름) 후 named `ck_member_role` 재생성. 승격은 신 jar 배포 후 UPDATE(구 jar 는 SUPER enum 못 읽음) | 2026-07-28 | V31 · `handoffs/2026-07-28-handoff.md` |
-| **B-13. 이메일 수집** — `member.email`(V29) 에 **채우는 경로**를 열었다. **신규 가입은 필수**(`SignupRequest @NotBlank @Email`) / 기존 회원은 `/settings` 에서 등록·변경(`PATCH /api/members/me/email`). ⚠ **DB 는 nullable 유지** — 기존 회원은 백필할 출처가 없어 NOT NULL 을 못 건다. "필수"는 API 계층 규칙이다. 저장값은 **trim+소문자 정규화**(`Member.normalizeEmail`) — Oracle UNIQUE 가 대소문자를 구분해 정규화 없이는 `A@b.com`/`a@b.com` 이 둘 다 들어간다. 중복은 `MEMBER-409E`. **확인 메일은 없다 → 저장된 주소는 미검증**(SMTP 대기). 마이그레이션 없음 | 2026-07-29 | 마이그레이션 없음 · `handoffs/2026-07-29-handoff.md` §5 |
+| **B-13. 이메일 수집** — `member.email`(V29) 에 **채우는 경로**를 열었다. **신규 가입은 필수**(`SignupRequest @NotBlank @Email`) / 기존 회원은 `/settings` 에서 등록·변경(`PATCH /api/members/me/email`). ⚠ **DB 는 nullable 유지** — 기존 회원은 백필할 출처가 없어 NOT NULL 을 못 건다. "필수"는 API 계층 규칙이다. 저장값은 **trim+소문자 정규화**(`Member.normalizeEmail`) — Oracle UNIQUE 가 대소문자를 구분해 정규화 없이는 `A@b.com`/`a@b.com` 이 둘 다 들어간다. 중복은 `MEMBER-409E`. **확인 메일은 없다 → 저장된 주소는 미검증**. ⚠ 발송 채널은 같은 날 생겼으므로(아래 B-10 완성) **이제 소유 인증이 가능해졌다** → B-14. 마이그레이션 없음 | 2026-07-29 | 마이그레이션 없음 · `handoffs/2026-07-29-handoff.md` §5 |
+| **B-10 완성 — 재설정 링크 메일 발송** — `spring-boot-starter-mail` + `global/mail/Mailer`. 발송 채널은 **로컬 메일 캐처**(Mailpit `127.0.0.1:1025`)라 밖으로 나가지 않는다. ⚠ 열거 방지 때문에 **발송 실패·이메일 없음·채널 없음을 전부 조용히 넘긴다**(예외가 올라가면 500 이 나며 아이디 존재가 드러난다). 링크 base-url 은 요청 Host 가 아니라 **설정**에서(host header injection 방지). ⚠ 운영 차단은 `application.yml` 에 **`spring.mail` 키를 두지 않는 것**으로 — "빈 기본값"은 안 막힌다(실측). 마이그레이션 없음 | 2026-07-29 | 마이그레이션 없음 · `handoffs/2026-07-29-handoff.md` §11 |
 
 > ⚠ **C-9 는 반품만.** 교환(다른 옵션·상품으로 재배송)은 "반품 + 새 주문" 이라 금액 정산이 복잡해
 > 뺐다(사용자 결정). **실결제 환불(PG)** 도 여전히 D 대기 — 지금은 적립금 환불이다.
