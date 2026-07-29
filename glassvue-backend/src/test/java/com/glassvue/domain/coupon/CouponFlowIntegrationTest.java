@@ -113,4 +113,37 @@ class CouponFlowIntegrationTest {
                         .header("Authorization", user))
                 .andExpect(status().isForbidden());
     }
+
+    /**
+     * 쿠폰 정의 목록(관리자 쿠폰 관리 화면) — 401/403/200.
+     *
+     * <p>⚠ 생성·발급(위 {@code permissions})만 덮고 <b>목록(GET)이 빠져 있었다</b>(2026-07-28 → 07-29 이월).
+     * {@code /api/admin/**} 블랭킷 규칙으로 보호되기는 하나 그게 테스트 면제 사유는 아니다(§2-4) —
+     * 규칙이 나중에 좁혀지거나 이 경로가 밖으로 나가면 <b>쿠폰 정의가 통째로 열린다</b>.
+     */
+    @Test
+    @DisplayName("쿠폰 목록(관리자) — 비로그인 401 / USER 403 / ADMIN 200 + 방금 만든 쿠폰이 최신순 첫 줄")
+    void adminList_permissionAndContent() throws Exception {
+        mockMvc.perform(get("/api/admin/coupons")).andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/admin/coupons").header("Authorization", login(userLoginId)))
+                .andExpect(status().isForbidden());
+
+        String admin = login(adminLoginId);
+        String name = "ZZ목록확인 " + UUID.randomUUID().toString().substring(0, 8);
+        mockMvc.perform(post("/api/admin/coupons").header("Authorization", admin)
+                        .contentType(JSON)
+                        .content("{\"name\":\"" + name + "\",\"discountType\":\"PERCENT\",\"discountValue\":10,"
+                               + "\"minOrderAmount\":10000,\"maxDiscountAmount\":3000,"
+                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2027-01-01T00:00:00Z\"}"))
+                .andExpect(status().isOk());
+
+        // 200 을 상태코드로만 보지 않고 "정의가 실제로 실려 오는지" 까지 본다(기본 정렬 createdAt DESC).
+        mockMvc.perform(get("/api/admin/coupons").header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].name").value(name))
+                .andExpect(jsonPath("$.data.content[0].discountType").value("PERCENT"))
+                .andExpect(jsonPath("$.data.content[0].discountValue").value(10))
+                .andExpect(jsonPath("$.data.content[0].maxDiscountAmount").value(3000));
+    }
 }
