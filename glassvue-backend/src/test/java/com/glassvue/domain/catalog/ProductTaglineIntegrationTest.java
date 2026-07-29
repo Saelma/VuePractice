@@ -99,16 +99,16 @@ class ProductTaglineIntegrationTest {
     @DisplayName("생성 시 한 줄 카피를 담으면 상세·목록 응답에 실린다")
     void createWithTagline() throws Exception {
         String token = login();
-        String id = create(token, "하루의 끝에 편안하게");
+        String id = create(token, "매일 쓰기 좋은 기본형");
 
         mockMvc.perform(get("/api/products/" + id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.tagline").value("하루의 끝에 편안하게"));
+                .andExpect(jsonPath("$.data.tagline").value("매일 쓰기 좋은 기본형"));
 
         // 목록에도 실려야 한다 — 카드가 읽는 건 목록 응답이다(상세만 되면 화면엔 안 보인다).
         mockMvc.perform(get("/api/products").param("name", "ZZP-태그상품"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].tagline").value("하루의 끝에 편안하게"));
+                .andExpect(jsonPath("$.data.content[0].tagline").value("매일 쓰기 좋은 기본형"));
     }
 
     @Test

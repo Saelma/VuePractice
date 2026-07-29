@@ -37,7 +37,7 @@ class CacheSerializationTest {
         ProductResponse p = new ProductResponse(
                 UUID.fromString("019f7d1c-e0b4-7000-8000-000000000001"),
                 "지바",
-                "하루의 끝에 편안하게",   // tagline — null 아닌 값으로 둬서 왕복에 실제로 포함시킨다(V33)
+                "매일 쓰기 좋은 기본형",   // tagline — null 아닌 값으로 둬서 왕복에 실제로 포함시킨다(V33)
                 "설명",
                 12000L,
                 39000L,   // listPrice — 정가가 있는 상태도 직렬화 왕복에 포함시킨다
@@ -82,7 +82,7 @@ class CacheSerializationTest {
         assertThat(p.createdAt()).isEqualTo(Instant.parse("2026-07-20T12:34:56Z"));
         assertThat(p.images()).hasSize(1);
         assertThat(p.images().get(0).url()).isEqualTo("/uploads/a.png");
-        assertThat(p.tagline()).isEqualTo("하루의 끝에 편안하게"); // V33 — 새 필드도 왕복에 실린다
+        assertThat(p.tagline()).isEqualTo("매일 쓰기 좋은 기본형"); // V33 — 새 필드도 왕복에 실린다
     }
 
     /**
@@ -101,7 +101,7 @@ class CacheSerializationTest {
         GenericJacksonJsonRedisSerializer serializer = serializer();
 
         String json = new String(serializer.serialize(samplePayload()), java.nio.charset.StandardCharsets.UTF_8);
-        String oldFormat = json.replace("\"tagline\":\"하루의 끝에 편안하게\",", ""); // V33 이전 모양
+        String oldFormat = json.replace("\"tagline\":\"매일 쓰기 좋은 기본형\",", ""); // V33 이전 모양
         assertThat(oldFormat).doesNotContain("tagline");
 
         Object restored = serializer.deserialize(oldFormat.getBytes(java.nio.charset.StandardCharsets.UTF_8));
