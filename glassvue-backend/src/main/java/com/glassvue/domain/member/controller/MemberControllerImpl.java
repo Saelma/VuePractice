@@ -2,6 +2,7 @@ package com.glassvue.domain.member.controller;
 
 import com.glassvue.domain.auth.dto.MemberResponse;
 import com.glassvue.domain.member.dto.EmailUpdateRequest;
+import com.glassvue.domain.member.dto.EmailVerificationRequest;
 import com.glassvue.domain.member.dto.NicknameUpdateRequest;
 import com.glassvue.domain.member.dto.PasswordUpdateRequest;
 import com.glassvue.domain.member.dto.ShippingAddressRequest;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,6 +42,23 @@ public class MemberControllerImpl implements MemberController {
             @LoginUser AuthUser user,
             @Valid @RequestBody EmailUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(memberService.changeEmail(user.id(), request.email())));
+    }
+
+    // 인증 흐름은 둘 다 **본인만**(/api/members/** 는 SecurityConfig 가 한 줄로 authenticated).
+    @Override
+    @PostMapping("/me/email/verification")
+    public ResponseEntity<ApiResponse<Void>> sendEmailVerification(@LoginUser AuthUser user) {
+        memberService.sendEmailVerification(user.id());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Override
+    @PostMapping("/me/email/verification/confirm")
+    public ResponseEntity<ApiResponse<MemberResponse>> confirmEmailVerification(
+            @LoginUser AuthUser user,
+            @Valid @RequestBody EmailVerificationRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                memberService.confirmEmailVerification(user.id(), request.code())));
     }
 
     @Override

@@ -25,6 +25,10 @@ public enum ErrorCode {
     DUPLICATE_LOGIN_ID("AUTH-409", HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다."),
     DUPLICATE_NICKNAME("MEMBER-409", HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     DUPLICATE_EMAIL("MEMBER-409E", HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
+    EMAIL_REQUIRED("MEMBER-400E", HttpStatus.BAD_REQUEST, "이메일을 먼저 등록해 주세요."),
+    EMAIL_ALREADY_VERIFIED("MEMBER-409V", HttpStatus.CONFLICT, "이미 인증된 이메일입니다."),
+    // ⚠ 만료·횟수초과·불일치를 구분하지 않는다 — 구분해 주면 남은 시도 횟수를 세어 볼 수 있다.
+    INVALID_VERIFICATION_CODE("MEMBER-400V", HttpStatus.BAD_REQUEST, "인증번호가 올바르지 않거나 만료되었습니다."),
     LOGIN_FAILED("AUTH-401", HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다."),
     UNAUTHENTICATED("AUTH-401U", HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     INVALID_TOKEN("AUTH-401T", HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 토큰입니다."),

@@ -9,6 +9,8 @@ import com.glassvue.domain.member.service.command.MemberAddressCommandService;
 import com.glassvue.domain.member.service.query.MemberAddressQueryService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.mail.Mailer;
+import com.glassvue.global.security.EmailVerificationCodeStore;
 import com.glassvue.global.security.JwtProvider;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
@@ -34,6 +36,8 @@ public class MemberService {
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklist tokenBlacklist;
     private final JwtProvider jwtProvider;
+    private final EmailVerificationCodeStore emailVerificationCodeStore;
+    private final Mailer mailer;
 
     /** 관리자 회원 id 목록 — 관리자 대상 알림(재고 부족 등)을 만들 때 쓰는 다른 도메인용 공개 API. */
     @Transactional(readOnly = true)
@@ -61,9 +65,10 @@ public class MemberService {
     /**
      * 이메일 등록·변경(B-13). 기존 회원은 값이 없어(전원 NULL) <b>이 화면이 유일한 수집 경로</b>다.
      *
-     * <p>⚠ 확인 메일을 보내지 않는다 — 발송 채널(SMTP)이 아직 없다(BACKLOG D). 그래서 지금 저장되는
-     * 주소는 <b>미검증</b>이다. 채널이 붙으면 여기에 "확인 메일 발송 → 확인 전까지 pending" 을 얹어야 한다.
-     * 그때까지는 오타를 걸러낼 방법이 형식 검증뿐이라는 걸 알고 쓴다.
+     * <p>⚠ <b>저장만 하고 확인 메일을 자동 발송하지는 않는다</b>(B-14). 인증은 사용자가 화면에서
+     * 「인증메일 보내기」를 눌러 시작한다 — 주소를 고치다 만 상태에서 메일이 나가는 걸 막고,
+     * 재발송 버튼과 경로를 하나로 유지하기 위해서다.
+     * {@link Member#updateEmail} 이 <b>인증 상태를 자동으로 푼다</b>(주소가 바뀌면 인증도 무효).
      */
     public MemberResponse changeEmail(UUID memberId, String email) {
         Member member = find(memberId);
@@ -74,6 +79,53 @@ public class MemberService {
         }
         member.updateEmail(normalized);
         log.info("Email updated: {}", memberId); // 주소 자체는 로그에 남기지 않는다(개인정보)
+        return withDefaultAddress(member);
+    }
+
+    /**
+     * 이메일 소유 인증 — 인증번호 발송 (B-14, 2026-07-29).
+     *
+     * <p>⚠ <b>이미 인증된 주소면 아무것도 하지 않는다</b> — 재발송은 코드를 새로 만들고 시도 횟수를
+     * 리셋하므로, 인증된 상태에서 부르면 얻는 것 없이 메일만 나간다.
+     *
+     * <p>⚠ 이메일이 없으면 보낼 곳이 없다 → {@code EMAIL_REQUIRED}. 여기는 <b>본인 요청</b>이라
+     * 열거 방지가 걸리지 않는다(재설정과 다르다) — 사용자에게 "먼저 이메일을 등록하라"고 알려야 한다.
+     */
+    public void sendEmailVerification(UUID memberId) {
+        Member member = find(memberId);
+        if (member.getEmail() == null) {
+            throw new BusinessException(ErrorCode.EMAIL_REQUIRED);
+        }
+        if (member.isEmailVerified()) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+        String code = emailVerificationCodeStore.issue(memberId);
+        mailer.send(member.getEmail(), "[Glassvue] 이메일 인증번호", """
+                안녕하세요, %s님.
+
+                아래 인증번호를 설정 화면에 입력해 주세요.
+
+                    %s
+
+                이 번호는 10분 후 만료되며, 5회 틀리면 폐기됩니다(다시 요청하세요).
+                본인이 요청한 것이 아니라면 이 메일을 무시하세요.
+                """.formatted(member.getNickname(), code));
+        log.info("Email verification code issued: {}", memberId); // 코드·주소는 남기지 않는다
+    }
+
+    /**
+     * 이메일 소유 인증 — 인증번호 확인 (B-14).
+     *
+     * <p>⚠ 틀린 코드는 {@code INVALID_VERIFICATION_CODE} 하나로만 답한다 — "만료됐다/횟수 초과다"를
+     * 구분해 주면 공격자가 <b>남은 시도 횟수를 세어</b> 재발송 타이밍을 맞출 수 있다.
+     */
+    public MemberResponse confirmEmailVerification(UUID memberId, String code) {
+        Member member = find(memberId);
+        if (!emailVerificationCodeStore.verify(memberId, code)) {
+            throw new BusinessException(ErrorCode.INVALID_VERIFICATION_CODE);
+        }
+        member.verifyEmail();
+        log.info("Email verified: {}", memberId);
         return withDefaultAddress(member);
     }
 

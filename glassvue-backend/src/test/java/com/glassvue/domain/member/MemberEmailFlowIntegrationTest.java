@@ -44,6 +44,8 @@ class MemberEmailFlowIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired MemberRepository memberRepository;
     @Autowired PasswordEncoder passwordEncoder;
+    // 인증번호는 메일로만 나가므로(응답에 안 실린다) 테스트는 저장소에서 직접 읽는다.
+    @Autowired org.springframework.data.redis.core.StringRedisTemplate redis;
 
     private static final String JSON = "application/json";
     private static final String PW = "password123";
@@ -77,6 +79,17 @@ class MemberEmailFlowIntegrationTest {
 
     private String body(String email) {
         return "{\"email\":\"" + email + "\"}";
+    }
+
+    /**
+     * ⚠ {@code @Transactional} 은 DB 만 롤백한다 — <b>Redis 는 안 되돌아간다</b>(WA §3 의 파일 사고와 같은 자리).
+     * 인증번호 키는 회원 id 로 묶여 있고 이 테스트의 회원은 매번 새로 만들어지므로 충돌은 없지만,
+     * 공유 Redis 에 쓰레기를 남기지 않도록 스스로 치운다.
+     */
+    @org.junit.jupiter.api.AfterEach
+    void cleanupRedis() {
+        redis.delete("auth:email-verify:" + meId);
+        redis.delete("auth:email-verify:attempt:" + meId);
     }
 
     @Test
@@ -124,6 +137,103 @@ class MemberEmailFlowIntegrationTest {
                         .contentType(JSON).content(body(shared.toUpperCase())))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("MEMBER-409E"));
+    }
+
+    // ---------- 이메일 소유 인증 (B-14, 2026-07-29) ----------
+
+    @Test
+    @DisplayName("인증: 비로그인 → 401 (발송·확인 둘 다)")
+    void verification_unauthenticated() throws Exception {
+        mockMvc.perform(post(URL + "/verification")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(URL + "/verification/confirm").contentType(JSON).content("{\"code\":\"123456\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("이메일이 없으면 인증 발송 거부 → 400 MEMBER-400E (보낼 곳이 없다)")
+    void verification_requiresEmail() throws Exception {
+        mockMvc.perform(post(URL + "/verification").header("Authorization", login(meLoginId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-400E"));
+    }
+
+    @Test
+    @DisplayName("발송 → 인증번호 확인 → emailVerified=true 로 바뀐다")
+    void verification_happyPath() throws Exception {
+        String token = login(meLoginId);
+        mockMvc.perform(patch(URL).header("Authorization", token).contentType(JSON)
+                        .content(body("verify_" + meLoginId + "@example.test")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.emailVerified").value(false)); // 등록 직후는 미인증
+
+        mockMvc.perform(post(URL + "/verification").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        // 코드는 메일로만 나가므로 테스트는 저장소에서 직접 읽는다(브라우저 검증은 Mailpit 으로).
+        String code = redis.opsForValue().get("auth:email-verify:" + meId);
+        assertThat(code).as("발송하면 인증번호가 저장돼 있어야 한다").matches("\\d{6}");
+
+        mockMvc.perform(post(URL + "/verification/confirm").header("Authorization", token)
+                        .contentType(JSON).content("{\"code\":\"" + code + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.emailVerified").value(true));
+    }
+
+    @Test
+    @DisplayName("⚠ 이메일을 바꾸면 인증이 풀린다 — 인증은 주소에 대한 것이지 회원에 대한 게 아니다")
+    void changingEmail_resetsVerification() throws Exception {
+        String token = login(meLoginId);
+        mockMvc.perform(patch(URL).header("Authorization", token).contentType(JSON)
+                        .content(body("first_" + meLoginId + "@example.test")))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(URL + "/verification").header("Authorization", token)).andExpect(status().isOk());
+        String code = redis.opsForValue().get("auth:email-verify:" + meId);
+        mockMvc.perform(post(URL + "/verification/confirm").header("Authorization", token)
+                        .contentType(JSON).content("{\"code\":\"" + code + "\"}"))
+                .andExpect(jsonPath("$.data.emailVerified").value(true));
+
+        // 다른 주소로 바꾸면 → 인증이 풀려야 한다(인증된 딱지를 물려받으면 안 된다)
+        mockMvc.perform(patch(URL).header("Authorization", token).contentType(JSON)
+                        .content(body("second_" + meLoginId + "@example.test")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.emailVerified").value(false));
+    }
+
+    @Test
+    @DisplayName("틀린 인증번호 → 400 MEMBER-400V / 형식(6자리 아님) → 400")
+    void verification_wrongCode() throws Exception {
+        String token = login(meLoginId);
+        mockMvc.perform(patch(URL).header("Authorization", token).contentType(JSON)
+                        .content(body("wrong_" + meLoginId + "@example.test"))).andExpect(status().isOk());
+        mockMvc.perform(post(URL + "/verification").header("Authorization", token)).andExpect(status().isOk());
+
+        String stored = redis.opsForValue().get("auth:email-verify:" + meId);
+        String wrong = "000000".equals(stored) ? "111111" : "000000";
+        mockMvc.perform(post(URL + "/verification/confirm").header("Authorization", token)
+                        .contentType(JSON).content("{\"code\":\"" + wrong + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-400V"));
+
+        // 6자리가 아니면 Redis 를 보기 전에 형식에서 걸린다
+        mockMvc.perform(post(URL + "/verification/confirm").header("Authorization", token)
+                        .contentType(JSON).content("{\"code\":\"12\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("이미 인증된 주소에 재발송 → 409 MEMBER-409V")
+    void verification_alreadyVerified() throws Exception {
+        String token = login(meLoginId);
+        mockMvc.perform(patch(URL).header("Authorization", token).contentType(JSON)
+                        .content(body("done_" + meLoginId + "@example.test"))).andExpect(status().isOk());
+        mockMvc.perform(post(URL + "/verification").header("Authorization", token)).andExpect(status().isOk());
+        String code = redis.opsForValue().get("auth:email-verify:" + meId);
+        mockMvc.perform(post(URL + "/verification/confirm").header("Authorization", token)
+                        .contentType(JSON).content("{\"code\":\"" + code + "\"}")).andExpect(status().isOk());
+
+        mockMvc.perform(post(URL + "/verification").header("Authorization", token))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("MEMBER-409V"));
     }
 
     @Test

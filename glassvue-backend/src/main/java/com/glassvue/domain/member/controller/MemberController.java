@@ -2,6 +2,7 @@ package com.glassvue.domain.member.controller;
 
 import com.glassvue.domain.auth.dto.MemberResponse;
 import com.glassvue.domain.member.dto.EmailUpdateRequest;
+import com.glassvue.domain.member.dto.EmailVerificationRequest;
 import com.glassvue.domain.member.dto.NicknameUpdateRequest;
 import com.glassvue.domain.member.dto.PasswordUpdateRequest;
 import com.glassvue.domain.member.dto.ShippingAddressRequest;
@@ -23,10 +24,24 @@ public interface MemberController {
 
     @Operation(summary = "이메일 등록·변경",
             description = "비밀번호 재설정 링크를 받을 주소. 기존 회원은 값이 없어 이 API 가 유일한 수집 경로다. "
-                    + "확인 메일은 아직 보내지 않으므로(SMTP 미도입) 저장된 주소는 미검증이다.")
+                    + "⚠ 저장만 하고 확인 메일을 자동 발송하지는 않는다 — 인증은 별도 API(B-14)로 사용자가 시작한다. "
+                    + "주소를 바꾸면 인증 상태가 함께 풀린다.")
     ResponseEntity<ApiResponse<MemberResponse>> changeEmail(
             @Parameter(hidden = true) AuthUser user,
             @Valid EmailUpdateRequest request);
+
+    @Operation(summary = "이메일 인증번호 발송 (B-14)",
+            description = "등록된 주소로 6자리 인증번호를 보낸다. 이미 인증됐거나 이메일이 없으면 거부한다. "
+                    + "발송 채널이 없는 환경(운영 기본)에서는 조용히 아무것도 나가지 않는다.")
+    ResponseEntity<ApiResponse<Void>> sendEmailVerification(
+            @Parameter(hidden = true) AuthUser user);
+
+    @Operation(summary = "이메일 인증번호 확인 (B-14)",
+            description = "맞으면 이메일이 인증됨으로 바뀐다. ⚠ 만료·횟수초과·불일치를 구분하지 않는다 — "
+                    + "구분해 주면 남은 시도 횟수를 세어 볼 수 있다. 5회 틀리면 코드가 폐기되어 재발송해야 한다.")
+    ResponseEntity<ApiResponse<MemberResponse>> confirmEmailVerification(
+            @Parameter(hidden = true) AuthUser user,
+            @Valid EmailVerificationRequest request);
 
     @Operation(summary = "기본 배송지 저장",
             description = "주문서에 자동으로 채워 넣기 위한 값. 주문에는 이 값을 복사(스냅샷)하므로 나중에 바꿔도 과거 주문의 배송지는 변하지 않는다.")

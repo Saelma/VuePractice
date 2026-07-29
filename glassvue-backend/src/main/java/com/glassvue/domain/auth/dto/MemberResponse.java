@@ -14,6 +14,8 @@ import java.util.UUID;
  * 저장 구조 이전과 화면 개편이 한꺼번에 얽힌다. 주소록 전체는 별도 API로 조회한다.
  */
 public record MemberResponse(UUID id, String loginId, String nickname, Role role, String email,
+                             // 이 주소의 소유가 확인됐는지(V34, B-14). 화면이 「미인증」 배지를 그린다.
+                             boolean emailVerified,
                              String shipRecipient, String shipPhone, String shipZipcode,
                              String shipAddress1, String shipAddress2) {
 
@@ -25,10 +27,10 @@ public record MemberResponse(UUID id, String loginId, String nickname, Role role
      */
     public static MemberResponse of(Member m, MemberAddress defaultAddress) {
         if (defaultAddress == null) {
-            return new MemberResponse(m.getId(), m.getLoginId(), m.getNickname(), m.getRole(), m.getEmail(),
+            return new MemberResponse(m.getId(), m.getLoginId(), m.getNickname(), m.getRole(), m.getEmail(), m.isEmailVerified(),
                     null, null, null, null, null);
         }
-        return new MemberResponse(m.getId(), m.getLoginId(), m.getNickname(), m.getRole(), m.getEmail(),
+        return new MemberResponse(m.getId(), m.getLoginId(), m.getNickname(), m.getRole(), m.getEmail(), m.isEmailVerified(),
                 defaultAddress.getRecipient(), defaultAddress.getPhone(), defaultAddress.getZipcode(),
                 defaultAddress.getAddress1(), defaultAddress.getAddress2());
     }

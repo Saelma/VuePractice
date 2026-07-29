@@ -3,7 +3,8 @@ import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { authState } from '../stores/auth';
-import { changeNickname, changeEmail, changePassword, withdraw } from '../api/member';
+import { changeNickname, changeEmail, changePassword, withdraw,
+         sendEmailVerification, confirmEmailVerification } from '../api/member';
 import AddressBook from '../components/AddressBook.vue';
 import NotificationSettings from '../components/NotificationSettings.vue';
 
@@ -61,10 +62,54 @@ async function onEmail() {
     // 서버가 소문자로 정규화하므로 입력값이 아니라 응답값을 되비춘다(예: A@B.com → a@b.com).
     email.value = me.email || '';
     email.msg = '이메일이 저장되었습니다.';
+    // ⚠ 주소가 바뀌면 서버가 인증을 푼다 — 화면의 코드 입력도 함께 접는다(옛 코드 오입력 방지).
+    verify.codeOpen = false;
+    verify.code = '';
+    verify.msg = ''; verify.err = '';
   } catch (e) {
     email.err = e.message;
   } finally {
     email.loading = false;
+  }
+}
+
+/*
+ * 이메일 소유 인증 (B-14, 2026-07-29).
+ *
+ * ⚠ **인증은 주소에 대한 것**이라, 이메일을 바꾸면 서버가 인증을 자동으로 푼다
+ * (Member.updateEmail). 그래서 저장 성공 시 여기서도 코드 입력 상태를 접는다 —
+ * 안 그러면 옛 주소로 받은 코드를 새 주소 인증에 넣는 화면이 된다.
+ */
+const verify = reactive({ codeOpen: false, code: '', msg: '', err: '', loading: false });
+
+async function onSendVerification() {
+  verify.msg = ''; verify.err = ''; verify.loading = true;
+  try {
+    await sendEmailVerification();
+    verify.codeOpen = true;
+    verify.code = '';
+    verify.msg = '인증번호를 보냈습니다. 메일함을 확인해 주세요. (10분 이내)';
+  } catch (e) {
+    verify.err = e.message;
+  } finally {
+    verify.loading = false;
+  }
+}
+
+async function onConfirmVerification() {
+  verify.msg = ''; verify.err = '';
+  if (!/^\d{6}$/.test(verify.code.trim())) { verify.err = '인증번호 6자리를 입력하세요.'; return; }
+  verify.loading = true;
+  try {
+    await confirmEmailVerification(verify.code.trim());
+    verify.codeOpen = false;
+    verify.code = '';
+    verify.msg = '이메일 인증이 완료되었습니다.';
+  } catch (e) {
+    // 서버가 사유를 구분해 주지 않는다(만료/횟수초과/불일치) — 그대로 보여준다.
+    verify.err = e.message;
+  } finally {
+    verify.loading = false;
   }
 }
 
@@ -106,12 +151,51 @@ async function onWithdraw() {
       <p v-if="email.err" class="alert-error">{{ email.err }}</p>
       <p v-if="email.msg" class="alert-success">{{ email.msg }}</p>
       <label class="field">
-        <span class="field-label">이메일</span>
+        <span class="field-label">
+          이메일
+          <!-- 인증 상태 배지 — 등록된 주소가 있을 때만 의미가 있다 -->
+          <span v-if="authState.user?.email" class="badge ml-2"
+                :class="authState.user?.emailVerified ? 'badge-success' : 'badge-warning'">
+            {{ authState.user?.emailVerified ? '인증됨' : '미인증' }}
+          </span>
+        </span>
         <DxTextBox v-model:value="email.value" mode="email" @enter-key="onEmail" />
       </label>
       <button type="button" class="btn btn-secondary self-start" :disabled="email.loading" @click="onEmail">
         {{ email.loading ? '저장 중…' : (authState.user?.email ? '이메일 변경' : '이메일 등록') }}
       </button>
+
+      <!--
+        이메일 소유 인증 (B-14). 등록됐고 아직 미인증일 때만 보인다.
+        ⚠ 인증은 **주소**에 대한 것이라 주소를 바꾸면 서버가 인증을 푼다 → 이 블록이 다시 나타난다.
+      -->
+      <div v-if="authState.user?.email && !authState.user?.emailVerified"
+           class="mt-1 flex flex-col gap-3 border-t border-line pt-4">
+        <p class="text-sm text-ink-700">
+          이 주소가 본인 것인지 아직 확인되지 않았습니다.
+          <span class="muted">오타가 있으면 비밀번호 재설정 메일이 다른 사람에게 갈 수 있습니다.</span>
+        </p>
+        <p v-if="verify.err" class="alert-error">{{ verify.err }}</p>
+        <p v-if="verify.msg" class="alert-success">{{ verify.msg }}</p>
+
+        <div v-if="verify.codeOpen" class="flex flex-wrap items-end gap-2">
+          <label class="field grow-0">
+            <span class="field-label">인증번호 6자리</span>
+            <DxTextBox v-model:value="verify.code" :max-length="6" placeholder="000000"
+                       @enter-key="onConfirmVerification" />
+          </label>
+          <button type="button" class="btn btn-primary" :disabled="verify.loading" @click="onConfirmVerification">
+            {{ verify.loading ? '확인 중…' : '확인' }}
+          </button>
+          <button type="button" class="btn btn-ghost" :disabled="verify.loading" @click="onSendVerification">
+            다시 보내기
+          </button>
+        </div>
+        <button v-else type="button" class="btn btn-secondary self-start"
+                :disabled="verify.loading" @click="onSendVerification">
+          {{ verify.loading ? '보내는 중…' : '인증메일 보내기' }}
+        </button>
+      </div>
     </div>
 
     <!-- 적립금·등급·쿠폰은 「혜택」 페이지(/benefits)로 옮겼다 — 혜택과 계정설정은 성격이 달라 분리(2026-07-28). -->

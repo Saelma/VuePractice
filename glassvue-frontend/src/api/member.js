@@ -49,6 +49,24 @@ export async function changeEmail(email) {
   return me;
 }
 
+/**
+ * 이메일 소유 인증 (B-14) — 6자리 인증번호를 등록된 주소로 보낸다.
+ * ⚠ 응답에 코드가 실리지 않는다(메일로만 나간다). dev 에서는 메일 캐처 웹 UI 로 확인한다.
+ */
+export function sendEmailVerification() {
+  return apiPost('/api/members/me/email/verification');
+}
+
+/**
+ * 인증번호 확인. 성공하면 갱신된 회원(emailVerified=true)이 오므로 스토어도 같이 갱신한다.
+ * ⚠ 실패 사유(만료/횟수초과/불일치)는 서버가 구분해 주지 않는다 — 남은 시도 횟수를 세지 못하게.
+ */
+export async function confirmEmailVerification(code) {
+  const me = await apiPost('/api/members/me/email/verification/confirm', { code });
+  setUser(me);
+  return me;
+}
+
 /** 기본 배송지 저장. 응답이 갱신된 회원이라 스토어도 같이 갱신해 주문서 자동 채움에 바로 반영된다. */
 export async function updateShippingAddress(address) {
   const me = await apiPatch('/api/members/me/shipping-address', address);

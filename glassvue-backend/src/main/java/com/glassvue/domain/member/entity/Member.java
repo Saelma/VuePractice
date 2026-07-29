@@ -43,6 +43,16 @@ public class Member extends BaseTimeEntity {
     @Column(unique = true, length = 255)
     private String email;
 
+    /**
+     * 이 주소의 <b>소유가 확인됐는지</b>(V34, 2026-07-29 B-14). 확인 메일의 인증번호를 맞혀야 true.
+     *
+     * <p>⚠ <b>인증은 "그 주소"에 대한 것이지 회원에 대한 게 아니다</b> — 주소를 바꾸면
+     * {@link #updateEmail}이 이 값을 <b>false 로 되돌린다.</b> 안 그러면 인증된 주소를 미인증 주소로
+     * 갈아끼워 "인증됨" 딱지만 물려받을 수 있다.
+     */
+    @Column(nullable = false)
+    private boolean emailVerified;
+
     // 회원 정지(B-11 후속, 2026-07-28, V30). 정지되면 로그인·토큰갱신·주문이 막힌다(관리자만 조작).
     // NUMBER(1) DEFAULT 0 — 기존 회원은 활성(false).
     @Column(nullable = false)
@@ -78,8 +88,19 @@ public class Member extends BaseTimeEntity {
         this.password = encodedPassword;
     }
 
+    /**
+     * 이메일 변경. ⚠ <b>인증 상태가 함께 풀린다</b>(B-14) — 새 주소는 아직 소유가 확인되지 않았다.
+     * 같은 값을 다시 저장하는 경우에도 푼다: 굳이 예외를 두면 "언제 유지되는지"가 규칙이 되어
+     * 나중에 어긋난다(재인증은 메일 한 통이라 비용이 작다).
+     */
     public void updateEmail(String email) {
         this.email = email;
+        this.emailVerified = false;
+    }
+
+    /** 인증번호 확인에 성공했을 때만 호출된다(MemberService). */
+    public void verifyEmail() {
+        this.emailVerified = true;
     }
 
     /**
