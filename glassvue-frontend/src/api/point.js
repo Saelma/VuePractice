@@ -16,6 +16,25 @@ export function fetchPointHistory({ page = 0, size = 20 } = {}) {
   return apiGet('/api/points/me/history', { page, size });
 }
 
+/**
+ * 등급 정책 표 — [{ grade, minPurchase, earnPercent }]. **공개**(비로그인도 조회 가능).
+ * `/api/points/me` 는 "내 등급"이라 로그인 전엔 못 쓴다. 홈의 혜택 안내가 "최대 N% 적립"을
+ * 직접 적지 않게 하려고 정책 표를 따로 받는다 — 등급을 고치면 문구도 따라 바뀐다.
+ *
+ * ⚠ 경로가 `/api/points/**` 가 아니라 `/api/policy/**` 인 이유: 앞쪽은 SecurityConfig 가 한 줄로
+ * 막는 보호 구역이라, 거기에 "이것만 공개" 예외를 넣으면 매처 순서에 의존하는 구멍이 된다.
+ * 공개 정책은 처음부터 공개인 네임스페이스에 모은다(회원별 정보는 절대 안 들어간다).
+ */
+export function fetchGrades() {
+  return apiGet('/api/policy/grades');
+}
+
+/** 정책 표에서 최고 적립률. 표가 비면 null — 화면은 그때 적립 안내를 통째로 감춘다. */
+export function maxEarnPercent(grades) {
+  const list = (grades ?? []).map((g) => g.earnPercent).filter((n) => typeof n === 'number');
+  return list.length ? Math.max(...list) : null;
+}
+
 // --- 관리자 조회 (B-11 회원 상세) — 특정 회원의 적립금·등급·이력. point 도메인이 소유해 admin 으로 노출. ---
 export function fetchAdminMemberPointAccount(memberId) {
   return apiGet(`/api/admin/points/${memberId}/account`);

@@ -15,6 +15,9 @@ export const SORT_OPTIONS = [
   { value: 'price,asc', text: '가격 낮은순' },
   { value: 'price,desc', text: '가격 높은순' },
   { value: 'avgRating,desc', text: '평점 높은순' },
+  // 평점 바로 뒤에 둔다 — 둘은 짝이다. 평점만 보면 "리뷰 1건에 별 5개"가 위로 오는데,
+  // 리뷰 많은순은 "많이 검증된 것"을 보여줘 그 왜곡을 보완한다(8fter 의 「사용후기」 정렬).
+  { value: 'reviewCount,desc', text: '리뷰 많은순' },
   { value: 'name,asc', text: '이름순' },
 ];
 

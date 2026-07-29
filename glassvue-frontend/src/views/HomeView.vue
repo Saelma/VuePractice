@@ -17,7 +17,8 @@ import { fetchProducts, hasDiscount, priceText } from '../api/product';
 import { fetchCategories } from '../api/category';
 import { fetchNotices } from '../api/notice';
 import { fetchOrders, orderStatusText, orderStatusClass } from '../api/order';
-import { fetchPointAccount, gradeText } from '../api/point';
+import { fetchPointAccount, fetchGrades, maxEarnPercent, gradeText } from '../api/point';
+import { fetchShippingPolicy } from '../api/policy';
 import { addToCart } from '../api/cart';
 import { loadCartCount } from '../stores/cart';
 import { isLoggedIn } from '../stores/auth';
@@ -39,6 +40,22 @@ const loading = ref(true);
 const pointAccount = ref(null);
 const recentOrder = ref(null);
 const reorderMsg = ref('');
+
+/*
+ * 비로그인 혜택 안내 (2026-07-29, 8fter 레퍼런스).
+ *
+ * ⚠ 만들어 둔 혜택(무료배송·적립금)을 **비로그인에게 한 번도 알리지 않고 있었다.** 혜택 허브
+ * (/benefits)는 로그인 후에만 보이고, 무료배송 안내는 장바구니에 담아야 나온다 — 즉 "담기 전에는
+ * 이유를 모르는" 구조였다. 기능이 아니라 **노출**의 문제라 화면만 고친다.
+ *
+ * ⚠ **쿠폰은 넣지 않는다.** 8fter 는 "신규가입 쿠폰팩"을 내걸지만 우리 쿠폰은 **관리자 지정 발급만**
+ * 있고 자가·자동 발급이 없다 — 가입해도 쿠폰이 안 생긴다. 없는 혜택을 광고할 수는 없다.
+ * (자동 발급을 만들면 그때 한 줄 더 붙인다. BACKLOG 「선착순 발급」과 같은 자리다.)
+ *
+ * 숫자는 전부 서버에서 받는다 — 정책을 화면에 적으면 설정만 바꿨을 때 안내가 거짓말이 된다.
+ */
+const freeThreshold = ref(null);
+const topEarnPercent = ref(null);
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
 
@@ -63,6 +80,14 @@ onMounted(async () => {
   if (notice.status === 'fulfilled') notices.value = notice.value.content;
 
   loading.value = false;
+
+  // 혜택 안내는 비로그인에게만 — 로그인 회원은 바로 아래 적립금·등급 카드가 같은 자리를 쓴다.
+  // 정책 조회가 실패하면 해당 항목만 안 뜬다(값이 null 이면 v-if 가 감춘다). 홈 본문에는 영향 없다.
+  if (!isLoggedIn.value) {
+    const [ship, grades] = await Promise.allSettled([fetchShippingPolicy(), fetchGrades()]);
+    if (ship.status === 'fulfilled') freeThreshold.value = ship.value.freeThreshold || null;
+    if (grades.status === 'fulfilled') topEarnPercent.value = maxEarnPercent(grades.value);
+  }
 
   // 개인화는 로그인 시에만. 위 섹션 로딩을 막지 않게 뒤에서 따로 받는다(실패해도 홈은 그대로).
   if (isLoggedIn.value) {
@@ -123,6 +148,31 @@ async function reorder() {
         class="mt-6 inline-flex rounded-control bg-white px-5 py-2.5 text-sm font-medium text-ink-900 transition-colors hover:bg-white/90"
       >전체 상품 보기</RouterLink>
     </div>
+
+    <!--
+      혜택 안내 (비로그인 전용). 만들어 둔 혜택을 첫 화면에서 알린다 — 담기 전에는 알 수 없던 것들.
+      무채색 원칙(DESIGN.md §2)을 지켜 배경은 캔버스, 강조는 숫자(near-black)와 CTA 하나뿐.
+      정책 조회가 둘 다 실패하면 스트립 자체가 안 뜬다(빈 껍데기를 남기지 않는다).
+    -->
+    <section
+      v-if="!isLoggedIn && (freeThreshold || topEarnPercent)"
+      class="rounded-card border border-ink-200 bg-canvas px-5 py-4"
+    >
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <ul class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-8">
+          <li v-if="freeThreshold" class="text-sm text-ink-700">
+            <strong class="tabular-nums text-ink-900">{{ priceText(freeThreshold) }}</strong> 이상 구매 시
+            <strong class="text-ink-900">무료배송</strong>
+          </li>
+          <li v-if="topEarnPercent" class="text-sm text-ink-700">
+            구매 확정 시 <strong class="tabular-nums text-ink-900">최대 {{ topEarnPercent }}%</strong> 적립금 적립
+          </li>
+        </ul>
+        <RouterLink to="/signup" class="btn btn-primary shrink-0 self-start sm:self-auto">
+          회원가입하고 혜택 받기
+        </RouterLink>
+      </div>
+    </section>
 
     <!-- 로그인 개인화 — 적립금·등급 + 최근 주문 다시 담기 (있을 때만) -->
     <section v-if="isLoggedIn && (pointAccount || recentOrder)" class="grid gap-4 sm:grid-cols-2">

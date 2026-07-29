@@ -80,6 +80,28 @@ class ProductRepositoryIntegrationTest {
     }
 
     @Test
+    @DisplayName("정렬: reviewCount 내림차순 — 리뷰 많은순이 실제로 정렬된다 (2026-07-29)")
+    void sortByReviewCount() {
+        // avgRating 테스트가 "거부되지 않음"만 보는 것과 달리, 여기선 값을 넣어 **순서**까지 본다.
+        // ⚠ 벌크 UPDATE 직후의 값은 엔티티로 읽지 않는다(ARCHITECTURE §3) — clear 로 1차 캐시를 비운다.
+        var all = productRepository.search(cond(MARK, null, null, null, null), firstPage()).getContent();
+        productRepository.updateRating(all.get(0).getId(), 4.0, 7);
+        productRepository.updateRating(all.get(1).getId(), 5.0, 1);
+        productRepository.updateRating(all.get(2).getId(), 3.0, 3);
+        entityManager.flush();
+        entityManager.clear();
+
+        var r = productRepository.search(cond(MARK, null, null, null, null),
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "reviewCount")));
+        assertThat(r.getContent()).extracting(Product::getReviewCount).containsExactly(7L, 3L, 1L);
+
+        // 평점순과 순서가 다르다는 것이 이 정렬을 연 이유다 — 별 5개 리뷰 1건이 위로 오는 왜곡을 보완한다.
+        var byRating = productRepository.search(cond(MARK, null, null, null, null),
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "avgRating")));
+        assertThat(byRating.getContent().get(0).getReviewCount()).isEqualTo(1L);
+    }
+
+    @Test
     @DisplayName("정렬: 화이트리스트 밖 필드는 거부한다(임의 컬럼 정렬 차단)")
     void sortByNotAllowedField() {
         assertThatThrownBy(() -> productRepository.search(cond(MARK, null, null, null, null),
