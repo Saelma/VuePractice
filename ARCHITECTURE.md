@@ -357,7 +357,7 @@ audit           관리자 조작 감사 이력 (append-only, 이벤트로만 유
 > `MemberAdminCommandService` 가 `actingRole`(JWT)로 가른다. SUPER 부여는 API로 불가(`CANNOT_GRANT_SUPER_ADMIN`),
 > 오직 데이터로만. **V31**은 role 의 CHECK 를 시스템 이름이라 **동적으로 찾아 DROP**(`search_condition_vc` 조회)한 뒤
 > named `ck_member_role`(USER/ADMIN/SUPER_ADMIN)로 재생성 — enum CHECK 트랩(orders.status 사고)의 정석 대응이다.
-> ⚠ 특정 계정 승격(김기현팀)은 **신 jar 배포 후** 별도 UPDATE — 구 jar 는 SUPER_ADMIN 을 enum 으로 못 읽어
+> ⚠ 특정 계정 승격(운영자ID)은 **신 jar 배포 후** 별도 UPDATE — 구 jar 는 SUPER_ADMIN 을 enum 으로 못 읽어
 > 그 회원 로딩이 깨지므로 순서가 반대면 안 된다. 프론트의 `role==='ADMIN'` 비교는 `stores/auth` 의
 > `isAdminRole`(SUPER 포함)로 모았다(흩어진 비교가 SUPER 를 관리 UI에서 배제하지 않도록).
 >

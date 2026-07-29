@@ -33,6 +33,11 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
 
   ```bash
   # 0) sqlplus는 ORACLE_HOME을 안 잡으면 SP2-0667로 죽는다
+  #
+  # ⚠ **비밀번호를 이 문서에 적지 않는다**(2026-07-29 정정). 예전엔 여기에 평문으로 적혀 있었는데,
+  #    저장소를 공개하면 그대로 나가고 **파일에서 지워도 git 히스토리에 남는다.**
+  #    그래서 값은 `.env` 의 `ESPTEST_PASSWORD` 한 곳에만 두고 여기서는 변수로만 참조한다
+  #    (DB_PASSWORD·JWT_SECRET 과 같은 취급 — infra/env.example 의 키 목록 참고).
   set -a; . /home/ecstel/work/.env; set +a
   export ORACLE_HOME=/opt/oracle/product/19c/dbhome_1
   export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH
@@ -47,7 +52,7 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
   # ⚠ 시퀀스를 빼먹지 말 것. 테이블만 지우면 V15가 만든 seq_order_no가 살아남아
   #    다음 검증에서 CREATE SEQUENCE가 ORA-00955(이미 사용 중인 이름)로 실패한다.
   #    2026-07-23 V16 검증에서 실제로 걸렸다.
-  sqlplus -s "esptest/TestPw#2026@//$DB_HOST:$DB_PORT/${DB_SERVICE:-espdb}" <<'EOF'
+  sqlplus -s "esptest/$ESPTEST_PASSWORD@//$DB_HOST:$DB_PORT/${DB_SERVICE:-espdb}" <<'EOF'
   BEGIN
     FOR t IN (SELECT table_name FROM user_tables) LOOP
       EXECUTE IMMEDIATE 'DROP TABLE "'||t.table_name||'" CASCADE CONSTRAINTS PURGE';
@@ -64,7 +69,7 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
 
   # 2) 그 계정으로 기동 (기본 DB를 안 건드리게 자격증명만 덮어쓴다)
   ./gradlew bootRun --args="--server.port=8083 --spring.profiles.active=dev \
-      --spring.datasource.username=esptest --spring.datasource.password=TestPw#2026"
+      --spring.datasource.username=esptest --spring.datasource.password=$ESPTEST_PASSWORD"
   # 로그에 V1→…→Vn이 순서대로 applied 되고 앱이 뜨면 성공(ddl-auto=validate 통과 = 엔티티와 일치).
   # 확인 후 반드시 내린다 — 8083이 떠 있으면 다음 검증이 포트 충돌로 죽는다.
   ```
@@ -72,7 +77,7 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
   > 계정이 없어졌다면 다시 만든다(DBA 필요):
   > ```sql
   > ALTER SESSION SET CONTAINER=espdb;
-  > CREATE USER esptest IDENTIFIED BY "TestPw#2026" QUOTA UNLIMITED ON USERS;
+  > CREATE USER esptest IDENTIFIED BY "<비밀번호>" QUOTA UNLIMITED ON USERS;   -- 값은 .env 의 ESPTEST_PASSWORD 와 맞춘다
   > GRANT CREATE SESSION, CREATE TABLE, CREATE SEQUENCE TO esptest;
   > ```
 
