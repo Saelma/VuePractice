@@ -32,6 +32,15 @@ spring:
       hibernate:
         default_batch_fetch_size: 100
 
+  # --- 메일 (2026-07-29, B-10 마무리) ---
+  # ⚠ **여기에 spring.mail 을 두지 않는다.** 프로퍼티가 아예 없어야 스프링이 JavaMailSender 빈을
+  #    만들지 않고, 그때만 Mailer 가 진짜 no-op 이 된다. 운영이 이 상태다.
+  #
+  #    ⚠ 처음엔 `host: ${MAIL_HOST:}` 로 뒀는데 **그건 안 막혔다** — 값이 비어도 **프로퍼티는 존재**해서
+  #    자동설정 조건(spring.mail.host 있음)이 통과하고, 빈 host 가 localhost 로 폴백해 :1025 에 붙었다.
+  #    통합 테스트가 로컬 메일 캐처로 실제 메일을 보내면서 드러났다(2026-07-29 실측).
+  #    → "기본값을 비워 둔다"와 "키를 두지 않는다"는 다르다. 발송을 켜려면 dev 처럼 **명시적으로 host 를 준다.**
+
   # --- Redis (로컬, 127.0.0.1:6379) ---
   data:
     redis:
@@ -109,6 +118,13 @@ app:
 #     CJ: "https://실제주소?wblNo={trackingNo}"
 # default-tracking-url을 빈 문자열로 두면 링크 자체를 만들지 않는다(송장번호만 표시).
 glassvue:
+  # 메일 본문에 들어갈 값들. from 은 표시용, base-url 은 재설정 링크가 가리킬 곳.
+  # ⚠ base-url 을 요청 헤더(Host)에서 만들지 않는다 — 헤더를 조작하면 공격자 서버로 가는
+  #    재설정 링크를 남에게 보내게 할 수 있다(host header injection). 그래서 설정에서 온다.
+  mail:
+    from: ${MAIL_FROM:no-reply@glassvue.local}
+    base-url: ${APP_BASE_URL:https://192.168.50.14}
+
   delivery:
     default-tracking-url: "/mock-tracking?carrier={carrier}&no={trackingNo}"
 

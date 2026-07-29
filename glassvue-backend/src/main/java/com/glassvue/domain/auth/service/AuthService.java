@@ -10,6 +10,8 @@ import com.glassvue.domain.member.repository.MemberRepository;
 import com.glassvue.domain.member.service.query.MemberAddressQueryService;
 import com.glassvue.domain.point.service.PointService;
 import com.glassvue.global.exception.BusinessException;
+import com.glassvue.global.mail.MailProperties;
+import com.glassvue.global.mail.Mailer;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProperties;
 import com.glassvue.global.security.JwtProvider;
@@ -40,6 +42,9 @@ public class AuthService {
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklist tokenBlacklist;
     private final PasswordResetTokenStore passwordResetTokenStore;
+    // 발송은 인프라라 global 어댑터를 그대로 주입한다(도메인 이벤트로 감쌀 만한 fan-out 이 아직 없다).
+    private final Mailer mailer;
+    private final MailProperties mailProperties;
 
     public MemberResponse signup(SignupRequest req) {
         if (memberRepository.existsByLoginId(req.loginId())) {
@@ -137,8 +142,42 @@ public class AuthService {
                 .map(member -> {
                     String token = passwordResetTokenStore.issue(member.getId());
                     log.info("Password reset requested: {}", member.getId());
+                    sendResetMail(member, token);
                     return token;
                 });
+    }
+
+    /**
+     * 재설정 링크를 메일로 보낸다 (2026-07-29, B-10 마무리).
+     *
+     * <p><b>⚠ 여기서 예외를 던지면 열거 방지가 깨진다.</b> 이 메서드가 실패해 500 이 나가면
+     * "그 아이디는 존재한다"가 드러난다 — 없는 아이디는 애초에 여기까지 안 오기 때문이다.
+     * 그래서 {@code Mailer} 가 실패를 삼키고, 아래 두 갈래도 <b>조용히 넘어간다</b>:
+     * <ul>
+     *   <li><b>이메일이 없는 회원</b> — B-13(2026-07-29) 이전 가입자는 {@code email} 이 null 이다.
+     *       보낼 곳이 없으니 발송만 건너뛴다. 토큰은 이미 발급됐고 응답도 그대로 200 이다.</li>
+     *   <li><b>발송 채널이 없는 환경</b> — 운영 기본 프로파일이 그렇다({@code Mailer} 가 no-op).</li>
+     * </ul>
+     *
+     * <p>⚠ <b>저장된 주소는 미검증이다</b>(B-13 — 확인 메일을 보내지 않았다). 오타가 있으면
+     * 재설정 링크가 <b>남의 주소로 간다.</b> 소유 확인을 붙이기 전까지 남는 위험이라 여기 적어 둔다.
+     */
+    private void sendResetMail(Member member, String token) {
+        if (member.getEmail() == null) {
+            log.info("Password reset mail skipped — no email on member: {}", member.getId());
+            return;
+        }
+        String link = mailProperties.baseUrl() + "/reset-password?token=" + token;
+        mailer.send(member.getEmail(), "[Glassvue] 비밀번호 재설정 안내", """
+                안녕하세요, %s님.
+
+                아래 링크에서 새 비밀번호를 설정할 수 있습니다.
+
+                %s
+
+                이 링크는 30분 후 만료되며, 한 번 사용하면 더 이상 쓸 수 없습니다.
+                본인이 요청한 것이 아니라면 이 메일을 무시하세요 — 비밀번호는 그대로 유지됩니다.
+                """.formatted(member.getNickname(), link));
     }
 
     /**

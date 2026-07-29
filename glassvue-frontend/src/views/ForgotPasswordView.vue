@@ -7,7 +7,9 @@ const form = reactive({ loginId: '' });
 const error = ref('');
 const loading = ref(false);
 const submitted = ref(false);
-// dev 전용: 발송 채널이 없어 서버가 토큰을 내려주면 화면에서 바로 링크를 보여준다.
+// dev 전용: 서버가 토큰을 내려주면 화면에서 바로 링크를 보여준다.
+// ⚠ 2026-07-29 부터 dev 는 **메일도 함께 나간다**(로컬 캐처 Mailpit → http://127.0.0.1:8025).
+//    이 블록은 캐처를 안 띄웠을 때를 위한 이중 확인 수단이라 남겨 둔다. 운영은 토큰이 비어 안 뜬다.
 const devToken = ref('');
 
 async function onSubmit() {
@@ -56,9 +58,10 @@ async function onSubmit() {
           <div class="alert-success mt-5">
             해당 아이디가 있다면 재설정 링크를 보냈습니다. 메일함을 확인해 주세요.
           </div>
-          <!-- dev 전용: 발송 채널이 없어 링크를 화면에 노출한다. 운영에서는 token이 비어 이 블록이 뜨지 않는다. -->
+          <!-- dev 전용: 메일 캐처를 안 띄웠을 때도 확인할 수 있게 링크를 화면에도 노출한다.
+               운영에서는 token 이 비어 이 블록이 뜨지 않는다. -->
           <div v-if="devToken" class="mt-4 rounded-md border border-dashed border-ink-300 p-3 text-sm">
-            <p class="muted mb-2">개발용 링크(메일 발송 대신):</p>
+            <p class="muted mb-2">개발용 링크(메일과 별개로 확인용):</p>
             <RouterLink
               :to="{ path: '/reset-password', query: { token: devToken } }"
               class="font-medium text-ink-900 underline underline-offset-2 break-all"

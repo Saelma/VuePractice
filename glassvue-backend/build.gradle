@@ -24,6 +24,11 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
+	// 메일 발송 (2026-07-29, B-10 마무리). JavaMailSender 만 제공한다 — **보낼 서버는 설정이 정한다.**
+	// spring.mail.host 가 없으면 스타터가 JavaMailSender 빈을 만들지 않고, 그때는 MailSender 가 no-op 이 된다
+	// (운영 기본 프로파일이 그 상태 = 발송 꺼짐). dev 는 로컬 메일 캐처(127.0.0.1:1025)로 보낸다.
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
+
 	// API 문서 (Swagger UI) — /swagger-ui.html
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 

@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -43,6 +44,10 @@ class AuthServiceTest {
     @Mock RefreshTokenStore refreshTokenStore;
     @Mock TokenBlacklist tokenBlacklist;
     @Mock PasswordResetTokenStore passwordResetTokenStore;
+    @Mock com.glassvue.global.mail.Mailer mailer;
+    // MailProperties 는 record 라 목이 아니라 실값을 쓴다 — 링크 조립 결과를 그대로 검증하려고.
+    @Spy com.glassvue.global.mail.MailProperties mailProperties =
+            new com.glassvue.global.mail.MailProperties("no-reply@test.local", "https://app.test");
     @InjectMocks AuthService service;
 
     private Member member() {
@@ -157,11 +162,43 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("재설정 요청: 없는 아이디 → empty, 토큰 발급 안 함(열거 방지)")
+    @DisplayName("재설정 요청: 이메일이 있으면 재설정 링크가 담긴 메일이 그 주소로 나간다 (B-10 마무리)")
+    void requestReset_sendsMail() {
+        Member m = com.glassvue.domain.member.entity.Member.builder()
+                .loginId("kim").password("ENC").nickname("김철수")
+                .role(com.glassvue.domain.member.entity.Role.USER).email("kim@test.local").build();
+        when(memberRepository.findByLoginId("kim")).thenReturn(Optional.of(m));
+        when(passwordResetTokenStore.issue(m.getId())).thenReturn("RESET-TOKEN");
+
+        service.requestPasswordReset("kim");
+
+        org.mockito.ArgumentCaptor<String> to = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.ArgumentCaptor<String> body = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(mailer).send(to.capture(), any(), body.capture());
+        assertThat(to.getValue()).isEqualTo("kim@test.local");
+        // 링크는 설정의 base-url 로 만든다(요청 Host 헤더가 아니다 — host header injection 방지)
+        assertThat(body.getValue()).contains("https://app.test/reset-password?token=RESET-TOKEN");
+    }
+
+    @Test
+    @DisplayName("⚠ 재설정 요청: 이메일이 없는 기존 회원이면 발송만 건너뛴다 — 토큰은 그대로 발급된다")
+    void requestReset_noEmail_skipsMailButStillIssues() {
+        Member m = member(); // email 없음 (B-13 이전 가입자 재현)
+        when(memberRepository.findByLoginId("kim")).thenReturn(Optional.of(m));
+        when(passwordResetTokenStore.issue(m.getId())).thenReturn("RESET-TOKEN");
+
+        assertThat(service.requestPasswordReset("kim")).contains("RESET-TOKEN");
+
+        verify(mailer, never()).send(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("재설정 요청: 없는 아이디 → empty, 토큰 발급 안 함(열거 방지) + 메일도 안 나간다")
     void requestReset_absent() {
         when(memberRepository.findByLoginId("nope")).thenReturn(Optional.empty());
         assertThat(service.requestPasswordReset("nope")).isEmpty();
         verify(passwordResetTokenStore, never()).issue(any());
+        verify(mailer, never()).send(any(), any(), any());
     }
 
     @Test
