@@ -22,6 +22,8 @@ import java.util.UUID;
 public record ProductResponse(
         UUID id,
         String name,
+        // 카드 한 줄 카피(V33). null 이면 화면이 그 줄을 감춘다 — 기존 상품은 전부 null 이다.
+        String tagline,
         String description,
         long price,
         // 정가(할인 전). null이면 할인 없음 — 할인율은 화면이 두 값에서 계산한다.
@@ -55,7 +57,7 @@ public record ProductResponse(
         boolean soldOut = p.getStatus() != ProductStatus.SELLING
                 || variants.stream().noneMatch(v -> v.getStock() > 0);
         return new ProductResponse(
-                p.getId(), p.getName(), p.getDescription(), p.getPrice(), p.getListPrice(),
+                p.getId(), p.getName(), p.getTagline(), p.getDescription(), p.getPrice(), p.getListPrice(),
                 variantResponses, totalStock, soldOut,
                 p.getStatus(), p.getCategory().getId(), p.getCategory().getName(),
                 images, p.getAvgRating(), p.getReviewCount(), p.getSoldCount(),

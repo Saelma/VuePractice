@@ -44,7 +44,7 @@ class CartServiceTest {
     private ProductResponse product(long price, long stock, ProductStatus status) {
         VariantResponse variant = new VariantResponse(variantId, "기본", 0, price, stock, stock <= 0);
         boolean soldOut = status != ProductStatus.SELLING || stock <= 0;
-        return new ProductResponse(productId, "지바", "desc", price, null,
+        return new ProductResponse(productId, "지바", null, "desc", price, null,
                 List.of(variant), stock, soldOut, status,
                 UUID.randomUUID(), "전자기기", List.of(), 0.0, 0L, 0L, null, null);
     }

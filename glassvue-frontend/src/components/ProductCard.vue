@@ -45,6 +45,13 @@ const thumbOf = (p) => (p.images && p.images.length ? p.images[0].thumbUrl : nul
       <div class="p-4">
         <p class="text-xs text-ink-500">{{ product.categoryName }}</p>
         <h3 class="mt-0.5 line-clamp-1 text-sm font-medium text-ink-900">{{ product.name }}</h3>
+        <!--
+          한 줄 카피(V33). 이름과 가격 사이 — "무엇이 좋은 상품인지"는 이름 다음에 읽혀야 한다.
+          ⚠ 없는 상품이 대부분이라(기존 전부 null) v-if 로 줄 자체를 없앤다. 빈 줄을 남기면
+          태그라인 있는 카드와 없는 카드의 높이가 달라져 그리드가 들쭉날쭉해진다.
+          line-clamp-1 — 두 줄로 넘치면 카드 높이가 흔들린다(카피가 길면 잘리는 게 맞다).
+        -->
+        <p v-if="product.tagline" class="mt-1 line-clamp-1 text-xs text-ink-500">{{ product.tagline }}</p>
         <div class="mt-2 flex items-end justify-between gap-2">
           <div class="min-w-0">
             <!-- 할인율은 이미지 뱃지로 옮겼다. 여기선 정가 취소선(위) + 판매가(아래)만. 정가 없으면 판매가만. -->

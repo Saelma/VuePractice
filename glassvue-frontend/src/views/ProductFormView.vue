@@ -15,7 +15,7 @@ const isEdit = computed(() => !!props.id);
 
 const categories = ref([]);
 // 옵션(variant): 최소 1개. 단일 옵션 상품은 이름 "기본" 한 줄이면 된다(2026-07-24 C-8).
-const form = reactive({ name: '', description: '', price: null, listPrice: null, status: 'SELLING', categoryId: null, images: [], variants: [] });
+const form = reactive({ name: '', tagline: '', description: '', price: null, listPrice: null, status: 'SELLING', categoryId: null, images: [], variants: [] });
 
 function newVariant() { return { name: '', priceDelta: 0, stock: null }; }
 function addVariant() { form.variants.push(newVariant()); }
@@ -36,7 +36,7 @@ onMounted(async () => {
     try {
       const p = await getProduct(props.id);
       Object.assign(form, {
-        name: p.name, description: p.description, price: p.price, listPrice: p.listPrice,
+        name: p.name, tagline: p.tagline || '', description: p.description, price: p.price, listPrice: p.listPrice,
         status: p.status, categoryId: p.categoryId,
       });
       form.images = p.images || [];
@@ -66,7 +66,11 @@ async function onSave() {
   saving.value = true;
   try {
     const payload = {
-      name: form.name, description: form.description, price: form.price, listPrice: form.listPrice,
+      name: form.name,
+      // 빈 문자열이 아니라 null 로 보낸다 — 빈 문자열을 저장하면 카드의 v-if 가 통과해
+      // 아무것도 없는 줄이 생긴다(높이만 차지). "없음"은 null 하나로 표현한다.
+      tagline: form.tagline.trim() || null,
+      description: form.description, price: form.price, listPrice: form.listPrice,
       status: form.status, categoryId: form.categoryId,
       imageIds: form.images.map((i) => i.id),
       variants: form.variants.map((v) => ({ name: v.name.trim(), priceDelta: v.priceDelta || 0, stock: v.stock })),
@@ -97,6 +101,11 @@ async function onSave() {
       <label class="field">
         <span class="field-label">상품명</span>
         <DxTextBox v-model:value="form.name" />
+      </label>
+      <label class="field">
+        <span class="field-label">한 줄 카피 (선택)</span>
+        <DxTextBox v-model:value="form.tagline" placeholder="목록 카드에 상품명 아래로 보입니다" :max-length="100" />
+        <span class="muted">비우면 카드에 안 보입니다. 100자까지.</span>
       </label>
       <div class="flex gap-4">
         <label class="field flex-1">

@@ -27,6 +27,18 @@ public class Product extends BaseTimeEntity {
     @Column(nullable = false, length = 200)
     private String name;
 
+    /**
+     * 목록 카드에 얹는 <b>한 줄 카피</b>(V33, 2026-07-29). null 이면 카드가 그 줄을 감춘다.
+     *
+     * <p>{@code description} 을 잘라 쓰지 않는다 — 설명은 문단이라 앞 N자를 자르면 문장이 끊긴다.
+     * "카드에 보여줄 한 줄"은 상세 설명과 <b>목적이 다른 글</b>이다.
+     *
+     * <p>⚠ length 를 명시한다. 안 주면 기본 255 로 검증돼 {@code ddl-auto=validate} 가
+     * DDL(100)과 어긋난다며 부팅을 막는다(V12 교훈 — admin_audit_log 에서 겪은 자리).
+     */
+    @Column(length = 100)
+    private String tagline;
+
     @Lob
     @Column(nullable = false)
     private String description;
@@ -77,9 +89,10 @@ public class Product extends BaseTimeEntity {
     private long soldCount;
 
     @Builder
-    private Product(String name, String description, long price, Long listPrice,
+    private Product(String name, String tagline, String description, long price, Long listPrice,
                     ProductStatus status, UUID imageGroupId, Category category) {
         this.name = name;
+        this.tagline = tagline;
         this.description = description;
         this.price = price;
         this.listPrice = listPrice;
@@ -88,9 +101,10 @@ public class Product extends BaseTimeEntity {
         this.category = category;
     }
 
-    public void update(String name, String description, long price, Long listPrice,
+    public void update(String name, String tagline, String description, long price, Long listPrice,
                        ProductStatus status, UUID imageGroupId, Category category) {
         this.name = name;
+        this.tagline = tagline;
         this.description = description;
         this.price = price;
         this.listPrice = listPrice;

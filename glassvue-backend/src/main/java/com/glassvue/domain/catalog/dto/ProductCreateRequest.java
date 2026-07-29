@@ -15,6 +15,11 @@ public record ProductCreateRequest(
         @NotBlank @Size(max = 200)
         String name,
 
+        @Schema(description = "카드에 보여줄 한 줄 카피(선택). 비우면 카드에서 그 줄이 사라진다",
+                example = "매일 쓰는 무선 키보드, 하루 종일 손이 편한")
+        @Size(max = 100)
+        String tagline,
+
         @Schema(description = "상품 설명")
         @NotBlank
         String description,

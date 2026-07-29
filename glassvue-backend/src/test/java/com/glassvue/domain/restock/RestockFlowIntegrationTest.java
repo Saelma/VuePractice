@@ -207,7 +207,7 @@ class RestockFlowIntegrationTest {
     void adminEditPublishesRestockEvent() {
         Category cat = categoryRepository.findAll().get(0);
         ProductUpdateRequest req = new ProductUpdateRequest(
-                "ZZP-품절상품" + suffix, "재입고 테스트", 10_000L, null,
+                "ZZP-품절상품" + suffix, null, "재입고 테스트", 10_000L, null,
                 ProductStatus.SELLING, cat.getId(), null,
                 List.of(new VariantRequest("기본", 0L, 7L))); // 재고 7 로 다시 채움
         productCommandService.update(productId, req);

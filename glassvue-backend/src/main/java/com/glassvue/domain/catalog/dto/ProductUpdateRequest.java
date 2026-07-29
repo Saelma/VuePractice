@@ -14,6 +14,10 @@ public record ProductUpdateRequest(
         @NotBlank @Size(max = 200)
         String name,
 
+        /** 카드에 보여줄 한 줄 카피(선택, V33). 비우면 카드에서 그 줄이 사라진다. */
+        @Size(max = 100)
+        String tagline,
+
         @NotBlank
         String description,
 

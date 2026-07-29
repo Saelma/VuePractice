@@ -49,6 +49,7 @@ public class ProductCommandService {
         UUID imageGroupId = imageService.createGroup(req.imageIds());
         Product product = Product.builder()
                 .name(req.name())
+                .tagline(req.tagline())
                 .description(req.description())
                 .price(req.price())
                 .listPrice(req.listPrice())
@@ -71,7 +72,7 @@ public class ProductCommandService {
         UUID oldGroupId = product.getImageGroupId();
         UUID imageGroupId = imageService.createGroup(req.imageIds());
         long stockBefore = variantRepository.sumStockByProduct(id); // 옵션 교체 전 총재고(재입고 판단용)
-        product.update(req.name(), req.description(), req.price(), req.listPrice(),
+        product.update(req.name(), req.tagline(), req.description(), req.price(), req.listPrice(),
                 req.status(), imageGroupId, category);
 
         // 옵션은 통째로 교체한다(delete-all + insert). 관리 화면이 옵션 전체를 다시 보내므로
