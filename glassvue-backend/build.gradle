@@ -73,6 +73,26 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+
+	// ⚠ **테스트는 운영과 다른 Redis DB 를 쓴다** (2026-07-29).
+	//
+	// 그전엔 둘이 db0 를 공유했고, 그래서 두 방향으로 새고 있었다:
+	//   ① 운영(:8080)의 조회수 플러셔가 30초마다 `notice:view:*` 를 SCAN+GETDEL 하는데,
+	//      **테스트가 만든 키까지 가져갔다.** NoticeQueryServiceIntegrationTest 가 간헐적으로
+	//      실패하던 진짜 원인이다 — @AfterEach 정리로는 못 막는다(지우는 게 다른 프로세스다).
+	//      실측: 손으로 만든 notice:view:<uuid> 키가 20초 만에 사라졌다.
+	//   ② 반대로 테스트가 운영 Redis 를 더럽혔다. 오늘 auth:reset:·auth:email-verify: 키를
+	//      손으로 치운 게 그 때문이다.
+	//
+	// systemProperty 로 주는 이유: src/test/resources/application.yml 을 만들면 main 의 것을
+	// **통째로 가린다**(datasource 설정까지 날아간다). 프로파일을 새로 파면 기본 프로파일 동작을
+	// 검증하는 테스트(MailerAutoConfigOffTest)의 전제가 바뀐다. 시스템 프로퍼티는 둘 다 피한다.
+	systemProperty 'spring.data.redis.database', '1'
+
+	// 조회수 플러셔를 사실상 끈다(24시간). 위 격리로 **운영** 플러셔는 못 건드리게 됐지만,
+	// 테스트 컨텍스트 자신의 @Scheduled 는 여전히 db1 을 SCAN+GETDEL 한다.
+	// ⚠ fixedDelay 는 컨텍스트 기동 직후 1회 실행된다 — 그건 테스트가 키를 만들기 전이라 무해하다.
+	systemProperty 'notice.view-count.flush-interval-ms', '86400000'
 }
 
 // scrimage-webp는 JVM이 시작할 때 cwebp/dwebp 바이너리(합계 6.5MB)를 java.io.tmpdir에 추출하고
