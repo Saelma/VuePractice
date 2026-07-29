@@ -42,6 +42,21 @@ sudo systemctl daemon-reload && sudo systemctl restart glassvue-backend
 
 # Oracle 서비스 drop-in (부팅 순서 보정 — 배경은 아래 6번)
 sudo mkdir -p /etc/systemd/system/oracledb_ESPDB-19c.service.d
+sudo cp infra/systemd/mailpit.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now mailpit
+```
+
+⚠ **Mailpit 은 바이너리를 먼저 받아 둬야 한다**(유닛이 `/home/ecstel/tools/mailpit/mailpit` 을 가리킨다):
+
+```bash
+mkdir -p ~/tools/mailpit && cd ~/tools/mailpit
+curl -L -o mailpit.tar.gz https://github.com/axllent/mailpit/releases/download/v1.30.6/mailpit-linux-amd64.tar.gz
+tar xzf mailpit.tar.gz && rm mailpit.tar.gz && ./mailpit version
+```
+
+**Oracle override**
+
+```bash
 sudo cp infra/systemd/oracledb_ESPDB-19c.service.d/override.conf \
         /etc/systemd/system/oracledb_ESPDB-19c.service.d/
 sudo systemctl daemon-reload

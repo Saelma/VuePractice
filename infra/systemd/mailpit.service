@@ -1,0 +1,38 @@
+[Unit]
+# 로컬 메일 캐처 (2026-07-29, B-10/B-14 개발용).
+#
+# ⚠ **개발 도구를 운영 VM 에 상주시키는 것**이라 두 가지를 의도적으로 정했다:
+#   ① 127.0.0.1 에만 바인딩한다 — LAN 에서도 안 보인다. nginx 가 프록시하지 않으므로 외부 노출 경로가 없다.
+#   ② **밖으로 메일을 보내지 않는다.** 받은 걸 붙잡아 웹 UI 로 보여줄 뿐이라, 실수로 실제 발송이 나갈 일이 없다.
+#
+# ⚠ 알아둘 부작용: Mailpit 이 상시 떠 있으면 :1025 에 **듣는 쪽이 생긴다.** 지금 운영이 메일을 안 보내는
+#    이유는 application.yml 에 spring.mail 키가 없어 JavaMailSender 빈이 아예 없기 때문인데,
+#    누군가 그 키를 되살리면 예전처럼 "연결 거부로 조용히 실패"하는 대신 **메일이 조용히 여기로 들어온다.**
+#    그 방어선은 MailerAutoConfigOffTest 가 맡는다(기본 프로파일에서 Mailer.isEnabled()==false).
+Description=Mailpit (local mail catcher, dev only)
+Documentation=https://mailpit.axllent.org/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=ecstel
+Group=ecstel
+WorkingDirectory=/home/ecstel/tools/mailpit
+# --listen = 웹 UI(:8025), --smtp = 수신 포트(:1025). 둘 다 루프백 고정.
+# --max-age 로 오래된 메일을 스스로 지운다 — 검증 잔재가 무한정 쌓이지 않게(WA §3 의 정신).
+ExecStart=/home/ecstel/tools/mailpit/mailpit \
+    --listen 127.0.0.1:8025 \
+    --smtp 127.0.0.1:1025 \
+    --max-age 7d
+Restart=on-failure
+RestartSec=5
+
+# 저장은 메모리다(-d 를 안 준다) — 재시작하면 받은 메일이 사라진다.
+# 검증용이라 보존할 이유가 없고, 개인정보가 디스크에 남지 않는 쪽이 낫다.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

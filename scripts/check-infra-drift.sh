@@ -17,6 +17,7 @@ PAIRS=(
   "infra/nginx/conf.d/glassvue.conf:/etc/nginx/conf.d/glassvue.conf"
   "infra/systemd/glassvue-backend.service:/etc/systemd/system/glassvue-backend.service"
   "infra/systemd/oracledb_ESPDB-19c.service.d/override.conf:/etc/systemd/system/oracledb_ESPDB-19c.service.d/override.conf"
+  "infra/systemd/mailpit.service:/etc/systemd/system/mailpit.service"
 )
 
 for pair in "${PAIRS[@]}"; do
