@@ -64,18 +64,14 @@ tabular-nums + Pretendard. `index.css` 한 곳으로 전 관리 그리드(회원
 - **일부 선행 완료**: 관리자 **쿠폰 관리 화면**(`/admin/coupons` 생성·목록·발급 + `GET /api/admin/coupons`)과
   고객 **혜택 허브**(`/benefits` 쿠폰함 신설)는 2026-07-28 완료(핸드오프 §13). 남은 B-12 = 회원·주문 DataGrid 개선.
 
-### B-13. 이메일 수집 (가입 폼 · 설정 화면) — 크기 소~중
+### B-13. 이메일 수집 — ✅ **완료 (2026-07-29)**
 
-**D 의 「SMTP 실발송」에서 떼어낸 앞부분이다.** `member.email` 컬럼은 V29(2026-07-28)로 이미 있는데
-**채우는 경로가 없어 전 회원 NULL** 이다. 발송 채널(SMTP)은 조건 미충족이라 D 에 남지만, **수집은
-조건 없이 지금 할 수 있다** — 그래서 D 표 안에 묻어두지 않고 B 로 꺼냈다(D 는 "조건 대기"가 정의다).
+근거: `handoffs/2026-07-29-handoff.md` §5. 아래 「완료」 표에도 넣었다.
 
-- 범위: ①회원가입 폼에 이메일 입력 ②`/settings` 에서 이메일 변경 ③형식·중복 검증(`uk_member_email`
-  이 이미 있어 DB 는 준비됨. Oracle 은 NULL 을 유니크에서 빼므로 미입력 회원과 공존 가능)
-- ⚠ **NOT NULL 로 못 바꾼다** — 기존 회원이 전부 NULL 이다. 필수로 만들려면 `nullable → 백필 →
-  NOT NULL` 3단계(WA §2-1)인데, 백필할 값이 없으므로 **선택 입력으로 둔다.**
-- 값: SMTP 가 붙는 날 "보낼 주소가 하나도 없는" 상태를 피한다. 수집은 시간이 지나야 쌓이므로
-  **먼저 시작할수록 싸다** — 발송 기능을 만든 다음 수집을 시작하면 그날 발송 대상이 0명이다.
+> ⚠ **어림과 달라진 지점을 남긴다**: 여기엔 *"선택 입력으로 둔다"* 고 적었는데 실제로는
+> **신규 가입만 필수**로 갔다(사용자 결정). 어림이 틀렸다기보다, **DB 제약과 API 규칙을 갈라 볼 수
+> 있다는 걸** 착수하며 알게 된 것이다 — 컬럼은 계속 nullable 이라 기존 회원(전원 NULL)과 공존한다.
+> 백로그를 쓸 땐 "NOT NULL 을 못 거니까 선택 입력"으로 **스키마 제약이 곧 API 규칙**이라 여겼다.
 
 ---
 
@@ -103,7 +99,7 @@ tabular-nums + Pretendard. `index.css` 한 곳으로 전 관리 그리드(회원
 | **HSTS / mkcert** | 도메인 + Let's Encrypt 도입 시. IP 접속엔 HSTS 가 애초에 무효 |
 | **리뷰 목록 캐시** | P6SPY 로 실제 병목이 측정될 때. 도구는 이미 검증됨(2026-07-23) |
 | **알림 Handler 실발송** | 임계치 재알림 스팸을 먼저 해결해야 한다 |
-| **비밀번호 재설정 링크 실발송 (SMTP)** | B-10 을 온전하게 만드는 남은 반쪽. **토큰 발급·검증·저장(Redis `auth:reset:`)은 이미 완성**이고 **`member.email` 컬럼도 V29(2026-07-28)로 선행 추가**(nullable·uk_member_email). 남은 건 ①가입/설정 폼의 **이메일 수집** ②컨트롤러의 `expose-token` 게이트(`AuthControllerImpl.requestPasswordReset`) 자리에 "토큰으로 링크 만들어 **메일 발송**". 발송 전까진 dev 노출 + 운영은 Redis 수동조회로 검증(`redis-cli --scan 'auth:reset:*'`) |
+| **비밀번호 재설정 링크 실발송 (SMTP)** | B-10 을 온전하게 만드는 남은 반쪽. **토큰 발급·검증·저장(Redis `auth:reset:`)은 완성**, **`member.email` 컬럼 V29(2026-07-28)**, **~~이메일 수집~~ 도 B-13(2026-07-29)으로 완료** — 신규 가입은 필수, 기존 회원은 `/settings`. **남은 건 발송 하나**: 컨트롤러의 `expose-token` 게이트(`AuthControllerImpl.requestPasswordReset`) 자리에 "토큰으로 링크 만들어 **메일 발송**".<br>⚠ 붙일 때 함께 볼 것 — ①**기존 회원은 email 이 여전히 null** 일 수 있다(수집은 자발적) → 발송 대상이 없을 때의 동작 ②지금 저장된 주소는 **미검증**이다(확인 메일을 안 보낸다) → "확인 메일 → 확인 전 pending" 을 얹을지. 발송 전까진 dev 노출 + 운영은 Redis 수동조회(`redis-cli --scan 'auth:reset:*'`) |
 | **`DB_PASSWORD` 강화**(현재 7자) | 도메인·외부 노출 단계에서. `.env`·DB계정·백업(Notion) 셋을 함께 맞춰야 한다 |
 | **Docker·RabbitMQ·관측 스택(Alloy/Loki/Prometheus/Grafana)·Spring Batch·OpenSearch** | MSA 단계 |
 | **선착순 한정 쿠폰 발급 (Redis 기반)** | 아래 참고 — MSA 단계 + 동시성이 실제로 생길 때 |
@@ -208,6 +204,7 @@ tabular-nums + Pretendard. `index.css` 한 곳으로 전 관리 그리드(회원
 | **회원 정지 · 역할변경** (B-11 후속) — `member.suspended`(V30, boolean) + `changeRole`. **전면 차단**: 정지 시 로그인·토큰갱신(Auth)·주문(Order 가드) 막고 refresh 토큰 삭제. **자기 자신 조작 불가**(락아웃 방지). 엔드포인트 `POST /api/admin/members/{id}/suspend·unsuspend`·`PATCH /role`. 정지=boolean(enum CHECK 트랩 회피) | 2026-07-28 | V30 · `handoffs/2026-07-28-handoff.md` |
 | **관리자 감사 로그** (회원관리 심화) — 관리자 조작(정지·해제·역할변경)을 append-only 로 남기고 **SUPER_ADMIN 만 조회**. 새 도메인 `domain/audit`: member 는 audit 을 직접 부르지 않고 `AdminActionEvent` 발행 → 리스너가 **같은 트랜잭션**에서 저장(감사 실패 시 조작도 롤백). 대상 탈퇴·개명에도 안 깨지게 이름·loginId **스냅샷**. `/api/admin/audit/**` 는 `/api/admin/**` 위에 `hasRole('SUPER_ADMIN')`. V32 순수 추가 | 2026-07-28 | V32 · `handoffs/2026-07-28-handoff.md` |
 | **최상위 관리자 SUPER_ADMIN** — 정지/역할을 계층화(엄격 분리). 일반 ADMIN 은 USER 만 정지, **역할변경·관리자 정지는 SUPER 전용**, SUPER 계정은 아무도 못 건드림. 김기현팀=SUPER. Role.authorities 로 SUPER 가 ROLE_ADMIN 포함(기존 admin 경로 통과), 계층 판단은 서비스에서. V31 은 role CHECK 를 **동적 DROP**(시스템 이름) 후 named `ck_member_role` 재생성. 승격은 신 jar 배포 후 UPDATE(구 jar 는 SUPER enum 못 읽음) | 2026-07-28 | V31 · `handoffs/2026-07-28-handoff.md` |
+| **B-13. 이메일 수집** — `member.email`(V29) 에 **채우는 경로**를 열었다. **신규 가입은 필수**(`SignupRequest @NotBlank @Email`) / 기존 회원은 `/settings` 에서 등록·변경(`PATCH /api/members/me/email`). ⚠ **DB 는 nullable 유지** — 기존 회원은 백필할 출처가 없어 NOT NULL 을 못 건다. "필수"는 API 계층 규칙이다. 저장값은 **trim+소문자 정규화**(`Member.normalizeEmail`) — Oracle UNIQUE 가 대소문자를 구분해 정규화 없이는 `A@b.com`/`a@b.com` 이 둘 다 들어간다. 중복은 `MEMBER-409E`. **확인 메일은 없다 → 저장된 주소는 미검증**(SMTP 대기). 마이그레이션 없음 | 2026-07-29 | 마이그레이션 없음 · `handoffs/2026-07-29-handoff.md` §5 |
 
 > ⚠ **C-9 는 반품만.** 교환(다른 옵션·상품으로 재배송)은 "반품 + 새 주문" 이라 금액 정산이 복잡해
 > 뺐다(사용자 결정). **실결제 환불(PG)** 도 여전히 D 대기 — 지금은 적립금 환불이다.
