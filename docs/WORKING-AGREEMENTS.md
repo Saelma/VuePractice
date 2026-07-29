@@ -351,6 +351,20 @@ Flyway 가 공유 espdb 에 적용하므로(§5), *배포하기 전에* 운영�
 - init 스크립트에서 계정을 바꿀 땐 `su`(`su_exec_t`) 말고 **`runuser`(`bin_t`)** 를 쓴다 —
   util-linux 가 init 스크립트용으로 제공하는 대체품이고 옵션(`-s`/`-c`)이 같다.
 
+#### 6-2-1. **서비스로 띄울 실행 파일을 홈 디렉터리에 두지 않는다** (2026-07-29)
+
+같은 원리의 다른 얼굴이다. 홈 아래 파일은 `user_home_t` 라벨이라 **systemd(`init_t`)가 실행 자체를 못 한다.**
+
+> **사고 (2026-07-29)**: Mailpit 을 `~/tools/mailpit/` 에 두고 유닛을 올렸더니
+> **`status=203/EXEC` + "Failed to locate executable … Permission denied"**. 파일 권한은 `-rwxr-xr-x`,
+> 소유자도 맞고, **셸에서는 잘 실행됐다**(`unconfined_t` 라서). §6-2 가 말한 "손으로는 되는데
+> 서비스만 실패"가 그대로 재현된 것이다.
+
+→ **`/opt` 아래에 둔다**(`usr_t`). 운영 jar(`/opt/glassvue-backend`)와 자리도 일관된다.
+→ 진단은 **`ls -lZ`** 한 줄이면 갈린다 — 컨텍스트가 `user_home_t` 면 이 문제다.
+   (`203/EXEC` 는 "실행조차 못 했다"는 뜻이라 애플리케이션 로그가 아예 없다 — 프로그램 문제로 착각하기 쉽다.)
+→ 옮긴 뒤 **`restorecon`** 으로 라벨을 확정한다. `chcon` 은 재라벨링 때 날아간다.
+
 ### 6-3. `systemctl start` 로 부팅 조건을 재현한다 (재부팅 불필요)
 
 `systemctl start` 는 ExecStart 를 **`init_t` 로 실행**한다 — SELinux 조건이 부팅과 같다.

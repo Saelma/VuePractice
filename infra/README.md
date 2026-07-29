@@ -46,13 +46,25 @@ sudo cp infra/systemd/mailpit.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now mailpit
 ```
 
-⚠ **Mailpit 은 바이너리를 먼저 받아 둬야 한다**(유닛이 `/home/ecstel/tools/mailpit/mailpit` 을 가리킨다):
+⚠ **Mailpit 은 바이너리를 `/opt/mailpit` 에 두고 나서 유닛을 올린다.**
 
 ```bash
+# 1) 내려받기(임시 위치는 어디든 상관없다)
 mkdir -p ~/tools/mailpit && cd ~/tools/mailpit
 curl -L -o mailpit.tar.gz https://github.com/axllent/mailpit/releases/download/v1.30.6/mailpit-linux-amd64.tar.gz
 tar xzf mailpit.tar.gz && rm mailpit.tar.gz && ./mailpit version
+
+# 2) /opt 로 옮긴다 — ⚠ 홈에 두면 SELinux 때문에 서비스가 못 뜬다(아래 설명)
+sudo mkdir -p /opt/mailpit
+sudo cp ~/tools/mailpit/mailpit /opt/mailpit/mailpit
+sudo chown root:root /opt/mailpit/mailpit && sudo chmod 755 /opt/mailpit/mailpit
+sudo restorecon -v /opt/mailpit/mailpit    # usr_t 라벨 확보
 ```
+
+> ⚠ **왜 홈이 아니라 `/opt` 인가** — SELinux 가 Enforcing 인데 홈 아래 파일은 `user_home_t` 라벨이라
+> **systemd(`init_t`)가 실행 자체를 못 한다**(`203/EXEC`, "Permission denied"). 2026-07-29 에
+> `~/tools/mailpit` 로 두고 실제로 겪었다 — **셸에서는 되는데 서비스로만 실패**하는, WA §6-2 가
+> 기록한 그 신호다. `ls -lZ` 로 컨텍스트를 보면 바로 갈린다.
 
 **Oracle override**
 
