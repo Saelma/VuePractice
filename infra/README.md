@@ -61,6 +61,12 @@ sudo chown root:root /opt/mailpit/mailpit && sudo chmod 755 /opt/mailpit/mailpit
 sudo restorecon -v /opt/mailpit/mailpit    # usr_t 라벨 확보
 ```
 
+> ⚠ **설치 전에 수동 실행분을 먼저 내린다.** 손으로 띄워 둔 Mailpit 이 살아 있으면 systemd 가 올린
+> 프로세스가 `listen tcp 127.0.0.1:1025: bind: address already in use` 로 죽는다(`status=1/FAILURE`).
+> 2026-07-29 에 실제로 겪었다 — ⚠ **그때 `curl :8025` 는 200 이었다.** 옛 프로세스가 응답한 것이라
+> "떠 있으니 됐다"로 오해하기 쉽다(WA §6-1: "지금 떠 있다"는 자동기동 성공의 증거가 아니다).
+> 확인: `ss -lntp | grep -E ':1025|:8025'` 로 **누가 쥐고 있는지**를 본다.
+>
 > ⚠ **왜 홈이 아니라 `/opt` 인가** — SELinux 가 Enforcing 인데 홈 아래 파일은 `user_home_t` 라벨이라
 > **systemd(`init_t`)가 실행 자체를 못 한다**(`203/EXEC`, "Permission denied"). 2026-07-29 에
 > `~/tools/mailpit` 로 두고 실제로 겪었다 — **셸에서는 되는데 서비스로만 실패**하는, WA §6-2 가
