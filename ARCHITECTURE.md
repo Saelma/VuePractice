@@ -454,6 +454,36 @@ Spring Boot ──(로그)──┐
 - 시각화: **Grafana** (Loki + Prometheus 데이터소스)
 - **트레이스/APM**: OTel + **Grafana Tempo**(Alloy 스택에 자연 결합 — 메트릭·로그·트레이스를 한 Grafana에)로 분산추적. 대안 **Pinpoint**(Naver OSS, 바이트코드 에이전트·서버맵 — HBase 필요로 운영 무거움, 한국 생태계 학습용). **Datadog·Jennifer는 상용/유료 → 연습 단계 제외**(업계 인지만). 에러 그루핑은 별개로 **Sentry**(§6.0)가 담당.
 
+#### LGTM 스택과의 관계 (2026-07-29 정리)
+
+**"LGTM 도입"은 새 결정이 아니라 위 스택의 다른 이름이다.** LGTM = **L**oki(로그)·**G**rafana(시각화)·
+**T**empo(트레이스)·**M**imir(메트릭). 위 그림과 대조하면 L·G·T 는 **이미 그대로 계획돼 있고**, 다른 건 M 하나다.
+
+| LGTM | 우리 계획 | 판단 |
+|---|---|---|
+| **L**oki | Loki | 동일 |
+| **G**rafana | Grafana | 동일 |
+| **T**empo | Tempo (트레이스) | 동일 |
+| **M**imir | **Prometheus** | ⚠ **Prometheus 유지.** Mimir 는 Prometheus 호환 **장기보존·수평확장 백엔드**다 — 여러 Prometheus 를 모아 클러스터로 굴릴 때 값을 한다. **단일 VM·단일 앱엔 운영 비용만 는다.** 보존기간이 모자라거나 인스턴스가 여러 대가 될 때 그때 얹는다(Prometheus → Mimir 는 remote_write 로 갈아끼우는 경로라 나중이 비싸지 않다) |
+
+→ **결론: LGTM 을 "도입"하는 게 아니라, 이미 계획된 Alloy+Loki+Prometheus+Grafana 를 실제로 깔고
+그 위에 Tempo 를 얹으면 그게 LGTM 이다.** 도입 시점도 그대로(아래 「도입 조건」).
+
+#### 상용 APM (MaxGauge · Dynatrace · Jennifer) — ❌ 이 프로젝트에선 제외
+
+셋 다 **유료 상용 라이선스**다. 개인 학습용 단일 VM 에는 도입 경로 자체가 없고(평가판은 기간 제한 +
+외부 SaaS 전송), 무엇보다 **볼 게 없는 상태에서 도구부터 까는 것**이라 Sentry 를 보류한 판단과 같다.
+
+| 도구 | 성격 | 왜 지금 아닌가 | 무료 대체 |
+|---|---|---|---|
+| **MaxGauge** (엑셈) | **DB(Oracle) 성능 모니터링** — 세션·SQL 단위 실시간 추적 | 나머지 둘과 **결이 다르다**(앱 APM 이 아니라 DB 전문). 그런데 우리 DB 부하는 **주문 수십 건 규모**라 볼 대상이 없다 | ①**P6SPY**(이미 완료, dev SQL·바인딩·실행시간) ②`v$` 뷰 직접 조회 ③**Statspack**(무료) ④Prometheus 로 뽑겠다면 `oracledb_exporter`<br>⚠ **AWR/ASH 는 무료가 아니다** — Diagnostic Pack(유료 옵션). 습관적으로 쓰기 전에 라이선스를 확인할 것 |
+| **Dynatrace** | 상용 APM (OneAgent 자동계측·AI 근본원인 분석) | 자동계측이 강점인데 그 값은 **서비스가 여러 개고 호출이 얽힐 때** 나온다. 지금은 단일 모놀리스 | **OTel + Tempo**(계획됨). 자동계측은 OTel Java Agent 로 상당부분 대체 |
+| **Jennifer** (제니퍼소프트) | 상용 APM (국산, 실시간 X-View) | 위와 같음. §7 에 이미 제외로 명시돼 있던 항목 | 동일 |
+
+→ **업계 인지 목적이면 문서로 남기는 것으로 충분하다**(취업·면접 맥락에서 이름과 역할은 여기 적혀 있다).
+실제로 깔아 볼 값이 생기는 시점은 **트래픽이 있고 서비스가 쪼개진 뒤**인데, 그때는 OTel+Tempo 가
+이미 같은 자리를 채우고 있다. **상용 도구는 회사에서 배우는 게 맞고, 여기선 OSS 로 원리를 익힌다.**
+
 ### MSA 인프라
 
 - **Docker** (→ compose → **k8s는 단일 VM엔 오버, 제외**): 서비스를 실제로 쪼갤 때 도입. 현재 VM 미설치(Redis·nginx·백엔드·Oracle 전부 systemd). 설치는 sudo라 명령만 제안.
@@ -466,6 +496,16 @@ Spring Boot ──(로그)──┐
 - **이벤트 큐: RabbitMQ** (`spring-boot-starter-amqp`)
   - 용도 예: *주문 완료 → 재고 차감 · 알림 · 포인트 적립*
   - RabbitMQ 선택 이유: exchange/queue/binding 개념이 직관적, 운영 단순, 이벤트 드리븐 학습에 적합. (Kafka는 대용량 스트리밍·이벤트소싱이 필요해지면 2차 목표. Redis Streams는 부하 우려로 제외.)
+
+#### Kafka · Kubernetes · MQTT 재검토 (2026-07-29)
+
+세 가지 모두 **이미 결정이 있거나(Kafka·k8s) 이 도메인에 자리가 없다(MQTT).** 다시 물어봤으니 근거를 갱신해 둔다.
+
+| 기술 | 현 결정 | 근거 · 뒤집히는 조건 |
+|---|---|---|
+| **Kafka** | ⏸ **2차 목표** (RabbitMQ 가 1차 — CLAUDE.md 에도 "이벤트 큐는 RabbitMQ 확정, Kafka 아님") | 둘은 **경쟁이 아니라 용도가 다르다.** 우리 이벤트는 *주문완료→알림·적립* 처럼 **작업 지시(task queue)** 라 RabbitMQ 결이다. Kafka 는 **로그·스트림을 보관하고 여러 소비자가 각자 오프셋으로 되감아 읽는** 모델이라, 값이 나오려면 ①**재처리(replay)가 필요**하거나 ②**이벤트 소싱/CDC** 를 하거나 ③초당 수천 건 스루풋이 있어야 한다. 지금 셋 다 없다.<br>→ **뒤집히는 조건**: RabbitMQ 로 먼저 쪼갠 뒤 *"그 이벤트를 다시 읽어야 한다"* 는 요구(집계 재생성·감사 재구축)가 실제로 생길 때. 순서를 지키면 **둘의 차이를 몸으로 알게 된다** — 반대로 Kafka 부터 깔면 "왜 이게 필요한가"를 영영 모른다 |
+| **Kubernetes** | ❌ **제외 유지** (§7 — 단일 VM 엔 오버, Docker compose 까지) | k8s 의 값은 **여러 노드에 스케줄링·자가치유·롤링업데이트**인데, **노드가 하나면 그 전부가 무의미**하다. compose 로 되는 일을 YAML 수백 줄로 하는 셈.<br>→ **학습 목적이라면 예외를 둘 수 있다**(사용자 결정 필요). 그때도 운영 VM 이 아니라 **별도 환경 + 경량 배포판(k3s·kind·minikube)** 으로 분리한다 — 운영을 실험대에 올리지 않는다. **선행 조건은 Docker 화**(이미지가 없으면 k8s 에 올릴 게 없다) |
+| **MQTT** | ❌ **도입 안 함** (신규 판단) | MQTT 는 **저대역폭·불안정 네트워크의 IoT 디바이스**용 경량 pub/sub 프로토콜이다(센서·차량·모바일 텔레메트리). **이커머스 백오피스엔 대응하는 문제가 없다.**<br>비슷해 보이는 자리는 둘인데 **이미 답이 있다**: ①실시간 푸시 → **SSE 완료**(§6.0 인앱 알림, nginx 버퍼링까지 해결) ②서비스 간 메시징 → **RabbitMQ**(같은 브로커가 MQTT 플러그인도 지원하지만, 프로토콜을 늘릴 이유가 없다).<br>→ **뒤집히는 조건**: 실제 디바이스(키오스크·POS·배송 단말)가 붙을 때. 그 전엔 프로토콜만 늘고 얻는 게 없다 |
 
 ### 도입 조건 (언제 넣는가)
 
@@ -480,8 +520,12 @@ Spring Boot ──(로그)──┐
 | Docker | 첫 서비스 분리를 시작할 때 (k8s 제외, compose까지) |
 | 컨테이너 모니터링 (Portainer/ctop + cAdvisor→Grafana) | Docker 전환과 세트. Docker Desktop은 서버엔 제외 |
 | RabbitMQ | 서비스가 2개 이상으로 쪼개져 서비스 간 비동기 이벤트가 필요할 때 |
-| Alloy + Loki + Prometheus + Grafana | 운영 관측이 필요해지는 시점 (이커머스 진입 무렵) |
-| 트레이싱/APM (OTel+Tempo, 대안 Pinpoint) | MSA로 서비스 간 호출 추적이 필요할 때. Datadog·Jennifer는 유료로 제외 |
+| Alloy + Loki + Prometheus + Grafana | 운영 관측이 필요해지는 시점 (이커머스 진입 무렵). **= LGTM 의 L·G·M 자리** — 별도 스택이 아니다 |
+| 트레이싱/APM (OTel+Tempo, 대안 Pinpoint) | MSA로 서비스 간 호출 추적이 필요할 때. **= LGTM 의 T**. Datadog·Jennifer·**Dynatrace·MaxGauge 는 유료로 제외**(§관측 「상용 APM」) |
+| **Mimir** (메트릭 장기저장) | Prometheus 보존기간이 모자라거나 **인스턴스가 여러 대**가 될 때. remote_write 로 나중에 갈아끼움 |
+| **Kafka** | RabbitMQ 로 먼저 쪼갠 뒤 **replay·이벤트소싱·CDC** 요구가 실제로 생길 때 (2차 목표) |
+| **Kubernetes** (k3s/kind) | ❌ 운영엔 제외. **학습 목적일 때만** 별도 환경에서, **Docker 화 이후** |
+| **MQTT** | ❌ 도입 안 함. 실제 IoT 디바이스(키오스크·POS·배송 단말)가 붙을 때만 |
 | OpenSearch (상품 검색 고도화) | QueryDSL/Oracle 검색이 부족해질 때 — 한글 형태소 분석·오타 보정·관련도 랭킹·패싯 집계, 대용량 상품. **로그용 아님(로그는 Loki)** |
 
 ---
@@ -494,7 +538,9 @@ Spring Boot ──(로그)──┐
 - 레이어 단위 패키지 ❌ — 도메인 단위
 - 모노레포 단계에서 Docker·RabbitMQ·관측 스택 설치 ❌ — 로드맵
 - OpenSearch 지금 도입 ❌ — 검색은 QueryDSL+Oracle로 충분. 상품 검색 고도화 단계의 로드맵
-- Kubernetes ❌ — 단일 VM엔 오버엔지니어링. Docker compose까지만
+- Kubernetes ❌ — 단일 VM엔 오버엔지니어링. Docker compose까지만 (학습 목적 예외는 §6 「Kafka·Kubernetes·MQTT 재검토」)
 - 서버에 Docker Desktop ❌ — 워크스테이션용. 서버는 Docker Engine 직접
-- Datadog·Jennifer ❌ — 상용/유료. 에러추적은 Sentry, 트레이싱은 OTel+Tempo/Pinpoint
+- **Datadog·Jennifer·Dynatrace·MaxGauge ❌** — 전부 상용/유료. 에러추적은 Sentry, 트레이싱은 OTel+Tempo/Pinpoint, DB는 P6SPY·Statspack (⚠ AWR/ASH도 Diagnostic Pack 유료 옵션)
+- **MQTT ❌** — IoT 프로토콜이라 이커머스에 대응 문제가 없다. 실시간 푸시는 SSE(완료), 서비스 간은 RabbitMQ
+- **Kafka 지금 도입 ❌** — RabbitMQ가 1차. replay·이벤트소싱 요구가 생기면 2차 목표
 - Spring Batch 지금 도입 ❌ — 대량·재시작 배치 작업 생길 때. 지금은 `@Scheduled`로 충분
