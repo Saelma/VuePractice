@@ -146,6 +146,34 @@ pnpm install
 pnpm dev                       # http://localhost:3000
 ```
 
+### 메일 흐름을 브라우저로 보기 (비밀번호 재설정 · 이메일 인증)
+
+⚠ **운영(`:8080`)은 메일을 보내지 않는다** — `application.yml` 에 `spring.mail` 키가 없어
+`JavaMailSender` 빈이 아예 없다. 메일이 나가는 건 **dev 프로파일뿐**이다.
+
+```bash
+# 1) 메일 캐처 확인(부팅 시 자동 기동 — 꺼져 있으면 systemctl start mailpit)
+systemctl is-active mailpit && curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8025/
+
+# 2) dev 백엔드를 운영과 겹치지 않는 포트로 (운영은 그대로 둔다)
+cd glassvue-backend
+set -a; . /path/to/.env; set +a
+./gradlew bootRun --args="--server.port=8084 --spring.profiles.active=dev"
+
+# 3) 프론트 dev 서버를 그 백엔드로 붙인다
+cd glassvue-frontend
+API_TARGET=http://127.0.0.1:8084 pnpm dev     # http://localhost:3000
+```
+
+그 뒤 브라우저에서 **`http://localhost:3000`** 으로 흐름을 밟고, 나간 메일은
+**`http://127.0.0.1:8025`**(Mailpit 웹 UI)에서 본다.
+
+> ⚠ **서버 밖(개발 PC)에서 볼 때**는 Mailpit 이 루프백에만 바인딩돼 있어 바로 못 연다. SSH 로 끌어온다:
+> ```bash
+> ssh -L 8025:127.0.0.1:8025 -L 3000:127.0.0.1:3000 ecstel@<서버IP>
+> ```
+> 이후 개발 PC 브라우저에서 `http://localhost:3000`(화면)·`http://localhost:8025`(메일함).
+
 ### 테스트
 
 ```bash
