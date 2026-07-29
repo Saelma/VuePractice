@@ -177,6 +177,15 @@ Flyway 가 공유 espdb 에 적용하므로(§5), *배포하기 전에* 운영�
       python3 -c "import glob,xml.etree.ElementTree as ET;
       print(sum(int(ET.parse(p).getroot().get('skipped')) for p in glob.glob('build/test-results/test/*.xml')))"
       ```
+- [ ] **테스트는 운영과 다른 Redis DB 를 쓴다**(`spring.data.redis.database`, build.gradle 의 systemProperty).
+      > **사고 (2026-07-29)**: 조회수 통합 테스트가 몇 날 며칠 간헐 실패했다. 이월 메모에는 *"테스트마다
+      > Redis 키 clear 로 고칠 수 있다"* 고 적혀 있었지만 **그 테스트엔 이미 `@AfterEach` 정리가 있었다.**
+      > 진짜 원인은 **운영(:8080)의 조회수 플러셔**가 30초마다 `notice:view:*` 를 SCAN+GETDEL 하면서
+      > **테스트가 만든 키까지 가져간 것**이었다 — 지우는 게 다른 프로세스라 테스트가 뭘 해도 못 막는다.
+      > (실측: 손으로 만든 키가 db0 에서 20초 만에 사라졌고, db1 에서는 40초 뒤에도 남았다.)
+      → **DB 롤백이 지켜 주는 건 DB 뿐이다.** Redis·파일처럼 트랜잭션 밖에 있는 것은
+      **정리가 아니라 격리**로 다룬다 — 정리는 "내가 만든 것"만 되돌리지만, 격리는 **남이 건드리는 것**도 막는다.
+      → 부수효과로 **반대 방향 오염도 사라진다**(테스트가 운영 Redis 에 토큰을 남기던 것).
 - [ ] **HTTP 계약을 바꿨으면 `Order.create` 같은 코드 호출부만 찾지 말고 E2E의 요청도 고친다.**
       > 컴파일러가 안 잡아주는 호출부다 — `mockMvc.perform(post("/api/orders"))`는 grep에도 안 걸린다.
 
