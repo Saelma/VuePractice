@@ -74,10 +74,11 @@ public class AuthControllerImpl implements AuthController {
     @Override
     @PostMapping("/password-reset/request")
     public ResponseEntity<ApiResponse<PasswordResetResponse>> requestPasswordReset(
-            @Valid @RequestBody PasswordResetRequest request) {
+            @Valid @RequestBody PasswordResetRequest request, HttpServletRequest httpRequest) {
         // 열거 공격 방지 — 아이디 존재 여부와 무관하게 항상 200.
         // 토큰은 발송 채널이 없는 dev에서만 응답에 실어 화면에서 링크를 확인한다(운영은 항상 null).
-        String token = authService.requestPasswordReset(request.loginId()).orElse(null);
+        String token = authService.requestPasswordReset(
+                request.loginId(), ClientIpResolver.resolve(httpRequest)).orElse(null);
         String exposed = passwordResetProperties.exposeToken() ? token : null;
         return ResponseEntity.ok(ApiResponse.ok(PasswordResetResponse.of(exposed)));
     }

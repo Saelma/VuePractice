@@ -3,7 +3,6 @@ package com.glassvue.global.security;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
@@ -42,18 +41,19 @@ public class LoginAttemptGuard {
     private static final int IP_MAX_FAILURES = 20;
     private static final int WINDOW_MINUTES = 10;
 
-    private final StringRedisTemplate redis;
+    private final AttemptCounter counter;
 
     /** 차단 상태면 true. 로그인 처리 <b>맨 앞</b>에서 부른다(DB 조회 전 — 존재 여부를 안 건드린다). */
     public boolean isBlocked(String loginId, String clientIp) {
-        return count(ID_PREFIX + normalize(loginId)) >= ID_MAX_FAILURES
-                || count(IP_PREFIX + clientIp) >= IP_MAX_FAILURES;
+        return counter.get(ID_PREFIX + normalize(loginId)) >= ID_MAX_FAILURES
+                || counter.get(IP_PREFIX + clientIp) >= IP_MAX_FAILURES;
     }
 
     /** 로그인 실패를 기록한다(아이디·IP 양쪽). */
     public void recordFailure(String loginId, String clientIp) {
-        long idFails = increment(ID_PREFIX + normalize(loginId));
-        long ipFails = increment(IP_PREFIX + clientIp);
+        Duration window = Duration.ofMinutes(WINDOW_MINUTES);
+        long idFails = counter.increment(ID_PREFIX + normalize(loginId), window);
+        long ipFails = counter.increment(IP_PREFIX + clientIp, window);
         if (idFails == ID_MAX_FAILURES || ipFails == IP_MAX_FAILURES) {
             // 임계값에 닿은 순간만 남긴다 — 매 실패를 warn 으로 남기면 로그가 공격자에게 도배된다.
             // ⚠ 아이디는 남기고 비밀번호는 절대 남기지 않는다(로그가 자격증명 저장소가 되면 안 된다).
@@ -64,22 +64,7 @@ public class LoginAttemptGuard {
 
     /** 로그인 성공 — <b>아이디 카운터만</b> 지운다(위 클래스 주석의 IP 예산 리셋 문제). */
     public void recordSuccess(String loginId) {
-        redis.delete(ID_PREFIX + normalize(loginId));
-    }
-
-    private long count(String key) {
-        String value = redis.opsForValue().get(key);
-        return value == null ? 0L : Long.parseLong(value);
-    }
-
-    private long increment(String key) {
-        Long value = redis.opsForValue().increment(key);
-        if (value != null && value == 1L) {
-            // 첫 실패에만 TTL 을 건다 — 매번 걸면 시도할 때마다 창이 밀려 영구 차단이 된다.
-            // (인증번호 시도 카운터와 같은 방식 — 안 걸면 반대로 카운터가 영원히 남는다.)
-            redis.expire(key, Duration.ofMinutes(WINDOW_MINUTES));
-        }
-        return value == null ? 0L : value;
+        counter.clear(ID_PREFIX + normalize(loginId));
     }
 
     /**

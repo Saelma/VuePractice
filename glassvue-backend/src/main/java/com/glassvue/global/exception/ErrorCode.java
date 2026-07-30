@@ -46,6 +46,13 @@ public enum ErrorCode {
             "너무 흔한 비밀번호입니다. 다른 값을 사용해 주세요."),
     WEAK_PASSWORD_CONTAINS_ID("AUTH-400P3", HttpStatus.BAD_REQUEST,
             "비밀번호에 아이디나 닉네임을 포함할 수 없습니다."),
+    /**
+     * 재설정 요청 과다 (2026-07-30). ⚠ 이 경로는 <b>열거 방지가 존재 이유</b>인 자리다 — 그래서
+     * 카운트를 DB 조회 전, 입력된 아이디 그대로 해서 <b>없는 아이디도 똑같이 잠기게</b> 한다
+     * (그러지 않으면 429 가 "그 계정은 있다" 는 신호가 되어 제한을 붙이면서 목적을 깨뜨린다).
+     */
+    TOO_MANY_RESET_REQUESTS("AUTH-429R", HttpStatus.TOO_MANY_REQUESTS,
+            "재설정 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
     UNAUTHENTICATED("AUTH-401U", HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     INVALID_TOKEN("AUTH-401T", HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 토큰입니다."),
     PASSWORD_MISMATCH("AUTH-400P", HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),

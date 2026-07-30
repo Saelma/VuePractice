@@ -19,6 +19,7 @@ import com.glassvue.global.security.JwtProperties;
 import com.glassvue.global.security.JwtProvider;
 import com.glassvue.global.security.PasswordResetTokenStore;
 import com.glassvue.global.security.PasswordPolicy;
+import com.glassvue.global.security.PasswordResetRequestGuard;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
 import com.glassvue.global.security.LoginAttemptGuard;
@@ -49,6 +50,7 @@ class AuthServiceTest {
     @Mock TokenRevocationStore tokenRevocationStore;
     @Mock LoginAttemptGuard loginAttemptGuard;
     @Mock PasswordPolicy passwordPolicy; // 규칙은 PasswordPolicyTest·API 통합테스트가 본다
+    @Mock PasswordResetRequestGuard resetRequestGuard;
     @Mock PasswordResetTokenStore passwordResetTokenStore;
     @Mock com.glassvue.global.mail.Mailer mailer;
     // MailProperties 는 record 라 목이 아니라 실값을 쓴다 — 링크 조립 결과를 그대로 검증하려고.
@@ -165,7 +167,7 @@ class AuthServiceTest {
         Member m = member();
         when(memberRepository.findByLoginId("kim")).thenReturn(Optional.of(m));
         when(passwordResetTokenStore.issue(m.getId())).thenReturn("RESET-TOKEN");
-        assertThat(service.requestPasswordReset("kim")).contains("RESET-TOKEN");
+        assertThat(service.requestPasswordReset("kim", IP)).contains("RESET-TOKEN");
         verify(passwordResetTokenStore).issue(m.getId());
     }
 
@@ -178,7 +180,7 @@ class AuthServiceTest {
         when(memberRepository.findByLoginId("kim")).thenReturn(Optional.of(m));
         when(passwordResetTokenStore.issue(m.getId())).thenReturn("RESET-TOKEN");
 
-        service.requestPasswordReset("kim");
+        service.requestPasswordReset("kim", IP);
 
         org.mockito.ArgumentCaptor<String> to = org.mockito.ArgumentCaptor.forClass(String.class);
         org.mockito.ArgumentCaptor<String> body = org.mockito.ArgumentCaptor.forClass(String.class);
@@ -195,7 +197,7 @@ class AuthServiceTest {
         when(memberRepository.findByLoginId("kim")).thenReturn(Optional.of(m));
         when(passwordResetTokenStore.issue(m.getId())).thenReturn("RESET-TOKEN");
 
-        assertThat(service.requestPasswordReset("kim")).contains("RESET-TOKEN");
+        assertThat(service.requestPasswordReset("kim", IP)).contains("RESET-TOKEN");
 
         verify(mailer, never()).send(any(), any(), any());
     }
@@ -204,7 +206,7 @@ class AuthServiceTest {
     @DisplayName("재설정 요청: 없는 아이디 → empty, 토큰 발급 안 함(열거 방지) + 메일도 안 나간다")
     void requestReset_absent() {
         when(memberRepository.findByLoginId("nope")).thenReturn(Optional.empty());
-        assertThat(service.requestPasswordReset("nope")).isEmpty();
+        assertThat(service.requestPasswordReset("nope", IP)).isEmpty();
         verify(passwordResetTokenStore, never()).issue(any());
         verify(mailer, never()).send(any(), any(), any());
     }

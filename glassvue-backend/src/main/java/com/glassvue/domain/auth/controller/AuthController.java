@@ -39,7 +39,9 @@ public interface AuthController {
     ResponseEntity<ApiResponse<MemberResponse>> me(@Parameter(hidden = true) AuthUser user);
 
     @Operation(summary = "비밀번호 재설정 요청 (아이디로 재설정 링크 발급)")
-    ResponseEntity<ApiResponse<PasswordResetResponse>> requestPasswordReset(@Valid PasswordResetRequest request);
+    ResponseEntity<ApiResponse<PasswordResetResponse>> requestPasswordReset(
+            @Valid PasswordResetRequest request,
+            @io.swagger.v3.oas.annotations.Parameter(hidden = true) jakarta.servlet.http.HttpServletRequest httpRequest);
 
     @Operation(summary = "비밀번호 재설정 확정 (토큰 + 새 비밀번호)")
     ResponseEntity<ApiResponse<Void>> confirmPasswordReset(@Valid PasswordResetConfirmRequest request);

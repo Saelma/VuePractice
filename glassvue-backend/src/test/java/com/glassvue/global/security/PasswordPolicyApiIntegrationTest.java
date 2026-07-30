@@ -138,7 +138,7 @@ class PasswordPolicyApiIntegrationTest {
     @Test
     @DisplayName("재설정 확정: 정책 위반이면 400 — ⚠ 그때 토큰은 이미 소비된다")
     void confirmPasswordReset_appliesPolicy() throws Exception {
-        String token = authService.requestPasswordReset(loginId).orElseThrow();
+        String token = authService.requestPasswordReset(loginId, "203.0.113.12").orElseThrow();
 
         mockMvc.perform(post("/api/auth/password-reset/confirm").contentType(JSON_TYPE)
                         .content("{\"token\":\"" + token + "\",\"newPassword\":\"" + LEGACY + "\"}"))
@@ -153,7 +153,7 @@ class PasswordPolicyApiIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("AUTH-400R"));
 
         // 새로 받은 토큰으로는 정상 값이 통한다
-        String fresh = authService.requestPasswordReset(loginId).orElseThrow();
+        String fresh = authService.requestPasswordReset(loginId, "203.0.113.12").orElseThrow();
         mockMvc.perform(post("/api/auth/password-reset/confirm").contentType(JSON_TYPE)
                         .content("{\"token\":\"" + fresh + "\",\"newPassword\":\"" + STRONG + "\"}"))
                 .andExpect(status().isOk());

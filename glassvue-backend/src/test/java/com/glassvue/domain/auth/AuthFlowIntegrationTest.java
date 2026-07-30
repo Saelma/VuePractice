@@ -87,7 +87,7 @@ class AuthFlowIntegrationTest {
                 .andExpect(status().isCreated());
 
         // 2) 재설정 토큰 발급(서비스로 직접 — 응답 노출은 dev만)
-        String token = authService.requestPasswordReset(loginId).orElseThrow();
+        String token = authService.requestPasswordReset(loginId, "203.0.113.11").orElseThrow();
 
         // 3) confirm 엔드포인트로 새 비번 설정
         mockMvc.perform(post("/api/auth/password-reset/confirm").contentType(JSON).content(

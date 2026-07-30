@@ -17,6 +17,7 @@ import com.glassvue.global.security.JwtProperties;
 import com.glassvue.global.security.JwtProvider;
 import com.glassvue.global.security.LoginAttemptGuard;
 import com.glassvue.global.security.PasswordPolicy;
+import com.glassvue.global.security.PasswordResetRequestGuard;
 import com.glassvue.global.security.PasswordResetTokenStore;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
@@ -47,6 +48,7 @@ public class AuthService {
     private final TokenRevocationStore tokenRevocationStore;
     private final LoginAttemptGuard loginAttemptGuard;
     private final PasswordPolicy passwordPolicy;
+    private final PasswordResetRequestGuard resetRequestGuard;
     private final PasswordResetTokenStore passwordResetTokenStore;
     // 발송은 인프라라 global 어댑터를 그대로 주입한다(도메인 이벤트로 감쌀 만한 fan-out 이 아직 없다).
     private final Mailer mailer;
@@ -158,7 +160,14 @@ public class AuthService {
      *
      * @return 발급된 토큰(대상 회원이 있을 때만), 없으면 empty
      */
-    public Optional<String> requestPasswordReset(String loginId) {
+    public Optional<String> requestPasswordReset(String loginId, String clientIp) {
+        // ⚠ 제한 검사·기록은 **회원 조회 전**이다(로그인 가드와 같은 규칙). 조회 뒤에 두면 없는 아이디는
+        // 세어지지 않아 카운터가 존재하는 계정에만 쌓이고, 그러면 429 가 계정 존재를 알려주는 신호가 된다
+        // — 이 경로는 열거 방지가 존재 이유라 특히 앞뒤가 안 맞는다.
+        if (resetRequestGuard.isBlocked(loginId, clientIp)) {
+            throw new BusinessException(ErrorCode.TOO_MANY_RESET_REQUESTS);
+        }
+        resetRequestGuard.record(loginId, clientIp);
         return memberRepository.findByLoginId(loginId)
                 .map(member -> {
                     String token = passwordResetTokenStore.issue(member.getId());
