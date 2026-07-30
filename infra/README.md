@@ -124,7 +124,8 @@ ss -lntp | grep -E ':1025|:8025'                                    # 누가 쥐
 
 서버 밖(개발 PC)에서 웹 UI 를 보려면:
 ```bash
-ssh -L 8025:127.0.0.1:8025 ecstel@192.168.50.14   # 이후 브라우저에서 http://localhost:8025
+# ⚠ 서버 IP 로 접속하지 않는다 — VM 이 NAT 라 호스트 포트포워딩(127.0.0.1:2222 → VM :22)으로 들어간다.
+ssh -L 8025:127.0.0.1:8025 -p 2222 ecstel@127.0.0.1   # 이후 브라우저에서 http://localhost:8025
 ```
 
 ## 드리프트 확인
@@ -145,13 +146,17 @@ ssh -L 8025:127.0.0.1:8025 ecstel@192.168.50.14   # 이후 브라우저에서 ht
 ## TLS 인증서 재발급
 
 self-signed 라 **서버 IP 가 바뀌면 SAN 이 어긋난다**(2026-07-22 에 실제로 발생).
-IP 를 정적으로 고정해 재발은 막았지만, 다시 바꿔야 하면:
+⚠ 그때 *"IP 를 정적으로 고정해 재발은 막았다"* 고 적었는데 **2026-07-30 에 또 바뀌었다**(어댑터가 NAT 대역
+→ `10.0.2.15`). 그래도 **재발급하지 않았다** — SAN 에 `IP:127.0.0.1`·`DNS:localhost` 가 함께 있어서
+호스트 포트포워딩으로 `https://localhost/` 로 들어가면 이름이 맞는다. **살아남은 건 IP 가 아니라 DNS·루프백 항목이다.**
+
+다시 발급해야 하면 — **IP 항목에 기대지 말고 DNS 로 잡는다**:
 
 ```bash
 openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
   -keyout glassvue.key -out glassvue.crt \
   -subj "/C=KR/O=Glassvue/CN=glassvue.local" \
-  -addext "subjectAltName=IP:192.168.50.14,IP:127.0.0.1,DNS:localhost,DNS:glassvue.local"
+  -addext "subjectAltName=IP:127.0.0.1,DNS:localhost,DNS:glassvue.local"   # 서버 IP 는 넣지 않는다
 
 sudo cp glassvue.crt glassvue.key /etc/nginx/ssl/
 sudo /usr/local/sbin/nginx -t && sudo systemctl reload nginx
@@ -160,7 +165,8 @@ sudo /usr/local/sbin/nginx -t && sudo systemctl reload nginx
 검증은 **`-k` 를 빼고** 한다 — `-k` 로는 SAN 이 맞는지 알 수 없다.
 
 ```bash
-curl --cacert glassvue.crt https://192.168.50.14/api/products   # 200 이어야 한다
+curl --cacert glassvue.crt https://127.0.0.1/api/products   # 200 이어야 한다 (서버 안에서)
+# 호스트에서는: curl --cacert glassvue.crt https://localhost/api/products
 ```
 
 ## 서버를 처음부터 세울 때 빠지는 것
