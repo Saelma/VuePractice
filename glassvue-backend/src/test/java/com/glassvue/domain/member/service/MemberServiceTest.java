@@ -16,6 +16,7 @@ import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProvider;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
+import com.glassvue.global.security.TokenRevocationStore;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -36,6 +37,7 @@ class MemberServiceTest {
     @Mock PasswordEncoder passwordEncoder;
     @Mock RefreshTokenStore refreshTokenStore;
     @Mock TokenBlacklist tokenBlacklist;
+    @Mock TokenRevocationStore tokenRevocationStore;
     @Mock JwtProvider jwtProvider;
     @InjectMocks MemberService service;
 

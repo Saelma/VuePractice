@@ -16,6 +16,7 @@ import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.security.RefreshTokenStore;
+import com.glassvue.global.security.TokenRevocationStore;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +33,7 @@ class MemberAdminCommandServiceTest {
 
     @Mock MemberRepository memberRepository;
     @Mock RefreshTokenStore refreshTokenStore;
+    @Mock TokenRevocationStore tokenRevocationStore;
     @Mock ApplicationEventPublisher eventPublisher;
     @InjectMocks MemberAdminCommandService service;
 

@@ -18,6 +18,7 @@ import com.glassvue.global.security.JwtProvider;
 import com.glassvue.global.security.PasswordResetTokenStore;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
+import com.glassvue.global.security.TokenRevocationStore;
 import io.jsonwebtoken.Claims;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +42,7 @@ public class AuthService {
     private final JwtProperties jwtProperties;
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklist tokenBlacklist;
+    private final TokenRevocationStore tokenRevocationStore;
     private final PasswordResetTokenStore passwordResetTokenStore;
     // 발송은 인프라라 global 어댑터를 그대로 주입한다(도메인 이벤트로 감쌀 만한 fan-out 이 아직 없다).
     private final Mailer mailer;
@@ -193,6 +195,9 @@ public class AuthService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_RESET_TOKEN));
         member.updatePassword(passwordEncoder.encode(newPassword));
         refreshTokenStore.delete(memberId);
+        // ⚠ 재설정은 계정을 되찾는 경로다 — 남이 들어와 있다면 그 access 토큰을 여기서 끊어야 한다
+        // (refresh 삭제만으로는 만료까지 그대로 통한다). changePassword 와 같은 처리.
+        tokenRevocationStore.revokeAll(memberId);
         log.info("Password reset completed: {}", memberId);
     }
 

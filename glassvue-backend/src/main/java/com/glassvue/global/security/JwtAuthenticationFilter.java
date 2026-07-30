@@ -26,6 +26,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
     private final TokenBlacklist blacklist;
+    private final TokenRevocationStore revocationStore;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -35,9 +36,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 Claims claims = jwtProvider.parse(token);
                 String role = claims.get("role", String.class);
-                if (role != null && !blacklist.contains(claims.getId())) {
+                UUID memberId = UUID.fromString(claims.getSubject());
+                if (role != null && !blacklist.contains(claims.getId()) && !isRevoked(memberId, claims)) {
                     String nickname = claims.get("nickname", String.class);
-                    AuthUser principal = new AuthUser(UUID.fromString(claims.getSubject()), Role.valueOf(role), nickname);
+                    AuthUser principal = new AuthUser(memberId, Role.valueOf(role), nickname);
                     // SUPER_ADMIN 은 ROLE_ADMIN 도 함께 부여받아 기존 /api/admin/** 를 통과한다(Role.authorities).
                     var authorities = principal.role().authorities().stream()
                             .map(SimpleGrantedAuthority::new).toList();
@@ -49,6 +51,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
         chain.doFilter(request, response);
+    }
+
+    /**
+     * 회원별 발급시각 컷오프에 걸리는 토큰인가(정지·강등·탈퇴·비밀번호 변경 시 세워진다).
+     *
+     * <p>⚠ {@code iat} 가 없는 토큰은 <b>무효로 본다</b> — 우리 {@link JwtProvider} 는 항상 넣으므로
+     * 없다는 것은 우리가 발급한 토큰이 아니라는 뜻이고, 컷오프를 판정할 수 없으면 통과시키면 안 된다.
+     */
+    private boolean isRevoked(UUID memberId, Claims claims) {
+        return claims.getIssuedAt() == null
+                || revocationStore.isRevoked(memberId, claims.getIssuedAt().toInstant());
     }
 
     private String resolveToken(HttpServletRequest request) {

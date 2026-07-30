@@ -14,6 +14,7 @@ import com.glassvue.global.security.EmailVerificationCodeStore;
 import com.glassvue.global.security.JwtProvider;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
+import com.glassvue.global.security.TokenRevocationStore;
 import io.jsonwebtoken.Claims;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ public class MemberService {
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklist tokenBlacklist;
+    private final TokenRevocationStore tokenRevocationStore;
     private final JwtProvider jwtProvider;
     private final EmailVerificationCodeStore emailVerificationCodeStore;
     private final Mailer mailer;
@@ -147,7 +149,10 @@ public class MemberService {
             throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
         }
         member.updatePassword(passwordEncoder.encode(newPassword));
-        refreshTokenStore.delete(memberId); // 다른 기기 세션 무효화(재로그인 유도)
+        refreshTokenStore.delete(memberId);
+        // ⚠ refresh 삭제만으로는 "다른 기기 세션 무효화"가 아니다 — 그 기기의 access 토큰은 만료까지
+        // 그대로 통한다(최대 30분). 비밀번호를 바꾸는 이유가 보통 "남이 쓰고 있다" 이므로 여기가 가장 아프다.
+        tokenRevocationStore.revokeAll(memberId);
         log.info("Password changed: {}", memberId);
     }
 
@@ -155,6 +160,9 @@ public class MemberService {
         Member member = find(memberId);
         refreshTokenStore.delete(memberId);
         blacklistAccess(accessToken);
+        // blacklistAccess 는 **이 요청에 실려 온 토큰 하나**만 막는다 — 다른 기기에 남아 있는 토큰은
+        // 회원이 사라진 뒤에도 통한다. 컷오프는 jti 를 몰라도 그 전부를 한 번에 막는다.
+        tokenRevocationStore.revokeAll(memberId);
         memberRepository.delete(member);
         log.info("Member withdrawn: {}", memberId);
     }

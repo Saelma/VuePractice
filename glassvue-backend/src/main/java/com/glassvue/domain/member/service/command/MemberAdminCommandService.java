@@ -10,6 +10,7 @@ import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.security.RefreshTokenStore;
+import com.glassvue.global.security.TokenRevocationStore;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,12 +42,14 @@ public class MemberAdminCommandService {
 
     private final MemberRepository memberRepository;
     private final RefreshTokenStore refreshTokenStore;
+    private final TokenRevocationStore tokenRevocationStore;
     private final ApplicationEventPublisher eventPublisher;
 
     public AdminMemberResponse suspend(AuthUser actor, UUID targetId) {
         Member member = authorize(actor, targetId, false);
         member.suspend();
-        refreshTokenStore.delete(targetId); // 기존 세션 무효화(갱신 차단)
+        refreshTokenStore.delete(targetId); // 갱신 차단
+        tokenRevocationStore.revokeAll(targetId); // 이미 나가 있는 access 토큰도 즉시 무효
         log.info("Member suspended: target={} by admin={}", targetId, actor.id());
         publish(AuditAction.MEMBER_SUSPEND, actor, member, null);
         return AdminMemberResponse.from(member);
@@ -67,6 +70,10 @@ public class MemberAdminCommandService {
         Member member = authorize(actor, targetId, true); // 역할변경은 항상 SUPER_ADMIN 전용
         Role oldRole = member.getRole();
         member.changeRole(newRole);
+        // ⚠ 역할은 JWT 클레임에 박혀 있다 — 컷오프가 없으면 강등된 관리자가 access 만료까지(최대 30분)
+        // 관리자 권한을 계속 쓴다. refresh 는 지우지 않는다: 그걸로 재발급하면 **새 역할**이 박히므로
+        // 오히려 정상 경로다(정지와 다른 점 — 정지는 재발급 자체를 막아야 한다).
+        tokenRevocationStore.revokeAll(targetId);
         log.info("Member role changed to {}: target={} by admin={}", newRole, targetId, actor.id());
         publish(AuditAction.MEMBER_ROLE_CHANGE, actor, member, oldRole + " → " + newRole);
         return AdminMemberResponse.from(member);
