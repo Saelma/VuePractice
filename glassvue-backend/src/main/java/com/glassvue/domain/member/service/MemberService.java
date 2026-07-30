@@ -4,6 +4,7 @@ import com.glassvue.domain.auth.dto.MemberResponse;
 import com.glassvue.domain.member.dto.ShippingAddressRequest;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.member.event.MemberWithdrawnEvent;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.glassvue.domain.member.service.command.MemberAddressCommandService;
 import com.glassvue.domain.member.service.query.MemberAddressQueryService;
@@ -19,6 +20,7 @@ import io.jsonwebtoken.Claims;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ public class MemberService {
     private final JwtProvider jwtProvider;
     private final EmailVerificationCodeStore emailVerificationCodeStore;
     private final Mailer mailer;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** 관리자 회원 id 목록 — 관리자 대상 알림(재고 부족 등)을 만들 때 쓰는 다른 도메인용 공개 API. */
     @Transactional(readOnly = true)
@@ -158,14 +161,39 @@ public class MemberService {
 
     public void withdraw(UUID memberId, String accessToken) {
         Member member = find(memberId);
-        refreshTokenStore.delete(memberId);
         blacklistAccess(accessToken);
-        // blacklistAccess 는 **이 요청에 실려 온 토큰 하나**만 막는다 — 다른 기기에 남아 있는 토큰은
-        // 회원이 사라진 뒤에도 통한다. 컷오프는 jti 를 몰라도 그 전부를 한 번에 막는다.
-        tokenRevocationStore.revokeAll(memberId);
-        memberRepository.delete(member);
+        purge(member);
         log.info("Member withdrawn: {}", memberId);
     }
+
+    /**
+     * 회원 하나를 <b>흔적까지</b> 지운다 — 본인 탈퇴와 관리자 강제 삭제(B-24)가 <b>공유하는 경로</b>다.
+     *
+     * <p>따로 두면 한쪽만 정리되는 어긋남이 생긴다("관리자로 지운 회원은 데이터가 남는다" 같은 것) —
+     * 그래서 진입점은 둘이어도 실제 삭제는 여기 한 곳이다.
+     *
+     * <p>순서에 이유가 있다:
+     * <ol>
+     *   <li><b>토큰 무효화 먼저</b> — 회원 행이 사라진 뒤에도 남의 기기에 있던 access 토큰은 만료까지
+     *       통한다(E-2). refresh 삭제 + 발급시각 컷오프로 전부 끊는다.
+     *   <li><b>배송지 삭제</b> — 같은 도메인이라 이벤트를 거치지 않고 직접 지운다(개인정보 — F-1 의 핵심).
+     *   <li><b>이벤트 발행</b> — 다른 도메인(적립금·찜·쿠폰·알림·재입고·문의)이 자기 것을 지운다.
+     *       회원 행을 지우기 <b>전에</b> 발행한다: 리스너가 회원을 다시 읽어야 할 일이 생기면
+     *       그때는 이미 없어서 실패하기 때문이다.
+     *   <li><b>회원 행 삭제</b>.
+     * </ol>
+     *
+     * <p>전부 <b>한 트랜잭션</b>이다 — 정리 중 실패하면 회원 삭제도 롤백된다(감사 로그와 같은 판단).
+     */
+    public void purge(Member member) {
+        UUID memberId = member.getId();
+        refreshTokenStore.delete(memberId);
+        tokenRevocationStore.revokeAll(memberId);
+        addressCommandService.deleteAllForMember(memberId);
+        eventPublisher.publishEvent(new MemberWithdrawnEvent(memberId));
+        memberRepository.delete(member);
+    }
+
 
     private void blacklistAccess(String accessToken) {
         try {

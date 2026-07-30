@@ -32,6 +32,17 @@ export function changeMemberRole(memberId, role) {
   return apiPatch(`/api/admin/members/${memberId}/role`, { role });
 }
 
+/**
+ * 회원 강제 삭제 (B-24) — **SUPER_ADMIN 전용, 되돌릴 수 없다.**
+ *
+ * 본인 탈퇴와 같은 정리 경로를 타므로 배송지·적립금·찜·쿠폰·알림·재입고 구독·문의가 함께 사라진다.
+ * 주문·리뷰·공지는 남는다(작성 시점 스냅샷으로 표시되므로 화면이 깨지지 않는다).
+ * ⚠ 서버가 자기 계정과 SUPER_ADMIN 대상을 막는다. 화면도 그 경우 버튼을 감춘다.
+ */
+export function deleteMember(memberId) {
+  return apiDelete(`/api/admin/members/${memberId}`);
+}
+
 export async function changeNickname(nickname) {
   const me = await apiPatch('/api/members/me/nickname', { nickname });
   setUser(me); // 헤더 닉네임 즉시 갱신 (토큰 claim은 다음 로그인 때 갱신)

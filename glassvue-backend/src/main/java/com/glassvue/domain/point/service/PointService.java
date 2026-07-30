@@ -192,4 +192,18 @@ public class PointService {
         return accountRepository.findByMemberId(memberId)
                 .orElseGet(() -> accountRepository.save(PointAccount.openFor(memberId)));
     }
+
+    /**
+     * 회원 삭제 정리(F-1) — 적립금 계정과 이력을 지운다. 핸들러(진짜 주체)이고, 리스너는 위임만 한다.
+     *
+     * <p>⚠ 이력은 <b>원장</b>이라 평소엔 지우지 않는다(잔액은 그 캐시다). 그러나 주인이 사라지면
+     * 남길 근거도 사라진다 — 회원 없는 이력은 아무 질문에도 답하지 못한다.
+     * ⚠ <b>순서가 있다</b>: 이력 → 계정. 반대로 하면 계정 없는 이력이 순간 존재한다(같은 트랜잭션이라
+     * 밖에서는 안 보이지만, 읽는 사람에게 의도를 남기려고 순서를 고정한다).
+     */
+    public void deleteAllForMember(UUID memberId) {
+        long histories = historyRepository.deleteByMemberId(memberId);
+        long accounts = accountRepository.deleteByMemberId(memberId);
+        log.info("Point data deleted for member {}: histories={} accounts={}", memberId, histories, accounts);
+    }
 }

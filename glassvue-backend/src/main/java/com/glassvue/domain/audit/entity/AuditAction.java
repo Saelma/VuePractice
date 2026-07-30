@@ -13,5 +13,12 @@ public enum AuditAction {
     /** 회원 정지 해제. */
     MEMBER_UNSUSPEND,
     /** 회원 역할 변경(USER↔ADMIN). */
-    MEMBER_ROLE_CHANGE
+    MEMBER_ROLE_CHANGE,
+    /**
+     * 회원 강제 삭제(B-24, 2026-07-30). 되돌릴 수 없는 조작이라 <b>SUPER_ADMIN 전용</b>이다.
+     *
+     * <p>⚠ 이 값을 더할 때 {@code V35} 로 CHECK 제약을 함께 넓혔다 — {@code ddl-auto=update} 도 아니고
+     * {@code validate} 라 제약은 절대 자동으로 안 따라온다(Oracle enum CHECK 트랩).
+     */
+    MEMBER_DELETE
 }

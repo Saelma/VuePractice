@@ -13,6 +13,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -61,6 +62,14 @@ public class AdminMemberControllerImpl implements AdminMemberController {
             @LoginUser AuthUser admin, @PathVariable UUID memberId) {
         return ResponseEntity.ok(ApiResponse.ok(
                 memberAdminCommandService.unsuspend(admin, memberId)));
+    }
+
+    @Override
+    @DeleteMapping("/{memberId}")
+    public ResponseEntity<ApiResponse<Void>> delete(
+            @LoginUser AuthUser admin, @PathVariable UUID memberId) {
+        memberAdminCommandService.delete(admin, memberId);
+        return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
     @Override

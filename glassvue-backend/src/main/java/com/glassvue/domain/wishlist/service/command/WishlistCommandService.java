@@ -51,4 +51,10 @@ public class WishlistCommandService {
             log.info("Wishlist removed: member={} product={}", memberId, productId);
         }
     }
+
+    /** 회원 삭제 정리(F-1) — 찜 전체 삭제. */
+    public void deleteAllForMember(UUID memberId) {
+        long deleted = wishlistRepository.deleteByMemberId(memberId);
+        log.info("Wishlist deleted for member {}: {}", memberId, deleted);
+    }
 }

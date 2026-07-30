@@ -123,4 +123,13 @@ public class CouponService {
                 .map(mc -> mc.getCoupon().getName())
                 .orElse(null);
     }
+
+    /**
+     * 회원 삭제 정리(F-1) — <b>발급된 쿠폰만</b> 지운다. 쿠폰 정의({@code coupon})는 다른 회원도 쓰므로 남는다.
+     */
+    @Transactional
+    public void deleteAllForMember(UUID memberId) {
+        long deleted = memberCouponRepository.deleteByMemberId(memberId);
+        log.info("Member coupons deleted for member {}: {}", memberId, deleted);
+    }
 }

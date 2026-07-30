@@ -23,4 +23,10 @@ public interface MemberAddressRepository extends JpaRepository<MemberAddress, UU
     Optional<MemberAddress> findFirstByMemberIdOrderByCreatedAtAsc(UUID memberId);
 
     long countByMemberId(UUID memberId);
+
+    /**
+     * 회원 삭제 정리용(F-1). ⚠ <b>여기가 가장 뾰족한 자리다</b> — 수령인 이름·전화번호·주소가 들어 있어
+     * 탈퇴("내 정보를 지워 달라")의 취지에 정면으로 걸린다.
+     */
+    long deleteByMemberId(UUID memberId);
 }

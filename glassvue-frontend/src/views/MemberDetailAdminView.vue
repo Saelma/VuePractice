@@ -12,7 +12,7 @@ import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { authState } from '../stores/auth';
 import {
-  fetchAdminMember, roleText, suspendMember, unsuspendMember, changeMemberRole,
+  fetchAdminMember, roleText, suspendMember, unsuspendMember, changeMemberRole, deleteMember,
 } from '../api/member';
 import { fetchAdminMemberPointAccount, fetchAdminMemberPointHistory, gradeText, pointTypeText } from '../api/point';
 import { fetchAdminMemberOrders, ORDER_STATUS_OPTIONS, orderStatusText, orderStatusClass } from '../api/order';
@@ -94,6 +94,27 @@ async function toggleRole() {
   } catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
 
+/**
+ * 회원 강제 삭제(B-24) — 되돌릴 수 없어 확인을 **두 단계**로 받는다.
+ *
+ * ⚠ 지워지는 것과 남는 것을 문구에 그대로 적는다: 관리자가 "주문 기록도 날아가나?" 를 여기서 알아야
+ * 하고(안 날아간다), 반대로 배송지·적립금이 사라진다는 것도 눌러 보고 알게 하면 안 된다.
+ */
+async function removeMember() {
+  const t = member.value;
+  if (!window.confirm(
+    `${t.nickname}(${t.loginId})님을 삭제할까요?\n\n`
+    + '함께 지워집니다: 배송지·적립금·찜·쿠폰·알림·재입고 알림 신청·상품 문의\n'
+    + '남습니다: 주문 내역·리뷰(작성자명은 그대로 표시)\n\n'
+    + '되돌릴 수 없습니다.')) return;
+  if (!window.confirm('한 번 더 확인합니다. 정말 삭제할까요?')) return;
+  error.value = ''; busy.value = true;
+  try {
+    await deleteMember(t.id);
+    router.push('/admin/members'); // 삭제된 회원의 상세에 머물 이유가 없다
+  } catch (e) { error.value = e.message; busy.value = false; }
+}
+
 function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
 }
@@ -152,6 +173,14 @@ function signedPoint(n) {
                 :disabled="busy"
                 @click="toggleRole"
               >{{ member.role === 'ADMIN' ? '일반으로 강등' : '관리자로 승격' }}</button>
+              <!-- 삭제는 되돌릴 수 없어 최상위 관리자만(B-24). 강등·정지와 같은 줄에 두되 맨 끝에 둔다. -->
+              <button
+                v-if="viewerIsSuper"
+                type="button"
+                class="btn btn-danger btn-sm"
+                :disabled="busy"
+                @click="removeMember"
+              >회원 삭제</button>
             </div>
             <p v-if="!canSuspend && !canChangeRole" class="muted">
               관리자 계정은 최상위 관리자만 정지·역할 변경할 수 있습니다.

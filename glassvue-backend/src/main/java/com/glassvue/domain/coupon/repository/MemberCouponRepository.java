@@ -18,4 +18,7 @@ public interface MemberCouponRepository extends JpaRepository<MemberCoupon, UUID
     @Query("select mc from MemberCoupon mc join fetch mc.coupon "
             + "where mc.memberId = :memberId and mc.usedAt is null order by mc.createdAt desc")
     List<MemberCoupon> findUnusedByMember(@Param("memberId") UUID memberId);
+
+    /** 회원 삭제 정리용(F-1). 지우는 것은 <b>발급분</b>이고 쿠폰 정의({@code coupon})는 남는다. */
+    long deleteByMemberId(UUID memberId);
 }

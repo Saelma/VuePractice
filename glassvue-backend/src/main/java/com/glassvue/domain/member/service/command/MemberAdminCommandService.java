@@ -6,6 +6,7 @@ import com.glassvue.domain.member.dto.AdminMemberResponse;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
+import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 관리자 회원 조작(B-11 후속) — 정지/해제 · 역할변경. 권한은 <b>엄격 분리</b>(2026-07-28):
+ * 관리자 회원 조작(B-11 후속) — 정지/해제 · 역할변경 · <b>강제 삭제</b>(B-24). 권한은 <b>엄격 분리</b>(2026-07-28):
  *
  * <ul>
  *   <li>자기 자신은 조작 불가(락아웃 방지, {@code CANNOT_MODIFY_SELF}).
@@ -28,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
  *       일반 ADMIN 은 일반 회원(USER)만 정지/해제할 수 있다.
  *   <li>역할 변경으로 SUPER_ADMIN 을 <b>부여할 수 없다</b>({@code CANNOT_GRANT_SUPER_ADMIN}) — 최상위는
  *       배포 후 별도 데이터 작업으로만 정한다.
+ *   <li><b>강제 삭제는 SUPER_ADMIN 만</b>(2026-07-30) — 되돌릴 수 없어 역할변경과 같은 급으로 봤다.
  * </ul>
  *
  * <p>행위자 정보는 JWT 클레임(=AuthUser: id·role·nickname)에서 온다. 성공한 조작은 {@link AdminActionEvent}
@@ -43,6 +45,7 @@ public class MemberAdminCommandService {
     private final MemberRepository memberRepository;
     private final RefreshTokenStore refreshTokenStore;
     private final TokenRevocationStore tokenRevocationStore;
+    private final MemberService memberService;
     private final ApplicationEventPublisher eventPublisher;
 
     public AdminMemberResponse suspend(AuthUser actor, UUID targetId) {
@@ -77,6 +80,32 @@ public class MemberAdminCommandService {
         log.info("Member role changed to {}: target={} by admin={}", newRole, targetId, actor.id());
         publish(AuditAction.MEMBER_ROLE_CHANGE, actor, member, oldRole + " → " + newRole);
         return AdminMemberResponse.from(member);
+    }
+
+    /**
+     * 회원 강제 삭제(B-24, 2026-07-30) — <b>SUPER_ADMIN 전용</b>.
+     *
+     * <p>왜 필요했나: 탈퇴는 {@code DELETE /api/members/me} <b>본인 전용</b>이라, 비밀번호를 모르는 계정은
+     * <b>정상 경로로 지울 방법이 아예 없었다.</b> 2026-07-30 잔재 점검에서 7/28 검증용 ADMIN 계정을
+     * 발견했을 때 남은 선택이 DB 직접 DELETE 뿐이었다 — 그건 토큰 무효화·연관 정리를 건너뛴다.
+     *
+     * <p>⚠ <b>정지보다 무거운 조작이라 권한도 한 칸 좁다</b>({@code superOnly=true}): 대상이 일반 USER 여도
+     * SUPER_ADMIN 만 지울 수 있다. 역할변경과 같은 급으로 본 것이다 — 되돌릴 수 없기 때문이다.
+     * {@code authorize} 가 <b>자기 자신</b>(락아웃)과 <b>SUPER_ADMIN 대상</b>도 함께 막는다.
+     *
+     * <p>⚠ 스냅샷을 <b>지우기 전에</b> 읽는다 — 감사 이력의 {@code target_login} 은 대상이 사라진 뒤에도
+     * 읽혀야 하는 값이다(그게 audit 이 FK 를 두지 않는 이유다). 삭제 후에 읽으면 값이 없다.
+     *
+     * <p>실제 삭제는 {@code MemberService.purge} 에 위임한다 — <b>본인 탈퇴와 같은 경로</b>여야
+     * "관리자로 지운 회원만 데이터가 남는" 어긋남이 안 생긴다(F-1).
+     */
+    public void delete(AuthUser actor, UUID targetId) {
+        Member member = authorize(actor, targetId, true);
+        // ⚠ 감사 발행이 **삭제보다 먼저**다 — publish 가 member.getLoginId() 를 스냅샷으로 읽는데,
+        // 지운 뒤에는 그 값을 읽을 수 없다(대상이 사라진 뒤에도 읽히는 값이어야 한다).
+        publish(AuditAction.MEMBER_DELETE, actor, member, null);
+        memberService.purge(member);
+        log.info("Member deleted by admin: target={} by admin={}", targetId, actor.id());
     }
 
     private void publish(AuditAction action, AuthUser actor, Member target, String detail) {

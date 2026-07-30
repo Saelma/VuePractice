@@ -49,4 +49,10 @@ public class RestockSubscriptionCommandService {
             log.info("Restock unsubscribed: member={} product={}", memberId, productId);
         }
     }
+
+    /** 회원 삭제 정리(F-1) — 재입고 구독 전체 삭제. */
+    public void deleteAllForMember(UUID memberId) {
+        long deleted = subscriptionRepository.deleteByMemberId(memberId);
+        log.info("Restock subscriptions deleted for member {}: {}", memberId, deleted);
+    }
 }

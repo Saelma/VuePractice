@@ -16,6 +16,8 @@ public interface WishlistRepository extends JpaRepository<Wishlist, UUID> {
 
     /** 해제. 반환값(삭제 건수)으로 "찜한 적 없는 상품 해제"를 구분한다. */
     long deleteByMemberIdAndProductId(UUID memberId, UUID productId);
+    /** 회원 삭제 정리용(F-1). */
+    long deleteByMemberId(UUID memberId);
 
     /**
      * 내가 찜한 상품 id 집합 — 화면이 목록·상세에서 하트를 채울지 판단하는 데 쓴다.

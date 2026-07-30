@@ -13,6 +13,8 @@ import org.springframework.data.repository.query.Param;
 public interface NotificationPrefRepository extends JpaRepository<NotificationPref, UUID> {
 
     List<NotificationPref> findByMemberId(UUID memberId);
+    /** 회원 삭제 정리용(F-1). */
+    long deleteByMemberId(UUID memberId);
 
     Optional<NotificationPref> findByMemberIdAndType(UUID memberId, NotificationType type);
 

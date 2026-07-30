@@ -11,6 +11,7 @@ import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 알림 생성·읽음·설정 변경 (2026-07-24). 알림을 "만드는" 유일한 입구다 —
  * stub 이던 이벤트 핸들러(주문·재고)가 이걸 호출해 실제 알림함에 쌓고 SSE 로 민다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationCommandService {
@@ -71,5 +73,18 @@ public class NotificationCommandService {
         if (updated == 0) {
             prefRepository.save(NotificationPref.of(memberId, type, enabled));
         }
+    }
+
+    /**
+     * 회원 삭제 정리(F-1) — 알림과 <b>알림 설정</b>을 함께 지운다.
+     *
+     * <p>⚠ 설정({@code notification_pref})은 백로그의 F-1 목록에 없었다 — 회원별 행인데 빠져 있었다.
+     * "회원 id 를 들고 있는 엔티티"를 코드에서 전수로 뽑아야 보이는 자리다(2026-07-30).
+     */
+    @Transactional
+    public void deleteAllForMember(UUID memberId) {
+        long notifications = notificationRepository.deleteByMemberId(memberId);
+        long prefs = prefRepository.deleteByMemberId(memberId);
+        log.info("Notifications deleted for member {}: notifications={} prefs={}", memberId, notifications, prefs);
     }
 }

@@ -125,4 +125,18 @@ public class MemberAddressCommandService {
         return addressRepository.findByIdAndMemberId(addressId, memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ADDRESS_NOT_FOUND));
     }
+
+    /**
+     * 회원 삭제 정리(F-1) — 주소록 전체 삭제.
+     *
+     * <p>⚠ <b>F-1 에서 가장 뾰족한 자리다</b>: 수령인 이름·전화번호·주소가 들어 있어, 탈퇴가 뜻하는
+     * "내 정보를 지워 달라"에 정면으로 걸린다. 같은 도메인이라 이벤트를 거치지 않고 직접 지운다.
+     *
+     * <p>기본 배송지 유니크 인덱스(V18, 함수기반)는 <b>삭제에는 걸리지 않는다</b> — 승계 로직도 필요 없다
+     * (회원 자체가 사라지므로 승계할 주인이 없다).
+     */
+    public void deleteAllForMember(UUID memberId) {
+        long deleted = addressRepository.deleteByMemberId(memberId);
+        log.info("Addresses deleted for member {}: {}", memberId, deleted);
+    }
 }

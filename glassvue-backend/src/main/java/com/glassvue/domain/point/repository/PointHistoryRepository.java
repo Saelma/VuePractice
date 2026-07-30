@@ -24,4 +24,7 @@ public interface PointHistoryRepository extends JpaRepository<PointHistory, UUID
      */
     @Query("select coalesce(sum(h.amount), 0) from PointHistory h where h.memberId = :memberId")
     long sumAmountByMemberId(@Param("memberId") UUID memberId);
+
+    /** 회원 삭제 정리용(F-1). 원장이지만 주인이 사라지면 남길 근거도 사라진다. */
+    long deleteByMemberId(UUID memberId);
 }

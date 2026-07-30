@@ -13,6 +13,8 @@ public interface RestockSubscriptionRepository extends JpaRepository<RestockSubs
 
     /** 신청 취소. 반환값(삭제 건수)으로 "신청한 적 없는 상품 취소"를 구분한다(멱등). */
     long deleteByMemberIdAndProductId(UUID memberId, UUID productId);
+    /** 회원 삭제 정리용(F-1). */
+    long deleteByMemberId(UUID memberId);
 
     /**
      * 내가 재입고 신청한 상품 id 집합 — 상품 상세에서 버튼 상태(신청함/안함)를 판단하는 용도.

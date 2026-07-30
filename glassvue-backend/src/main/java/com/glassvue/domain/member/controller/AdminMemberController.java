@@ -36,6 +36,15 @@ public interface AdminMemberController {
     ResponseEntity<ApiResponse<AdminMemberResponse>> unsuspend(
             @Parameter(hidden = true) AuthUser admin, @Parameter(description = "회원 id") UUID memberId);
 
+    @Operation(summary = "회원 강제 삭제 (SUPER_ADMIN 전용, B-24)",
+            description = """
+                    회원을 되돌릴 수 없이 지운다. 본인 탈퇴와 **같은 정리 경로**를 타므로 배송지·적립금·찜·쿠폰·
+                    알림·재입고 구독·문의가 함께 지워진다(주문·리뷰·공지는 남는다 — 스냅샷으로 표시된다).
+                    자기 계정과 SUPER_ADMIN 계정은 대상이 될 수 없다. 감사 이력에 MEMBER_DELETE 로 남는다.
+                    """)
+    ResponseEntity<ApiResponse<Void>> delete(
+            @Parameter(hidden = true) AuthUser admin, @Parameter(description = "회원 id") UUID memberId);
+
     @Operation(summary = "회원 역할 변경 (USER↔ADMIN)",
             description = "자기 계정은 변경할 수 없다(스스로 강등해 락아웃되는 것 방지).")
     ResponseEntity<ApiResponse<AdminMemberResponse>> changeRole(

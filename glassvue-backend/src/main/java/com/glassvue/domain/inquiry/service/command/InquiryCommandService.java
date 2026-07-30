@@ -11,6 +11,7 @@ import com.glassvue.domain.member.entity.Role;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -91,5 +92,23 @@ public class InquiryCommandService {
     private Inquiry findById(UUID id) {
         return inquiryRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+    }
+
+    /**
+     * 회원 삭제 정리(F-1) — 그 회원이 쓴 문의를 지운다(사용자 결정: 리뷰는 남기고 문의는 지운다 —
+     * 문의는 본인↔관리자 대화라 내용에 개인정보가 들어갈 수 있고 비밀글도 있다).
+     *
+     * <p>⚠ <b>벌크 삭제로 하지 않았다.</b> 문의마다 첨부 이미지 그룹을 함께 해제해야 하는데
+     * (단건 삭제 {@link #delete}가 지키는 규칙), 벌크 DELETE 는 그 경로를 건너뛰어
+     * <b>주인 없는 이미지</b>를 남긴다 — 2026-07-20 에 실제로 고아 이미지 3건을 손으로 치운 그 문제다.
+     */
+    public void deleteAllForMember(UUID authorId) {
+        List<Inquiry> inquiries = inquiryRepository.findByAuthorId(authorId);
+        for (Inquiry inquiry : inquiries) {
+            UUID imageGroupId = inquiry.getImageGroupId();
+            inquiryRepository.delete(inquiry);
+            imageService.deleteGroup(imageGroupId); // 문의가 사라지면 첨부 사진도 주인이 없다
+        }
+        log.info("Inquiries deleted for member {}: {}", authorId, inquiries.size());
     }
 }
