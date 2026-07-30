@@ -15,6 +15,7 @@ import com.glassvue.global.mail.Mailer;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProperties;
 import com.glassvue.global.security.JwtProvider;
+import com.glassvue.global.security.LoginAttemptGuard;
 import com.glassvue.global.security.PasswordResetTokenStore;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
@@ -43,6 +44,7 @@ public class AuthService {
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklist tokenBlacklist;
     private final TokenRevocationStore tokenRevocationStore;
+    private final LoginAttemptGuard loginAttemptGuard;
     private final PasswordResetTokenStore passwordResetTokenStore;
     // 발송은 인프라라 global 어댑터를 그대로 주입한다(도메인 이벤트로 감쌀 만한 fan-out 이 아직 없다).
     private final Mailer mailer;
@@ -77,10 +79,20 @@ public class AuthService {
         return MemberResponse.of(member, null);
     }
 
-    public TokenResponse login(LoginRequest req) {
+    public TokenResponse login(LoginRequest req, String clientIp) {
+        // ⚠ 차단 검사는 **DB 조회보다 먼저**다(E-1). 조회 뒤에 두면 없는 아이디는 카운트되기 전에
+        // LOGIN_FAILED 로 빠져나가 카운터가 존재하는 계정에만 쌓이고, 그러면 차단 응답이
+        // "이 계정은 있다" 를 알려주는 신호가 된다.
+        if (loginAttemptGuard.isBlocked(req.loginId(), clientIp)) {
+            throw new BusinessException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS);
+        }
         Member member = memberRepository.findByLoginId(req.loginId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.LOGIN_FAILED));
+                .orElseThrow(() -> {
+                    loginAttemptGuard.recordFailure(req.loginId(), clientIp);
+                    return new BusinessException(ErrorCode.LOGIN_FAILED);
+                });
         if (!passwordEncoder.matches(req.password(), member.getPassword())) {
+            loginAttemptGuard.recordFailure(req.loginId(), clientIp);
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
         // 비번은 맞아도 정지된 계정은 로그인 불가(B-11 후속). 비번 검증 뒤에 둔 이유: 계정 열거를
@@ -88,6 +100,9 @@ public class AuthService {
         if (member.isSuspended()) {
             throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
         }
+        // ⚠ 성공 처리는 정지 검사 **뒤**다. 정지 계정은 비밀번호가 맞아도 로그인이 아니므로,
+        // 여기서 카운터를 리셋해 주면 정지된 계정으로 시도 예산을 무한히 새로 얻는 셈이 된다.
+        loginAttemptGuard.recordSuccess(req.loginId());
         return issueTokens(member);
     }
 

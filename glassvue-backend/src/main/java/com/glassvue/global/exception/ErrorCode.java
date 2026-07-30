@@ -30,6 +30,12 @@ public enum ErrorCode {
     // ⚠ 만료·횟수초과·불일치를 구분하지 않는다 — 구분해 주면 남은 시도 횟수를 세어 볼 수 있다.
     INVALID_VERIFICATION_CODE("MEMBER-400V", HttpStatus.BAD_REQUEST, "인증번호가 올바르지 않거나 만료되었습니다."),
     LOGIN_FAILED("AUTH-401", HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다."),
+    /**
+     * 로그인 시도 과다 (E-1, 2026-07-30). ⚠ 실패 카운트를 <b>DB 조회 전, 입력된 아이디 그대로</b> 세므로
+     * 없는 아이디도 똑같이 잠긴다 — 그래서 이 응답이 <b>계정 존재를 알려주지 않는다</b>(열거 방지 유지).
+     */
+    TOO_MANY_LOGIN_ATTEMPTS("AUTH-429", HttpStatus.TOO_MANY_REQUESTS,
+            "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요."),
     UNAUTHENTICATED("AUTH-401U", HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     INVALID_TOKEN("AUTH-401T", HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 토큰입니다."),
     PASSWORD_MISMATCH("AUTH-400P", HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),

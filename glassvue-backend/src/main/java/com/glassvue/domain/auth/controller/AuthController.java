@@ -23,7 +23,9 @@ public interface AuthController {
     ResponseEntity<ApiResponse<MemberResponse>> signup(@Valid SignupRequest request);
 
     @Operation(summary = "로그인 (access + refresh 발급)")
-    ResponseEntity<ApiResponse<TokenResponse>> login(@Valid LoginRequest request);
+    ResponseEntity<ApiResponse<TokenResponse>> login(
+            @Valid LoginRequest request,
+            @io.swagger.v3.oas.annotations.Parameter(hidden = true) jakarta.servlet.http.HttpServletRequest httpRequest);
 
     @Operation(summary = "토큰 재발급 (refresh 회전)")
     ResponseEntity<ApiResponse<TokenResponse>> refresh(@Valid RefreshRequest request);

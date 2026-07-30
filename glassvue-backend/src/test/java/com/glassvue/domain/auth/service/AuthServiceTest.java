@@ -20,6 +20,7 @@ import com.glassvue.global.security.JwtProvider;
 import com.glassvue.global.security.PasswordResetTokenStore;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
+import com.glassvue.global.security.LoginAttemptGuard;
 import com.glassvue.global.security.TokenRevocationStore;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,12 +46,15 @@ class AuthServiceTest {
     @Mock RefreshTokenStore refreshTokenStore;
     @Mock TokenBlacklist tokenBlacklist;
     @Mock TokenRevocationStore tokenRevocationStore;
+    @Mock LoginAttemptGuard loginAttemptGuard;
     @Mock PasswordResetTokenStore passwordResetTokenStore;
     @Mock com.glassvue.global.mail.Mailer mailer;
     // MailProperties 는 record 라 목이 아니라 실값을 쓴다 — 링크 조립 결과를 그대로 검증하려고.
     @Spy com.glassvue.global.mail.MailProperties mailProperties =
             new com.glassvue.global.mail.MailProperties("no-reply@test.local", "https://app.test");
     @InjectMocks AuthService service;
+
+    private static final String IP = "10.0.2.99";
 
     private Member member() {
         return Member.builder().loginId("kim").password("HASH").nickname("김철수").role(Role.USER).build();
@@ -93,7 +97,7 @@ class AuthServiceTest {
     @DisplayName("로그인: 없는 아이디 → LOGIN_FAILED")
     void login_notFound() {
         when(memberRepository.findByLoginId("nope")).thenReturn(Optional.empty());
-        assertErrorCode(() -> service.login(new LoginRequest("nope", "pw")), ErrorCode.LOGIN_FAILED);
+        assertErrorCode(() -> service.login(new LoginRequest("nope", "pw"), IP), ErrorCode.LOGIN_FAILED);
     }
 
     @Test
@@ -101,7 +105,7 @@ class AuthServiceTest {
     void login_wrongPassword() {
         when(memberRepository.findByLoginId("kim")).thenReturn(Optional.of(member()));
         when(passwordEncoder.matches("wrong", "HASH")).thenReturn(false);
-        assertErrorCode(() -> service.login(new LoginRequest("kim", "wrong")), ErrorCode.LOGIN_FAILED);
+        assertErrorCode(() -> service.login(new LoginRequest("kim", "wrong"), IP), ErrorCode.LOGIN_FAILED);
     }
 
     @Test
@@ -113,7 +117,7 @@ class AuthServiceTest {
         when(jwtProvider.createAccessToken(any(), any(), any())).thenReturn("AT");
         when(jwtProvider.createRefreshToken(any())).thenReturn("RT");
         when(jwtProperties.accessTokenValidityMs()).thenReturn(1_800_000L);
-        TokenResponse res = service.login(new LoginRequest("kim", "pw"));
+        TokenResponse res = service.login(new LoginRequest("kim", "pw"), IP);
         assertThat(res.accessToken()).isEqualTo("AT");
         verify(refreshTokenStore).save(m.getId(), "RT");
     }
@@ -136,7 +140,7 @@ class AuthServiceTest {
         m.suspend();
         when(memberRepository.findByLoginId("kim")).thenReturn(Optional.of(m));
         when(passwordEncoder.matches("pw", "HASH")).thenReturn(true);
-        assertErrorCode(() -> service.login(new LoginRequest("kim", "pw")), ErrorCode.ACCOUNT_SUSPENDED);
+        assertErrorCode(() -> service.login(new LoginRequest("kim", "pw"), IP), ErrorCode.ACCOUNT_SUSPENDED);
     }
 
     @Test

@@ -10,9 +10,11 @@ import com.glassvue.domain.auth.dto.SignupRequest;
 import com.glassvue.domain.auth.dto.TokenResponse;
 import com.glassvue.domain.auth.service.AuthService;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.global.security.ClientIpResolver;
 import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.security.LoginUser;
 import com.glassvue.global.security.PasswordResetProperties;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -40,8 +42,12 @@ public class AuthControllerImpl implements AuthController {
 
     @Override
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<TokenResponse>> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok(authService.login(request)));
+    public ResponseEntity<ApiResponse<TokenResponse>> login(
+            @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        // 클라이언트 IP 는 nginx 뒤라 그냥 getRemoteAddr() 을 쓰면 전부 127.0.0.1 이 된다
+        // (ClientIpResolver 주석 — 그 상태로 IP 제한을 걸면 한 사람 때문에 전원이 잠긴다).
+        return ResponseEntity.ok(ApiResponse.ok(
+                authService.login(request, ClientIpResolver.resolve(httpRequest))));
     }
 
     @Override
