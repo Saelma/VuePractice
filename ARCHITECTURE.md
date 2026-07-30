@@ -344,8 +344,9 @@ audit           관리자 조작 감사 이력 (append-only, 이벤트로만 유
 > **회원 정지·역할변경 (2026-07-28, B-11 후속, V30)**: 위 조회 전용의 **쓰기 후속**. `member.suspended`
 > (boolean, `NUMBER(1)` — 상태가 이진이라 enum CHECK 트랩을 안 진다) + `changeRole`. **정지는 전면 차단**:
 > 로그인·토큰갱신은 auth(`AuthService.login`/`refresh`)가, 주문은 order(`checkout` → `MemberService.isSuspended`
-> 공개 API)가 막는다 — order→member 는 이미 있던 방향이라 순환 없음. 정지 시 refresh 토큰을 지워 기존 세션은
-> access 만료(≤30분) 뒤 끊기고, 그 창의 주문은 checkout 가드가 닫는다. **자기 계정은 조작 불가**(락아웃 방지,
+> 공개 API)가 막는다 — order→member 는 이미 있던 방향이라 순환 없음. ~~정지 시 refresh 토큰을 지워 기존 세션은
+> access 만료(≤30분) 뒤 끊기고, 그 창의 주문은 checkout 가드가 닫는다.~~ → **그 30분 창은 2026-07-30 에 닫혔다**
+> (E-2, 아래 「발급시각 컷오프」). **자기 계정은 조작 불가**(락아웃 방지,
 > `CANNOT_MODIFY_SELF`). 조작 API 는 `/api/admin/members/{id}/suspend·unsuspend·role` — 조회와 같은 컨트롤러,
 > `/api/admin/**` 보호. (조작 이력은 이제 감사 로그에도 남는다 — 아래 audit 도메인.)
 >
@@ -371,6 +372,25 @@ audit           관리자 조작 감사 이력 (append-only, 이벤트로만 유
 > target_login 을 **스냅샷**으로 박는다(FK 없는 느슨한 UUID + 스냅샷 — restock·order 스냅샷과 같은 패턴).
 > 조회 인가는 `/api/admin/audit/**` 를 `/api/admin/**`(ADMIN) **위에** `hasRole('SUPER_ADMIN')` 로 얹어
 > 좁은 규칙이 먼저 매칭되게 한다. 조작당사자(ADMIN)가 자기 이력을 보는 구조를 막는다.
+> ✅ **2026-07-30 (H-1)**: 이 도메인은 소스 10개에 **테스트가 0개**였다 — 있던 것은 "이벤트가 발행되는가"만
+> 보는 단위 테스트라 **리스너 이후(저장·조회·권한)가 한 번도 실행된 적이 없었다.** 감사 로그는 쓰기만 하고
+> 읽을 일이 없어 **고장 나도 아무도 모르는** 자리라 특히 위험했다. `AdminAuditIntegrationTest` 8건으로 고정
+> (권한 401/403/**ADMIN 403**/200 · 행이 실제로 남는지 · 스냅샷이 탈퇴 후에도 읽히는지 · 필터·정렬 ·
+> **롤백되면 감사도 사라지는지**를 REQUIRES_NEW 로 실측).
+>
+> **발급시각 컷오프 — access 토큰 즉시 무효화 (2026-07-30, E-2)**: 정지·강등이 **최대 30분간 효과가 없던**
+> 구멍을 닫았다. 역할이 JWT 클레임에 박혀 있어 강등해도 옛 토큰의 `role` 은 ADMIN 이다(실측: `suspend` 는
+> refresh 만 지웠고 `changeRole` 은 그것조차 안 했다). ⚠ **블랙리스트로는 못 막는다** — `TokenBlacklist` 는
+> **jti 단위**라 여러 기기에 나가 있는 토큰들을 서버가 알지 못한다. 그래서 토큰을 모으는 대신 **시각 하나**를
+> 남긴다: `TokenRevocationStore`(Redis `auth:revoked-before:<memberId>`)에 컷오프를 쓰고
+> `JwtAuthenticationFilter` 가 `iat` 와 비교한다. TTL 은 **access 유효기간만큼만**(그 뒤엔 대상 토큰이 전부
+> 자연 만료 — 블랙리스트가 "남은 만료시간만큼만" 올리는 것과 같은 판단). 경계는 **fail-closed**(`iat <= cutoff`):
+> `iat` 가 초 정밀도라 `<` 로 비교하면 **강등과 같은 초에 발급된 토큰이 살아남는다.**
+> 무효화 지점은 **다섯 곳** — 정지 · 역할변경 · 탈퇴(다른 기기 토큰) · 비밀번호 변경 · 비밀번호 재설정.
+> 원래 백로그는 앞의 둘만 적었는데, `refreshTokenStore.delete` 옆에 *"다른 세션 무효화"* 주석이 달린 자리가
+> **전부 같은 구멍**이었다(주석이 코드보다 앞서 있었다). ⚠ **역할변경은 refresh 를 지우지 않는다** — 재발급하면
+> **새 역할**이 박히므로 그게 정상 경로다(정지는 반대로 재발급 자체를 막아야 한다). 프론트는 재발급 직후
+> `/api/auth/me` 를 다시 읽어 `user.role` 을 맞춘다 — 안 하면 강등돼도 관리 메뉴가 계속 보인다.
 >
 > **배송지 주소록(2026-07-24, V18)**: 배송지는 `member.ship_*` 5컬럼 = **회원당 하나**였는데(V11),
 > 별칭을 붙인 여러 주소(`member_address`)로 늘리고 그중 하나를 기본 배송지로 둔다.
@@ -435,7 +455,7 @@ MSA를 기다릴 필요 없는, 개발 편의·보안·에러 가시성 개선. 
 | 기술 | 판단 | 시점 | 메모 |
 |---|---|---|---|
 | **P6SPY** | ✅ **완료** (2026-07-16) | dev 프로파일 한정 | JDBC 가로채 실제 SQL + 바인딩값 + 실행시간 로깅. QueryDSL 동적쿼리·N+1 육안 확인용. **운영 프로파일 제외**(오버헤드·민감정보 로깅). *구현 메모*: `p6spy-spring-boot-starter`(gavlyukovskiy)는 Boot 4.1 자동설정 호환이 불확실해 채택하지 않고, **plain `p6spy` + dev 프로파일에서 datasource URL만 `jdbc:p6spy:…`로 재작성**(자동설정 무의존)했다. 운영은 순수 oracle URL이라 p6spy 코드 경로를 안 탐. 포맷/카테고리는 `spy.properties`(SLF4J·한 줄·결과셋 제외) |
-| **HTTPS** | ✅ **완료** (2026-07-16) | — | JWT를 평문으로 흘리지 않기. **nginx에서 TLS 종단(:443), 백엔드는 내부 HTTP(:8080) 유지**. 내부 VM이라 **self-signed**(SAN에 IP 포함 — 브라우저는 CN 무시·SAN만 검증) 10년. **SAN: `IP:192.168.50.14, IP:127.0.0.1, DNS:localhost, DNS:glassvue.local`**(2026-07-22 재발급 — 서버 IP가 `.36`→`.14`로 바뀌어 SAN이 어긋났다. 이때 IP를 정적으로 고정했으므로 재발 없음). 원본 `/home/ecstel/nginx-tls/2026-07-22/`, 이전 인증서는 `/etc/nginx/ssl/*.bak`으로 백업. **80→443 301 리다이렉트**, 방화벽 443 개방. 프론트는 `/api` 상대경로 + JWT를 localStorage에 둬서 코드·재배포 불필요(secure 쿠키 이슈 없음). 인증서 원본 `/home/ecstel/nginx-tls/`, 배포본 `/etc/nginx/ssl/`. 공인 도메인 생기면 Let's Encrypt로 교체 |
+| **HTTPS** | ✅ **완료** (2026-07-16) | — | JWT를 평문으로 흘리지 않기. **nginx에서 TLS 종단(:443), 백엔드는 내부 HTTP(:8080) 유지**. 내부 VM이라 **self-signed**(SAN에 IP 포함 — 브라우저는 CN 무시·SAN만 검증) 10년. **SAN: `IP:192.168.50.14, IP:127.0.0.1, DNS:localhost, DNS:glassvue.local`**(2026-07-22 재발급 — 서버 IP가 `.36`→`.14`로 바뀌어 SAN이 어긋났다). ⚠ **2026-07-30: 그 뒤에 적어 둔 *"IP를 정적으로 고정했으므로 재발 없음"* 은 틀렸다** — 어댑터가 NAT 대역으로 바뀌어 IP가 `10.0.2.15`가 됐다(접속은 호스트에서 포트포워딩). SAN 의 `IP:192.168.50.14` 는 이제 죽은 값이고, **살아 있는 것은 `IP:127.0.0.1`·`DNS:localhost`** 다 — 포워딩으로 `https://localhost/` 로 들어가면 SAN 에 걸려 경고가 없다. 새 IP 로 직접 접속할 일이 생기면 재발급이 필요하다(그때는 SAN 을 IP 대신 DNS 로 잡는 쪽이 낫다). 원본 `/home/ecstel/nginx-tls/2026-07-22/`, 이전 인증서는 `/etc/nginx/ssl/*.bak`으로 백업. **80→443 301 리다이렉트**, 방화벽 443 개방. 프론트는 `/api` 상대경로 + JWT를 localStorage에 둬서 코드·재배포 불필요(secure 쿠키 이슈 없음). 인증서 원본 `/home/ecstel/nginx-tls/`, 배포본 `/etc/nginx/ssl/`. 공인 도메인 생기면 Let's Encrypt로 교체 |
 | **인앱 알림 SSE** (nginx) | ✅ **완료** (2026-07-24) | — | 인앱 알림 실시간 푸시가 SSE라, nginx가 그 경로를 **버퍼링하면 이벤트가 뭉쳐 즉시 안 나간다**(토스트가 안 뜬다). `/etc/nginx/conf.d/glassvue.conf` 에 `location = /api/notifications/stream` 을 `location /api/` **와 별도**로 두고 `proxy_buffering off`·`gzip off`·`chunked_transfer_encoding on`·`proxy_read_timeout 3600s`. exact(`=`) 매치라 프리픽스 `/api/` 보다 우선(파일 순서 무관). 안 해도 알림은 DB에 남아 **벨/뱃지는 재조회로 보인다** — 즉시성(토스트)만 잃는 우아한 열화. 서버측은 `SseEmitter`(회원별 레지스트리) + `@Scheduled(15s)` 하트비트로 유휴 연결 유지. ⚠ 인증: 브라우저 기본 `EventSource`가 Authorization 헤더를 못 실어 **프론트가 fetch 스트림 + Bearer** 로 연결(토큰 URL 노출 회피). 상세 `handoffs/2026-07-24-handoff.md` §11 |
 | **비밀번호 재설정** (B-10) | ✅ **완료** (2026-07-28) | — | "비밀번호 잊음" 흐름. 아이디로 **단발성 토큰** 발급(`PasswordResetTokenStore`, Redis `auth:reset:<token>`=memberId, 30분 TTL, `getAndDelete`로 재사용·경합 차단) → 새 비번. `RefreshTokenStore`와 반대로 **토큰을 키**로 둬(회원당 1개가 아니라 토큰당 1개) 재발급이 이전 링크를 조용히 무효화하지 않고 O(1) 소비. 변경 시 refresh 폐기(다른 세션 무효화, `changePassword`와 동일). **열거 방지**: 없는 아이디도 200. ✅ **2026-07-29 완성** — 보낼 주소(B-13)와 발송 채널이 같은 날 붙었다. 채널은 **로컬 메일 캐처**(Mailpit `127.0.0.1:1025`)라 밖으로 나가지 않고, 코드는 `global/mail/Mailer` 한 곳. ⚠ 운영 차단은 `application.yml` 에 **`spring.mail` 키를 두지 않는 것**으로 보장한다 — *"빈 기본값이면 꺼진다"* 는 **틀렸다**(프로퍼티가 존재하면 자동설정이 빈을 만들고 localhost 로 폴백한다 — 통합 테스트가 실제로 메일을 보내 드러났다). `MailerAutoConfigOffTest` 가 고정. ✅ **소유 인증도 같은 날 붙었다**(B-14, V34) — 6자리 인증번호를 메일로 보내 확인하고 `member.email_verified` 에 남긴다. ⚠ 주소를 바꾸면 인증이 자동으로 풀린다(인증은 주소에 대한 것). ⚠ 미인증 주소로도 재설정 링크는 보낸다(사용자 결정 — 안 보내면 오타 낸 사람이 계정을 못 찾는다). 링크는 dev 에서 응답에도 실어(`auth.password-reset.expose-token`, base=false·`application-dev.yml`=true) 화면에서 확인한다. 운영은 기본 프로파일로 떠(systemd `ExecStart`에 `--spring.profiles.active` 없음) 절대 노출 안 됨. 마이그레이션 없음(Redis). 상세 `handoffs/2026-07-28-handoff.md` |
 | **Sentry** (에러추적) | ⏸ **보류 → 관측/MSA 단계** (2026-07-16 재판단) | 관측 스택과 함께 | 예외/에러 그루핑·릴리스 추적, **프론트(Vue)+백(Spring) 동시 커버**. *재판단 이유*: 의미가 있으려면 이벤트를 받을 곳(DSN→sentry.io SaaS 또는 자체호스트)이 필요한데, 자체호스트는 Docker+무거운 스택(지금 로드맵상 보류)이고 SaaS는 외부 계정·전송 필요. **모노레포 연습 단계엔 오버엔지니어링** — 관측 스택(Alloy/Loki/Prometheus/Grafana) 도입 시점에 함께 넣는다. 메트릭·로그·트레이스와 별개의 "에러 전용" 도구 |
