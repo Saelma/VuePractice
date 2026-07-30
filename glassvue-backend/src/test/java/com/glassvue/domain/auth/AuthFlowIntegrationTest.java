@@ -27,6 +27,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class AuthFlowIntegrationTest {
 
+    // ⚠ 비밀번호 정책(E-3, 2026-07-30) 때문에 픽스처를 바꿨다 — password123 은 차단 목록에 있다.
+    //    가입·비밀번호 변경 API 는 정책을 타므로, **API 로 만드는 계정**은 정책을 통과하는 값을 써야 한다.
+    //    (리포지토리로 직접 저장하는 픽스처는 검증을 안 타므로 password123 을 그대로 쓴다.)
+    private static final String PW = "Tulip-Harbor-72";
+
     @Autowired MockMvc mockMvc;
     // 재설정 토큰은 Redis에 저장되고 응답 노출은 dev 프로파일만 켜진다(테스트는 기본 프로파일).
     // 그래서 HTTP로 토큰을 못 받으니, 서비스로 직접 발급해 confirm 엔드포인트만 E2E로 검증한다.
@@ -40,13 +45,13 @@ class AuthFlowIntegrationTest {
     void fullFlow() throws Exception {
         // 1) 회원가입
         mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
-                        "{\"loginId\":\"" + loginId + "\",\"password\":\"password123\",\"nickname\":\"통합테스터\",\"email\":\"" + loginId + "@example.com\"}"))
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\",\"nickname\":\"통합테스터\",\"email\":\"" + loginId + "@example.com\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.nickname").value("통합테스터"));
 
         // 2) 로그인 → accessToken 추출
         String loginBody = mockMvc.perform(post("/api/auth/login").contentType(JSON).content(
-                        "{\"loginId\":\"" + loginId + "\",\"password\":\"password123\"}"))
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         String token = JsonPath.read(loginBody, "$.data.accessToken");
@@ -78,7 +83,7 @@ class AuthFlowIntegrationTest {
     void passwordResetFlow() throws Exception {
         // 1) 가입
         mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
-                        "{\"loginId\":\"" + loginId + "\",\"password\":\"password123\",\"nickname\":\"재설정테스터\",\"email\":\"" + loginId + "@example.com\"}"))
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\",\"nickname\":\"재설정테스터\",\"email\":\"" + loginId + "@example.com\"}"))
                 .andExpect(status().isCreated());
 
         // 2) 재설정 토큰 발급(서비스로 직접 — 응답 노출은 dev만)
@@ -92,7 +97,7 @@ class AuthFlowIntegrationTest {
 
         // 4) 옛 비번은 실패
         mockMvc.perform(post("/api/auth/login").contentType(JSON).content(
-                        "{\"loginId\":\"" + loginId + "\",\"password\":\"password123\"}"))
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\"}"))
                 .andExpect(status().isUnauthorized());
 
         // 5) 새 비번으로 로그인 성공
@@ -123,7 +128,7 @@ class AuthFlowIntegrationTest {
     // ---------- 이메일 수집 (B-13) ----------
 
     private String signupBody(String id, String nickname, String email) {
-        return "{\"loginId\":\"" + id + "\",\"password\":\"password123\",\"nickname\":\"" + nickname
+        return "{\"loginId\":\"" + id + "\",\"password\":\"" + PW + "\",\"nickname\":\"" + nickname
                 + "\",\"email\":\"" + email + "\"}";
     }
 
@@ -133,7 +138,7 @@ class AuthFlowIntegrationTest {
         String id = "em_" + UUID.randomUUID().toString().substring(0, 8);
         // 누락 — DB 는 nullable 이지만 API 계층에서 막는다(@NotBlank)
         mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
-                        "{\"loginId\":\"" + id + "\",\"password\":\"password123\",\"nickname\":\"ZZ이메일없음\"}"))
+                        "{\"loginId\":\"" + id + "\",\"password\":\"" + PW + "\",\"nickname\":\"ZZ이메일없음\"}"))
                 .andExpect(status().isBadRequest());
         // 형식 오류
         mockMvc.perform(post("/api/auth/signup").contentType(JSON)

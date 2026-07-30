@@ -18,6 +18,7 @@ import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProperties;
 import com.glassvue.global.security.JwtProvider;
 import com.glassvue.global.security.PasswordResetTokenStore;
+import com.glassvue.global.security.PasswordPolicy;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
 import com.glassvue.global.security.LoginAttemptGuard;
@@ -47,6 +48,7 @@ class AuthServiceTest {
     @Mock TokenBlacklist tokenBlacklist;
     @Mock TokenRevocationStore tokenRevocationStore;
     @Mock LoginAttemptGuard loginAttemptGuard;
+    @Mock PasswordPolicy passwordPolicy; // 규칙은 PasswordPolicyTest·API 통합테스트가 본다
     @Mock PasswordResetTokenStore passwordResetTokenStore;
     @Mock com.glassvue.global.mail.Mailer mailer;
     // MailProperties 는 record 라 목이 아니라 실값을 쓴다 — 링크 조립 결과를 그대로 검증하려고.

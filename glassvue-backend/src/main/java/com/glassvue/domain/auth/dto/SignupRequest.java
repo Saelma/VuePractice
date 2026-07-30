@@ -12,7 +12,7 @@ public record SignupRequest(
         String loginId,
 
         @Schema(description = "비밀번호", example = "password123")
-        @NotBlank @Size(min = 8, max = 64)
+        @NotBlank @Size(min = 10, max = 64)
         String password,
 
         @Schema(description = "닉네임", example = "홍길동")

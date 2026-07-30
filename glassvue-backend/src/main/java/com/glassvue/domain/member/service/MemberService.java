@@ -13,6 +13,7 @@ import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.mail.Mailer;
 import com.glassvue.global.security.EmailVerificationCodeStore;
 import com.glassvue.global.security.JwtProvider;
+import com.glassvue.global.security.PasswordPolicy;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
 import com.glassvue.global.security.TokenRevocationStore;
@@ -39,6 +40,7 @@ public class MemberService {
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklist tokenBlacklist;
     private final TokenRevocationStore tokenRevocationStore;
+    private final PasswordPolicy passwordPolicy;
     private final JwtProvider jwtProvider;
     private final EmailVerificationCodeStore emailVerificationCodeStore;
     private final Mailer mailer;
@@ -151,6 +153,9 @@ public class MemberService {
         if (!passwordEncoder.matches(currentPassword, member.getPassword())) {
             throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
         }
+        // ⚠ 정책 검사는 **현재 비밀번호 확인 뒤**다. 앞에 두면 남이 아무 값이나 넣어 보며
+        // "이 비밀번호는 정책에 걸린다/안 걸린다" 를 알아낼 수 있다(사소하지만 공짜로 피할 수 있는 누출).
+        passwordPolicy.validate(newPassword, member.getLoginId(), member.getNickname());
         member.updatePassword(passwordEncoder.encode(newPassword));
         refreshTokenStore.delete(memberId);
         // ⚠ refresh 삭제만으로는 "다른 기기 세션 무효화"가 아니다 — 그 기기의 access 토큰은 만료까지

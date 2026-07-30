@@ -61,7 +61,10 @@ class PointFlowIntegrationTest {
     @Autowired PointService pointService;
 
     private static final String JSON = "application/json";
-    private static final String PW = "password123";
+    // ⚠ 비밀번호 정책(E-3, 2026-07-30) 때문에 픽스처를 바꿨다 — password123 은 차단 목록에 있다.
+    //    가입·비밀번호 변경 API 는 정책을 타므로, **API 로 만드는 계정**은 정책을 통과하는 값을 써야 한다.
+    //    (리포지토리로 직접 저장하는 픽스처는 검증을 안 타므로 password123 을 그대로 쓴다.)
+    private static final String PW = "Tulip-Harbor-72";
 
     private String buyerLoginId;
     private String adminLoginId;

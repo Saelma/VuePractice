@@ -30,7 +30,7 @@ async function onNickname() {
 async function onPassword() {
   pw.msg = ''; pw.err = '';
   if (!pw.current || !pw.next) { pw.err = '현재/새 비밀번호를 입력하세요.'; return; }
-  if (pw.next.length < 8) { pw.err = '새 비밀번호는 8자 이상이어야 합니다.'; return; }
+  if (pw.next.length < 10) { pw.err = '새 비밀번호는 10자 이상이어야 합니다.'; return; }
   pw.loading = true;
   try {
     await changePassword(pw.current, pw.next);

@@ -14,6 +14,7 @@ import com.glassvue.domain.member.service.query.MemberAddressQueryService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProvider;
+import com.glassvue.global.security.PasswordPolicy;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
 import com.glassvue.global.security.TokenRevocationStore;
@@ -38,6 +39,7 @@ class MemberServiceTest {
     @Mock RefreshTokenStore refreshTokenStore;
     @Mock TokenBlacklist tokenBlacklist;
     @Mock TokenRevocationStore tokenRevocationStore;
+    @Mock PasswordPolicy passwordPolicy; // 규칙은 PasswordPolicyTest·API 통합테스트가 본다
     @Mock JwtProvider jwtProvider;
     @InjectMocks MemberService service;
 

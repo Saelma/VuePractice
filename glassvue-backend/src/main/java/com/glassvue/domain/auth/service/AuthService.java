@@ -16,6 +16,7 @@ import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProperties;
 import com.glassvue.global.security.JwtProvider;
 import com.glassvue.global.security.LoginAttemptGuard;
+import com.glassvue.global.security.PasswordPolicy;
 import com.glassvue.global.security.PasswordResetTokenStore;
 import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
@@ -45,6 +46,7 @@ public class AuthService {
     private final TokenBlacklist tokenBlacklist;
     private final TokenRevocationStore tokenRevocationStore;
     private final LoginAttemptGuard loginAttemptGuard;
+    private final PasswordPolicy passwordPolicy;
     private final PasswordResetTokenStore passwordResetTokenStore;
     // 발송은 인프라라 global 어댑터를 그대로 주입한다(도메인 이벤트로 감쌀 만한 fan-out 이 아직 없다).
     private final Mailer mailer;
@@ -63,6 +65,8 @@ public class AuthService {
         if (memberRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
+        // 비밀번호 정책(E-3) — 아이디·닉네임을 함께 봐야 하므로 DTO 애노테이션으로는 못 하는 검사다.
+        passwordPolicy.validate(req.password(), req.loginId(), req.nickname());
         Member member = Member.builder()
                 .loginId(req.loginId())
                 .password(passwordEncoder.encode(req.password()))
@@ -208,6 +212,9 @@ public class AuthService {
         }
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_RESET_TOKEN));
+        // ⚠ 정책 검사는 **토큰 소비 뒤**다. 앞에 두면 약한 비밀번호를 넣어 본 사람이 토큰을 잃지 않고
+        // 재시도할 수 있는데, 그건 편의 대신 링크의 단발성을 깨는 것이다 — 다시 요청하면 된다.
+        passwordPolicy.validate(newPassword, member.getLoginId(), member.getNickname());
         member.updatePassword(passwordEncoder.encode(newPassword));
         refreshTokenStore.delete(memberId);
         // ⚠ 재설정은 계정을 되찾는 경로다 — 남이 들어와 있다면 그 access 토큰을 여기서 끊어야 한다

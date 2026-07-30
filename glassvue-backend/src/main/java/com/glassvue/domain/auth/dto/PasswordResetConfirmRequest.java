@@ -12,7 +12,7 @@ public record PasswordResetConfirmRequest(
         String token,
 
         @Schema(description = "새 비밀번호", example = "newpassword123")
-        @NotBlank @Size(min = 8, max = 64)
+        @NotBlank @Size(min = 10, max = 64)
         String newPassword
 ) {
 }

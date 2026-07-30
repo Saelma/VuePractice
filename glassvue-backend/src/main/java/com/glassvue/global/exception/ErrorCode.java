@@ -36,6 +36,16 @@ public enum ErrorCode {
      */
     TOO_MANY_LOGIN_ATTEMPTS("AUTH-429", HttpStatus.TOO_MANY_REQUESTS,
             "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요."),
+    /**
+     * 비밀번호 정책 위반 (E-3, 2026-07-30). 셋을 <b>구분해서</b> 답한다 — 로그인 실패와 달리
+     * 여기는 <b>본인이 값을 새로 정하는 자리</b>라, 이유를 알려주지 않으면 사용자가 고칠 수 없다
+     * (열거 위험도 없다: 대상이 이미 자기 계정이다).
+     */
+    WEAK_PASSWORD_TOO_SHORT("AUTH-400P1", HttpStatus.BAD_REQUEST, "비밀번호는 10자 이상이어야 합니다."),
+    WEAK_PASSWORD_COMMON("AUTH-400P2", HttpStatus.BAD_REQUEST,
+            "너무 흔한 비밀번호입니다. 다른 값을 사용해 주세요."),
+    WEAK_PASSWORD_CONTAINS_ID("AUTH-400P3", HttpStatus.BAD_REQUEST,
+            "비밀번호에 아이디나 닉네임을 포함할 수 없습니다."),
     UNAUTHENTICATED("AUTH-401U", HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     INVALID_TOKEN("AUTH-401T", HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 토큰입니다."),
     PASSWORD_MISMATCH("AUTH-400P", HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),

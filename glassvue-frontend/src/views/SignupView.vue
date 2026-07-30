@@ -23,8 +23,10 @@ async function onSubmit() {
     error.value = '아이디는 4자 이상이어야 합니다.';
     return;
   }
-  if (form.password.length < 8) {
-    error.value = '비밀번호는 8자 이상이어야 합니다.';
+  if (form.password.length < 10) {
+    // 서버 정책(E-3)과 같은 하한. ⚠ 나머지 규칙(흔한 목록·아이디 포함 금지)은 **서버가 판정한다** —
+    // 화면이 목록을 들고 있으면 목록이 갈라지고, 그 목록 자체가 힌트가 된다.
+    error.value = '비밀번호는 10자 이상이어야 합니다.';
     return;
   }
   if (!EMAIL_RE.test(form.email.trim())) {
@@ -67,7 +69,7 @@ async function onSubmit() {
           <label class="field">
             <span class="field-label">비밀번호</span>
             <DxTextBox v-model:value="form.password" mode="password" />
-            <span class="muted">8자 이상</span>
+            <span class="muted">10자 이상 · 아이디·닉네임이나 흔한 비밀번호는 쓸 수 없습니다</span>
           </label>
           <label class="field">
             <span class="field-label">닉네임</span>

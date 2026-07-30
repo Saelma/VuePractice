@@ -19,8 +19,8 @@ async function onSubmit() {
     error.value = '재설정 링크가 올바르지 않습니다. 처음부터 다시 시도해 주세요.';
     return;
   }
-  if (form.newPassword.length < 8) {
-    error.value = '비밀번호는 8자 이상이어야 합니다.';
+  if (form.newPassword.length < 10) {
+    error.value = '비밀번호는 10자 이상이어야 합니다.';
     return;
   }
   if (form.newPassword !== form.confirm) {
@@ -53,7 +53,7 @@ async function onSubmit() {
             <label class="field">
               <span class="field-label">새 비밀번호</span>
               <DxTextBox v-model:value="form.newPassword" mode="password" />
-              <span class="muted">8자 이상</span>
+              <span class="muted">10자 이상 · 아이디·닉네임이나 흔한 비밀번호는 쓸 수 없습니다</span>
             </label>
             <label class="field">
               <span class="field-label">새 비밀번호 확인</span>
