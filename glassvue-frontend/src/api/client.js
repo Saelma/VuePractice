@@ -1,4 +1,4 @@
-import { authState, setTokens, clearSession } from '../stores/auth';
+import { authState, setTokens, setUser, clearSession } from '../stores/auth';
 
 // 백엔드는 항상 ApiResponse<T> 래퍼로 응답한다. 여기서 벗겨 data만 돌려주고 실패면 예외.
 // 로그인 상태면 Authorization 헤더 자동 첨부, access 만료(401) 시 refresh로 1회 자동 재발급.
@@ -16,12 +16,34 @@ async function doRefresh() {
     const payload = await res.json().catch(() => null);
     if (res.ok && payload && payload.success) {
       setTokens(payload.data.accessToken, payload.data.refreshToken);
+      await syncUser(payload.data.accessToken);
       return true;
     }
   } catch (e) {
     /* 네트워크 오류 → 실패 처리 */
   }
   return false;
+}
+
+// 재발급 직후 사용자 정보(특히 role)를 다시 읽어 화면 상태를 서버와 맞춘다.
+//
+// ⚠ 왜 여기인가: 관리자가 강등되면 백엔드가 옛 access 토큰을 즉시 무효화하므로(발급시각 컷오프)
+// 다음 요청이 401 → 재발급을 타고, 그 새 토큰에는 **바뀐 역할**이 박혀 있다. 즉 역할이 달라질 수 있는
+// 자리는 정확히 이 시점뿐이다. 여기서 갱신하지 않으면 localStorage 의 role 이 ADMIN 으로 남아
+// **관리 메뉴가 계속 보이고 라우터 가드도 통과**한 뒤 API 에서 403 이 난다 — 화면이 거짓말을 한다.
+// 실패는 무시한다: 토큰은 이미 유효하므로 요청 자체를 막을 이유가 없다(다음 재발급에서 다시 맞춰진다).
+async function syncUser(accessToken) {
+  try {
+    const res = await fetch('/api/auth/me', {
+      headers: { Accept: 'application/json', Authorization: 'Bearer ' + accessToken },
+    });
+    const payload = await res.json().catch(() => null);
+    if (res.ok && payload && payload.success) {
+      setUser(payload.data);
+    }
+  } catch (e) {
+    /* 사용자 정보 갱신 실패는 재발급 성공을 취소하지 않는다 */
+  }
 }
 
 function tryRefresh() {
