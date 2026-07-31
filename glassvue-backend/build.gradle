@@ -1,5 +1,6 @@
 plugins {
 	id 'java'
+	id 'jacoco'   // 테스트 커버리지 측정 (H-5, 2026-07-31) — 리포트만, 게이트 없음(아래 참조)
 	id 'org.springframework.boot' version '4.1.0'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -93,6 +94,39 @@ tasks.named('test') {
 	// 테스트 컨텍스트 자신의 @Scheduled 는 여전히 db1 을 SCAN+GETDEL 한다.
 	// ⚠ fixedDelay 는 컨텍스트 기동 직후 1회 실행된다 — 그건 테스트가 키를 만들기 전이라 무해하다.
 	systemProperty 'notice.view-count.flush-interval-ms', '86400000'
+
+	// 테스트를 돌리면 커버리지 리포트도 함께 갱신한다(H-5). 수동 생성으로 두면 **어제 숫자를
+	// 오늘 것으로 읽는** 사고가 난다 — 리포트는 조용히 낡는다.
+	finalizedBy tasks.named('jacocoTestReport')
+}
+
+// ── 테스트 커버리지 (JaCoCo) — H-5, 2026-07-31 ────────────────────────────────
+//
+// ⚠ **이 도구의 사용 규약이 도구 자체보다 중요하다** (BACKLOG H-5 · WA §3):
+//   · 리포트만 본다. **게이트(최소 %)는 붙이지 않는다** — 빌드를 막기 시작하면 숫자 채우기가 목적이 된다.
+//   · **"커버리지 올려줘" 는 금지**. 단언 없는 테스트로도 100% 가 나온다("실행됐다"만 재고 "맞다"는 못 잰다).
+//   · 쓰는 법은 하나: **"이 분기가 안 덮였는데 진짜 위험한가"** 를 찾는 자.
+//     맞다고 판단되면 그 자리에 테스트를 쓰고, **변형 주입으로 그 테스트가 진짜 잡는지 확인한다**(WA §3).
+//
+// → 그래서 `jacocoTestCoverageVerification` 은 **일부러 설정하지 않는다.** 없는 게 아니라 안 쓴다.
+jacoco {
+	// 0.8.14 부터 Java 25(클래스 파일 버전 69)를 공식 지원한다. 낮추면 계측 자체가 실패한다.
+	toolVersion = '0.8.14'
+}
+
+tasks.named('jacocoTestReport') {
+	dependsOn tasks.named('test')
+	reports {
+		html.required = true    // 사람이 읽는 것 → build/reports/jacoco/test/html/index.html
+		xml.required = false    // 받아 갈 CI 가 없다. 켜면 아무도 안 읽는 파일만 생긴다
+		csv.required = false
+	}
+	// 생성 코드는 세지 않는다 — 우리가 쓴 코드가 아니라서 숫자만 흐린다.
+	//   · QueryDSL Q 클래스: annotationProcessor 산출물(수백 줄).
+	//   · Lombok 생성 메서드: `lombok.config` 의 addLombokGeneratedAnnotation 으로 걸러진다(그 파일 주석 참조).
+	classDirectories.setFrom(files(classDirectories.files.collect {
+		fileTree(dir: it, exclude: ['**/Q*.class'])
+	}))
 }
 
 // scrimage-webp는 JVM이 시작할 때 cwebp/dwebp 바이너리(합계 6.5MB)를 java.io.tmpdir에 추출하고
