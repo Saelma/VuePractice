@@ -72,7 +72,12 @@ async function onSubmit() {
         </template>
       </div>
 
+      <!-- 아이디를 잊은 사람이 이 화면으로 온다 — 여기서 막히면 갈 곳이 없어 옆으로 보내 준다(G-1). -->
       <p class="mt-4 text-center text-sm text-ink-500">
+        아이디도 기억나지 않나요?
+        <RouterLink to="/find-id" class="font-medium text-ink-900 underline underline-offset-2">아이디 찾기</RouterLink>
+      </p>
+      <p class="mt-2 text-center text-sm text-ink-500">
         <RouterLink to="/login" class="font-medium text-ink-900 underline underline-offset-2">로그인으로 돌아가기</RouterLink>
       </p>
     </div>

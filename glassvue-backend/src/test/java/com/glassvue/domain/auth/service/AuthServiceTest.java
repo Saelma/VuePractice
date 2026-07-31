@@ -51,6 +51,7 @@ class AuthServiceTest {
     @Mock LoginAttemptGuard loginAttemptGuard;
     @Mock PasswordPolicy passwordPolicy; // 규칙은 PasswordPolicyTest·API 통합테스트가 본다
     @Mock PasswordResetRequestGuard resetRequestGuard;
+    @Mock com.glassvue.global.security.FindLoginIdGuard findLoginIdGuard;
     @Mock PasswordResetTokenStore passwordResetTokenStore;
     @Mock com.glassvue.global.mail.Mailer mailer;
     // MailProperties 는 record 라 목이 아니라 실값을 쓴다 — 링크 조립 결과를 그대로 검증하려고.
@@ -229,5 +230,69 @@ class AuthServiceTest {
         when(passwordResetTokenStore.consume("BAD")).thenReturn(null);
         assertErrorCode(() -> service.confirmPasswordReset("BAD", "newpw12345"), ErrorCode.INVALID_RESET_TOKEN);
         verify(refreshTokenStore, never()).delete(any());
+    }
+
+    // --- 아이디 찾기 (G-1, 2026-07-31) ---
+
+    @Test
+    @DisplayName("아이디 찾기: 등록된 주소 → 아이디가 담긴 메일이 그 주소로 나간다")
+    void findLoginId_sendsMail() {
+        Member m = com.glassvue.domain.member.entity.Member.builder()
+                .loginId("kim").password("ENC").nickname("김철수")
+                .role(com.glassvue.domain.member.entity.Role.USER).email("kim@test.local").build();
+        when(memberRepository.findByEmail("kim@test.local")).thenReturn(Optional.of(m));
+
+        service.findLoginId("kim@test.local", IP);
+
+        org.mockito.ArgumentCaptor<String> to = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.ArgumentCaptor<String> body = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(mailer).send(to.capture(), any(), body.capture());
+        assertThat(to.getValue()).isEqualTo("kim@test.local");
+        assertThat(body.getValue()).contains("kim");   // 아이디가 본문에 있어야 쓸모가 있다
+    }
+
+    @Test
+    @DisplayName("⚠ 아이디 찾기: 대문자·공백이 섞인 주소도 정규화해서 찾는다 (안 하면 영영 못 찾는다)")
+    void findLoginId_normalizesEmail() {
+        // 저장은 소문자(B-13). 입력을 그대로 조회하면 대문자로 가입한 사람은 자기 아이디를 못 찾는다.
+        Member m = com.glassvue.domain.member.entity.Member.builder()
+                .loginId("kim").password("ENC").nickname("김철수")
+                .role(com.glassvue.domain.member.entity.Role.USER).email("kim@test.local").build();
+        when(memberRepository.findByEmail("kim@test.local")).thenReturn(Optional.of(m));
+
+        service.findLoginId("  KIM@Test.Local ", IP);
+
+        verify(mailer).send(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("아이디 찾기: 없는 주소여도 예외 없이 끝난다 — 메일만 안 나간다(열거 방지)")
+    void findLoginId_absent() {
+        when(memberRepository.findByEmail("nobody@test.local")).thenReturn(Optional.empty());
+
+        service.findLoginId("nobody@test.local", IP);   // 예외가 나면 그 자체로 가입 여부를 알려준다
+
+        verify(mailer, never()).send(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("⚠ 아이디 찾기: 요청 기록은 **조회 전** — 없는 주소도 똑같이 센다(429가 가입 여부를 알려주지 않게)")
+    void findLoginId_recordsBeforeLookup() {
+        when(memberRepository.findByEmail("nobody@test.local")).thenReturn(Optional.empty());
+
+        service.findLoginId("nobody@test.local", IP);
+
+        verify(findLoginIdGuard).record("nobody@test.local", IP);
+    }
+
+    @Test
+    @DisplayName("아이디 찾기: 제한 초과 → TOO_MANY_FIND_ID_REQUESTS, 회원 조회조차 안 한다")
+    void findLoginId_throttled() {
+        when(findLoginIdGuard.isBlocked("kim@test.local", IP)).thenReturn(true);
+
+        assertErrorCode(() -> service.findLoginId("kim@test.local", IP), ErrorCode.TOO_MANY_FIND_ID_REQUESTS);
+
+        verify(memberRepository, never()).findByEmail(any());
+        verify(mailer, never()).send(any(), any(), any());
     }
 }

@@ -15,6 +15,7 @@ import com.glassvue.global.mail.Mailer;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.JwtProperties;
 import com.glassvue.global.security.JwtProvider;
+import com.glassvue.global.security.FindLoginIdGuard;
 import com.glassvue.global.security.LoginAttemptGuard;
 import com.glassvue.global.security.PasswordPolicy;
 import com.glassvue.global.security.PasswordResetRequestGuard;
@@ -49,6 +50,7 @@ public class AuthService {
     private final LoginAttemptGuard loginAttemptGuard;
     private final PasswordPolicy passwordPolicy;
     private final PasswordResetRequestGuard resetRequestGuard;
+    private final FindLoginIdGuard findLoginIdGuard;
     private final PasswordResetTokenStore passwordResetTokenStore;
     // 발송은 인프라라 global 어댑터를 그대로 주입한다(도메인 이벤트로 감쌀 만한 fan-out 이 아직 없다).
     private final Mailer mailer;
@@ -208,6 +210,57 @@ public class AuthService {
                 이 링크는 30분 후 만료되며, 한 번 사용하면 더 이상 쓸 수 없습니다.
                 본인이 요청한 것이 아니라면 이 메일을 무시하세요 — 비밀번호는 그대로 유지됩니다.
                 """.formatted(member.getNickname(), link));
+    }
+
+    /**
+     * 아이디 찾기 (2026-07-31, G-1) — 등록된 주소로 <b>아이디를 메일로</b> 보낸다.
+     *
+     * <p><b>왜 필요했나</b>: 비밀번호 재설정은 <b>아이디를 알아야</b> 시작된다. 아이디를 잊은 사람은
+     * 재설정도 못 하니 <b>들어올 방법이 아예 없었다</b>(실측: {@code /api/auth/*} 에 찾기 경로 없음).
+     *
+     * <p><b>화면에 직접 보여주지 않는 이유</b>: 응답에 아이디를 실으면 주소를 넣어 보며 가입 여부와
+     * 아이디를 <b>수집</b>할 수 있다. 재설정에서 지킨 열거 방지를 여기서 깨면 아무 의미가 없다 —
+     * 그래서 <b>가입 여부와 무관하게 빈 200</b> 이고, 값은 그 주소의 주인만 메일로 받는다.
+     * ⚠ dev 라도 응답에 싣지 않는다(재설정 토큰은 {@code expose-token} 으로 노출하는데, <b>그건
+     * 링크지 신원이 아니다</b>). dev 확인은 Mailpit 로 한다.
+     *
+     * <p>⚠ 정지된 계정도 알려준다. 아이디는 계정 상태와 무관한 <b>식별자</b>이고, 안 알려주면
+     * 정지된 사람이 "왜 안 되는지" 물어볼 창구조차 못 찾는다(로그인 시 403 으로 사유를 안내한다).
+     */
+    public void findLoginId(String email, String clientIp) {
+        // ⚠ 제한 검사·기록은 **회원 조회 전**이다(재설정·로그인 가드와 같은 규칙).
+        // 조회 뒤에 두면 없는 주소는 세어지지 않아 429 가 "그 주소는 가입돼 있다" 는 신호가 된다.
+        if (findLoginIdGuard.isBlocked(email, clientIp)) {
+            throw new BusinessException(ErrorCode.TOO_MANY_FIND_ID_REQUESTS);
+        }
+        findLoginIdGuard.record(email, clientIp);
+        // ⚠ 저장 시점과 같은 정규화를 거친다. 안 하면 대문자로 가입한 사람이 자기 아이디를 못 찾는다
+        // (저장은 소문자, 조회는 입력 그대로 → 영원히 안 맞는다). B-13 이 정한 규칙을 그대로 쓴다.
+        memberRepository.findByEmail(Member.normalizeEmail(email))
+                .ifPresent(member -> {
+                    log.info("Login id found and mailed: {}", member.getId());
+                    sendLoginIdMail(member);
+                });
+    }
+
+    /**
+     * 아이디를 메일로 보낸다.
+     *
+     * <p>주소로 찾아온 회원이라 {@code email} 이 null 일 수 없다 — 재설정({@link #sendResetMail})과
+     * 달리 빈 주소 갈래가 없다. 실패를 삼키는 것은 같다({@code Mailer}) — 여기서 예외가 나면
+     * <b>500 이 곧 "그 주소는 가입돼 있다" 가 되어</b> 열거 방지가 깨진다.
+     */
+    private void sendLoginIdMail(Member member) {
+        mailer.send(member.getEmail(), "[Glassvue] 아이디 안내", """
+                안녕하세요, %s님.
+
+                요청하신 계정의 아이디는 아래와 같습니다.
+
+                %s
+
+                비밀번호가 기억나지 않는다면 로그인 화면의 「비밀번호를 잊으셨나요?」 에서 재설정할 수 있습니다.
+                본인이 요청한 것이 아니라면 이 메일을 무시하세요 — 계정에는 아무 변화도 없습니다.
+                """.formatted(member.getNickname(), member.getLoginId()));
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.glassvue.domain.auth.controller;
 
+import com.glassvue.domain.auth.dto.FindLoginIdRequest;
 import com.glassvue.domain.auth.dto.LoginRequest;
 import com.glassvue.domain.auth.dto.MemberResponse;
 import com.glassvue.domain.auth.dto.PasswordResetConfirmRequest;
@@ -45,4 +46,9 @@ public interface AuthController {
 
     @Operation(summary = "비밀번호 재설정 확정 (토큰 + 새 비밀번호)")
     ResponseEntity<ApiResponse<Void>> confirmPasswordReset(@Valid PasswordResetConfirmRequest request);
+
+    @Operation(summary = "아이디 찾기 (이메일로 아이디 발송) — 가입 여부와 무관하게 항상 200, 응답에 아이디를 싣지 않는다")
+    ResponseEntity<ApiResponse<Void>> findLoginId(
+            @Valid FindLoginIdRequest request,
+            @io.swagger.v3.oas.annotations.Parameter(hidden = true) jakarta.servlet.http.HttpServletRequest httpRequest);
 }

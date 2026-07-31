@@ -47,4 +47,13 @@ public interface MemberRepository extends JpaRepository<Member, UUID> {
 
     /** 이메일 변경 시 본인 제외(같은 값 재저장 허용 — 닉네임과 같은 규칙). */
     boolean existsByEmailAndIdNot(String email, UUID id);
+
+    /**
+     * 아이디 찾기(G-1) — 주소로 회원을 찾는다. ⚠ {@link #existsByEmail} 과 같은 전제:
+     * <b>소문자로 정규화된 값</b>이 들어온다(호출부가 {@code Member.normalizeEmail} 을 거친다).
+     * 정규화를 빠뜨리면 대문자로 가입한 사람이 자기 아이디를 못 찾는다.
+     *
+     * <p>주소는 유니크라 최대 1건이다. 여러 계정을 한 주소로 묶는 건 지금 구조가 허용하지 않는다.
+     */
+    Optional<Member> findByEmail(String email);
 }

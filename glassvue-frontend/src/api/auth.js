@@ -18,6 +18,12 @@ export function confirmPasswordReset(token, newPassword) {
   return apiPost('/api/auth/password-reset/confirm', { token, newPassword });
 }
 
+// 아이디 찾기(G-1) — 이메일로 아이디를 **메일로** 받는다.
+// ⚠ 응답에는 아이디가 없다(있으면 주소를 넣어 보며 계정을 수집할 수 있다). 가입 여부와 무관하게 200.
+export function findLoginId(email) {
+  return apiPost('/api/auth/find-id', { email });
+}
+
 export async function login(payload) {
   const tokens = await apiPost('/api/auth/login', payload);
   setTokens(tokens.accessToken, tokens.refreshToken);

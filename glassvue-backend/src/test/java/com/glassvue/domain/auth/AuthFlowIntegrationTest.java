@@ -1,5 +1,6 @@
 package com.glassvue.domain.auth;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -164,5 +165,79 @@ class AuthFlowIntegrationTest {
                         .content(signupBody(id + "b", "ZZ중복" + id.substring(3), upper.toLowerCase())))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("MEMBER-409E"));
+    }
+
+    // ---------- 아이디 찾기 (G-1, 2026-07-31) ----------
+
+    /**
+     * ⚠ <b>요청마다 자기 IP 를 만들어 보낸다</b>(WA §3 — 정리가 아니라 격리).
+     *
+     * <p>이 경로는 <b>IP 당 10회 · 10분</b> 제한이 걸려 있고 카운터는 Redis 에 TTL 로 남는다.
+     * 고정 IP(헤더 없으면 전부 {@code 127.0.0.1})를 쓰면 <b>10분 안에 스위트를 몇 번 돌리는 순간
+     * 뒷 테스트가 429 로 깨진다</b> — 원인이 자기 테스트에 없어서 찾기 어려운 종류다.
+     * 문서용 대역이 254개뿐이라 실행마다 겹칠 수 있어, 카운터 키로만 쓰인다는 점을 이용해
+     * {@code 10.x.y.z} 에서 뽑는다(1600만 조합 — 실행 간 충돌이 사실상 없다).
+     */
+    private static String uniqueIp() {
+        int n = Math.abs(UUID.randomUUID().hashCode());
+        return "10." + (n >> 16 & 0xFF) + "." + (n >> 8 & 0xFF) + "." + (n & 0xFF);
+    }
+
+    private static String findIdBody(String email) {
+        return "{\"email\":\"" + email + "\"}";
+    }
+
+    @Test
+    @DisplayName("아이디 찾기: 가입 안 된 주소여도 200 (열거 방지)")
+    void findId_unknownEmail() throws Exception {
+        mockMvc.perform(post("/api/auth/find-id").header("X-Real-IP", uniqueIp())
+                        .contentType(JSON).content(findIdBody("nobody_" + UUID.randomUUID() + "@example.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("⚠ 아이디 찾기: 가입된 주소로 요청해도 **응답 어디에도 아이디가 없다** — 값은 메일로만")
+    void findId_registeredEmail_neverLeaksIdInResponse() throws Exception {
+        String id = "fid_" + UUID.randomUUID().toString().substring(0, 8);
+        String email = "zz_" + id + "@example.com";
+        mockMvc.perform(post("/api/auth/signup").contentType(JSON)
+                        .content(signupBody(id, "ZZ찾기" + id.substring(4), email)))
+                .andExpect(status().isCreated());
+
+        String body = mockMvc.perform(post("/api/auth/find-id").header("X-Real-IP", uniqueIp())
+                        .contentType(JSON).content(findIdBody(email)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // 여기가 이 기능의 핵심 제약이다 — 아이디가 응답에 실리면 주소를 넣어 보며 계정을 수집할 수 있다.
+        // 없는 주소(위 테스트)와 **바이트 단위로 구분되지 않는** 응답이어야 한다.
+        assertThat(body).doesNotContain(id);
+    }
+
+    @Test
+    @DisplayName("아이디 찾기: 같은 주소로 3회 200 → 4회째 429(AUTH-429F)")
+    void findId_throttledPerEmail() throws Exception {
+        // 주소는 매 실행 새로 만든다 — 주소 카운터가 실행 간에 이어지면 첫 요청부터 429 가 난다.
+        String email = "zz_thr_" + UUID.randomUUID() + "@example.com";
+        String ip = uniqueIp();
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(post("/api/auth/find-id").header("X-Real-IP", ip)
+                            .contentType(JSON).content(findIdBody(email)))
+                    .andExpect(status().isOk());
+        }
+        // ⚠ 가입되지 않은 주소로 태운다 — 없는 주소도 똑같이 잠겨야 429 가 가입 여부를 알려주지 않는다.
+        mockMvc.perform(post("/api/auth/find-id").header("X-Real-IP", ip)
+                        .contentType(JSON).content(findIdBody(email)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.error.code").value("AUTH-429F"));
+    }
+
+    @Test
+    @DisplayName("아이디 찾기: 이메일 형식이 아니면 400 — 제한 카운터를 태우기 전에 막힌다")
+    void findId_invalidEmail() throws Exception {
+        mockMvc.perform(post("/api/auth/find-id").header("X-Real-IP", uniqueIp())
+                        .contentType(JSON).content(findIdBody("not-an-email")))
+                .andExpect(status().isBadRequest());
     }
 }

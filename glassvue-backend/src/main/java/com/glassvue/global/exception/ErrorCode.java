@@ -53,6 +53,12 @@ public enum ErrorCode {
      */
     TOO_MANY_RESET_REQUESTS("AUTH-429R", HttpStatus.TOO_MANY_REQUESTS,
             "재설정 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
+    /**
+     * 아이디 찾기 요청 과다 (2026-07-31, G-1). 위와 같은 이유·같은 규칙이다 —
+     * 세는 대상만 아이디가 아니라 <b>이메일</b>이다({@code FindLoginIdGuard}).
+     */
+    TOO_MANY_FIND_ID_REQUESTS("AUTH-429F", HttpStatus.TOO_MANY_REQUESTS,
+            "아이디 찾기 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
     UNAUTHENTICATED("AUTH-401U", HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     INVALID_TOKEN("AUTH-401T", HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 토큰입니다."),
     PASSWORD_MISMATCH("AUTH-400P", HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),

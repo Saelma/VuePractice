@@ -1,5 +1,6 @@
 package com.glassvue.domain.auth.controller;
 
+import com.glassvue.domain.auth.dto.FindLoginIdRequest;
 import com.glassvue.domain.auth.dto.LoginRequest;
 import com.glassvue.domain.auth.dto.MemberResponse;
 import com.glassvue.domain.auth.dto.PasswordResetConfirmRequest;
@@ -88,6 +89,16 @@ public class AuthControllerImpl implements AuthController {
     public ResponseEntity<ApiResponse<Void>> confirmPasswordReset(
             @Valid @RequestBody PasswordResetConfirmRequest request) {
         authService.confirmPasswordReset(request.token(), request.newPassword());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Override
+    @PostMapping("/find-id")
+    public ResponseEntity<ApiResponse<Void>> findLoginId(
+            @Valid @RequestBody FindLoginIdRequest request, HttpServletRequest httpRequest) {
+        // 열거 방지 — 가입 여부와 무관하게 항상 200 이고, **응답에 아이디를 싣지 않는다**.
+        // 재설정과 달리 dev 노출 갈래도 없다: 저건 링크지만 이건 신원이라 성질이 다르다(AuthService).
+        authService.findLoginId(request.email(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok());
     }
 }

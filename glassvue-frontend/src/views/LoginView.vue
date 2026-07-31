@@ -51,9 +51,11 @@ async function onSubmit() {
             {{ loading ? '로그인 중…' : '로그인' }}
           </button>
 
-          <RouterLink to="/forgot-password" class="text-center text-sm text-ink-500 underline underline-offset-2">
-            비밀번호를 잊으셨나요?
-          </RouterLink>
+          <div class="flex items-center justify-center gap-3 text-sm text-ink-500">
+            <RouterLink to="/find-id" class="underline underline-offset-2">아이디 찾기</RouterLink>
+            <span aria-hidden="true" class="text-ink-300">|</span>
+            <RouterLink to="/forgot-password" class="underline underline-offset-2">비밀번호를 잊으셨나요?</RouterLink>
+          </div>
         </div>
       </div>
 

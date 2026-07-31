@@ -9,6 +9,7 @@ import LoginView from '../views/LoginView.vue';
 import SignupView from '../views/SignupView.vue';
 import ForgotPasswordView from '../views/ForgotPasswordView.vue';
 import ResetPasswordView from '../views/ResetPasswordView.vue';
+import FindIdView from '../views/FindIdView.vue';
 import MyPageView from '../views/MyPageView.vue';
 import BenefitsView from '../views/BenefitsView.vue';
 import ProductListView from '../views/ProductListView.vue';
@@ -37,6 +38,7 @@ const routes = [
   { path: '/signup', name: 'signup', component: SignupView },
   // 비밀번호 재설정 — 로그인 전 접근하므로 공개(requiresAuth 없음).
   { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView },
+  { path: '/find-id', name: 'find-id', component: FindIdView },
   { path: '/reset-password', name: 'reset-password', component: ResetPasswordView },
   { path: '/settings', name: 'settings', component: MyPageView, meta: { requiresAuth: true } },
   { path: '/benefits', name: 'benefits', component: BenefitsView, meta: { requiresAuth: true } },
