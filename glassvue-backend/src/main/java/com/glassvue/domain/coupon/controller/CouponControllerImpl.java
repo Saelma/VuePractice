@@ -37,6 +37,14 @@ public class CouponControllerImpl implements CouponController {
         return ResponseEntity.ok(ApiResponse.ok(couponService.myCoupons(user.id(), itemsTotal)));
     }
 
+    /** 공개 엔드포인트 — SecurityConfig 에서 `/api/coupons/**` 인증 규칙보다 **위에** 예외로 뚫어 뒀다. */
+    @Override
+    @GetMapping("/coupons/welcome")
+    public ResponseEntity<ApiResponse<CouponResponse>> welcome() {
+        // 없으면 data:null — 화면이 "쿠폰 안내를 띄울지"를 이 값 하나로 판단한다.
+        return ResponseEntity.ok(ApiResponse.ok(couponService.welcomeCoupon().orElse(null)));
+    }
+
     // 관리자 API는 /api/admin/** 아래로 모아 SecurityConfig 한 줄로 막는다(개별 매처를 잊을 수 없게).
     @Override
     @GetMapping("/admin/coupons")

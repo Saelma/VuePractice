@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verifyNoInteractions;
 
+import com.glassvue.domain.coupon.config.CouponProperties;
+import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.entity.Coupon;
 import com.glassvue.domain.coupon.entity.DiscountType;
 import com.glassvue.domain.coupon.entity.MemberCoupon;
@@ -131,6 +134,43 @@ class CouponServiceTest {
         given(memberCouponRepository.findById(any())).willReturn(Optional.empty());
 
         assertErrorCode(() -> couponService.redeem(MC_ID, OWNER, 50_000L), ErrorCode.COUPON_NOT_FOUND);
+    }
+
+    // ── 가입 쿠폰 안내(G-2) ───────────────────────────────────
+
+    /** 설정값에 따라 갈리는 기능이라 설정만 진짜 객체로 갈아 끼운다(목으로는 분기가 안 보인다). */
+    private CouponService serviceWith(String configured) {
+        return new CouponService(couponRepository, memberCouponRepository, new CouponProperties(configured));
+    }
+
+    @Test
+    @DisplayName("가입 쿠폰: 설정된 쿠폰이 있으면 그 정의를 돌려준다")
+    void welcomeCouponPresent() {
+        UUID couponId = UUID.randomUUID();
+        given(couponRepository.findById(couponId))
+                .willReturn(Optional.of(coupon(0L, YEAR_AGO, NEXT_YEAR)));
+
+        Optional<CouponResponse> welcome = serviceWith(couponId.toString()).welcomeCoupon();
+
+        assertThat(welcome).isPresent();
+        assertThat(welcome.get().name()).isEqualTo("ZZ 5천원");
+    }
+
+    @Test
+    @DisplayName("가입 쿠폰: 설정이 없으면 **DB 를 보지도 않는다**")
+    void welcomeCouponNotConfigured() {
+        assertThat(serviceWith("").welcomeCoupon()).isEmpty();
+
+        verifyNoInteractions(couponRepository);
+    }
+
+    @Test
+    @DisplayName("⚠ 가입 쿠폰: 설정된 쿠폰이 지워졌으면 비어 있다 — 화면이 없는 혜택을 광고하지 않게")
+    void welcomeCouponDeleted() {
+        UUID couponId = UUID.randomUUID();
+        given(couponRepository.findById(couponId)).willReturn(Optional.empty());
+
+        assertThat(serviceWith(couponId.toString()).welcomeCoupon()).isEmpty();
     }
 
     // ── 주문 스냅샷용 이름 ────────────────────────────────────

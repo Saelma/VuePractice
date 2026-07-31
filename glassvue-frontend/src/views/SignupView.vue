@@ -1,8 +1,9 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { reactive, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { signup, login } from '../api/auth';
+import { fetchWelcomeCoupon, couponDiscountText } from '../api/coupon';
 
 const router = useRouter();
 const form = reactive({ loginId: '', password: '', nickname: '', email: '' });
@@ -12,6 +13,17 @@ const loading = ref(false);
 // 서버(@Email)와 같은 것을 막자는 게 아니라, 왕복 없이 오타를 먼저 걸러 주자는 것.
 // 최종 판정은 서버가 한다 — 여기 규칙이 서버보다 엄격하면 정상 주소가 화면에서 막힌다.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// 가입 즉시 받는 쿠폰(G-2). 서버가 null 을 주면(기능 꺼짐·쿠폰 삭제) 문구를 아예 안 띄운다 —
+// 결정 직전 화면이라 여기서 거짓말을 하면 가장 나쁘다. 실패해도 가입 화면은 그대로 동작한다.
+const welcomeCoupon = ref(null);
+onMounted(async () => {
+  try {
+    welcomeCoupon.value = (await fetchWelcomeCoupon()) || null;
+  } catch {
+    welcomeCoupon.value = null;
+  }
+});
 
 async function onSubmit() {
   error.value = '';
@@ -57,6 +69,9 @@ async function onSubmit() {
       <div class="card p-6">
         <h1 class="page-title">회원가입</h1>
         <p class="muted mt-1">가입이 끝나면 자동으로 로그인됩니다.</p>
+        <p v-if="welcomeCoupon" class="mt-3 rounded-card border border-ink-200 bg-canvas px-4 py-3 text-sm text-ink-700">
+          가입 즉시 <strong class="text-ink-900">{{ couponDiscountText(welcomeCoupon) }}</strong> 쿠폰이 지급됩니다.
+        </p>
 
         <div v-if="error" class="alert-error mt-5">{{ error }}</div>
 

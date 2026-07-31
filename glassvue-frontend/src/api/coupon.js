@@ -15,6 +15,17 @@ export function fetchMyCoupons(itemsTotal = 0) {
   return apiGet('/api/coupons/me', { itemsTotal });
 }
 
+/**
+ * 가입 즉시 자동 발급되는 쿠폰(G-2). **비로그인도 부를 수 있다.**
+ *
+ * ⚠ 화면이 "가입하면 쿠폰" 문구를 띄울지는 **이 응답이 정한다** — 기능이 꺼져 있거나 설정된 쿠폰이
+ * 지워졌으면 `null` 이 오고, 그러면 문구를 감춘다. 혜택을 화면에 하드코딩하면 설정만 바뀌어도
+ * **안내가 거짓말이 된다**(HomeView 혜택 스트립의 원칙).
+ */
+export function fetchWelcomeCoupon() {
+  return apiGet('/api/coupons/welcome');
+}
+
 /** 쿠폰 할인 표기 — 정액(FIXED)은 금액, 정률(PERCENT)은 %. */
 export function couponDiscountText(c) {
   return c.discountType === 'PERCENT' ? `${c.discountValue}% 할인` : `${priceText(c.discountValue)} 할인`;

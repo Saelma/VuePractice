@@ -1,5 +1,6 @@
 package com.glassvue.domain.coupon.service;
 
+import com.glassvue.domain.coupon.config.CouponProperties;
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
@@ -12,6 +13,7 @@ import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.response.PageResponse;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +36,7 @@ public class CouponService {
 
     private final CouponRepository couponRepository;
     private final MemberCouponRepository memberCouponRepository;
+    private final CouponProperties couponProperties;
 
     /** 쿠폰 생성(관리자). */
     @Transactional
@@ -58,6 +61,21 @@ public class CouponService {
                 : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
                         Sort.by(Sort.Direction.DESC, "createdAt"));
         return PageResponse.from(couponRepository.findAll(p).map(CouponResponse::from));
+    }
+
+    /**
+     * 가입 시 자동 발급되는 쿠폰 — <b>비로그인도 볼 수 있는 공개 정보</b>다(G-2).
+     *
+     * <p>화면이 *"가입하면 5,000원 쿠폰"* 을 쓰려면 <b>그 쿠폰이 실제로 있는지</b>를 서버가 답해야 한다.
+     * 설정이 비었거나(기능 꺼짐) 가리키는 쿠폰이 지워졌으면 <b>비어 있는 값</b>을 주고, 화면은
+     * 그때 문구를 감춘다 — 정책을 화면에 적으면 설정만 바꿨을 때 <b>안내가 거짓말이 된다</b>
+     * (`HomeView` 혜택 스트립의 원칙).
+     */
+    @Transactional(readOnly = true)
+    public Optional<CouponResponse> welcomeCoupon() {
+        return couponProperties.welcomeCoupon()
+                .flatMap(couponRepository::findById)
+                .map(CouponResponse::from);
     }
 
     /** 회원에게 발급(관리자). 같은 쿠폰을 여러 장 주는 것도 허용한다(이벤트 재발급 등). */

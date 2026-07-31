@@ -24,6 +24,12 @@ public interface CouponController {
     ResponseEntity<ApiResponse<List<MemberCouponResponse>>> myCoupons(
             @Parameter(hidden = true) AuthUser user, long itemsTotal);
 
+    @Operation(summary = "가입 쿠폰 안내 (공개)",
+            description = "가입 즉시 자동 발급되는 쿠폰(G-2). **비로그인도 조회 가능** — 홈·가입 화면이 "
+                    + "\"가입하면 쿠폰\" 문구를 띄울지 결정하는 근거다. 기능이 꺼져 있거나 설정된 쿠폰이 "
+                    + "없으면 data 가 null 이고, 그때 화면은 문구를 감춘다(없는 혜택을 광고하지 않는다).")
+    ResponseEntity<ApiResponse<CouponResponse>> welcome();
+
     @Operation(summary = "쿠폰 정의 목록 (관리자)",
             description = "발급 가능한 쿠폰(정의) 목록. 정렬 미지정 시 최신 생성순. 회원별 발급분이 아니라 쿠폰 그 자체다.")
     ResponseEntity<ApiResponse<PageResponse<CouponResponse>>> list(@ParameterObject Pageable pageable);

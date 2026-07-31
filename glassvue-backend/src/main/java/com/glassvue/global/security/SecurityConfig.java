@@ -48,6 +48,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
                         .requestMatchers("/api/members/**").authenticated()
                         .requestMatchers("/api/cart/**").authenticated()
+                        // ⚠ 가입 쿠폰 안내는 **공개**다(G-2) — 비로그인 홈·가입 화면이 "가입하면 쿠폰"을
+                        // 띄울지 판단하는 근거라 로그인 전에 읽혀야 한다. 쿠폰 **정의**(이름·할인액)만 나가고
+                        // 회원별 발급분은 안 나간다. 아래 인증 규칙보다 **위에** 있어야 효력이 있다(먼저 매칭).
+                        .requestMatchers(HttpMethod.GET, "/api/coupons/welcome").permitAll()
                         // 내 쿠폰 목록 — 기본이 permitAll이라 매처를 안 넣으면 남의 쿠폰까지 열린다.
                         // (관리자 쿠폰 API는 /api/admin/** 한 줄로 이미 막힌다.)
                         .requestMatchers("/api/coupons/**").authenticated()

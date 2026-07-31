@@ -6,6 +6,7 @@ import com.glassvue.domain.auth.dto.SignupRequest;
 import com.glassvue.domain.auth.dto.TokenResponse;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.member.event.MemberSignedUpEvent;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.glassvue.domain.member.service.query.MemberAddressQueryService;
 import com.glassvue.domain.point.service.PointService;
@@ -28,6 +29,7 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +57,8 @@ public class AuthService {
     // 발송은 인프라라 global 어댑터를 그대로 주입한다(도메인 이벤트로 감쌀 만한 fan-out 이 아직 없다).
     private final Mailer mailer;
     private final MailProperties mailProperties;
+    // 가입 후처리(가입 쿠폰 등)는 구독자가 가져간다 — auth 는 누가 듣는지 모른다(G-2).
+    private final ApplicationEventPublisher eventPublisher;
 
     public MemberResponse signup(SignupRequest req) {
         if (memberRepository.existsByLoginId(req.loginId())) {
@@ -83,6 +87,8 @@ public class AuthService {
         // 동시 조회에서 유니크 충돌도 난다(PointService.accountOf 주석 참조).
         pointService.openAccount(member.getId());
         log.info("Member signed up: {}", member.getId());
+        // 가입 후처리는 구독자에게 넘긴다(G-2 가입 쿠폰). AFTER_COMMIT 이라 가입이 롤백되면 아무 일도 없다.
+        eventPublisher.publishEvent(new MemberSignedUpEvent(member.getId(), member.getLoginId()));
         // 갓 가입한 회원은 주소록이 비어 있다 — ship* 전부 null.
         return MemberResponse.of(member, null);
     }

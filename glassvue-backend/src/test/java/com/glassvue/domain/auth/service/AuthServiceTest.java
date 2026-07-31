@@ -57,6 +57,7 @@ class AuthServiceTest {
     // MailProperties 는 record 라 목이 아니라 실값을 쓴다 — 링크 조립 결과를 그대로 검증하려고.
     @Spy com.glassvue.global.mail.MailProperties mailProperties =
             new com.glassvue.global.mail.MailProperties("no-reply@test.local", "https://app.test");
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
     @InjectMocks AuthService service;
 
     private static final String IP = "10.0.2.99";
@@ -96,6 +97,38 @@ class AuthServiceTest {
         var res = service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com"));
         assertThat(res.nickname()).isEqualTo("닉");
         verify(memberRepository).save(any(Member.class));
+    }
+
+    /**
+     * 가입 후처리(가입 쿠폰 G-2)는 구독자가 가져간다 — auth 는 누가 듣는지 모른다.
+     * ⚠ <b>실패한 가입에서는 이벤트가 나가지 않아야</b> 한다: 중복 아이디로 막힌 요청에도 쿠폰이
+     * 나가면 남의 아이디를 찍어 보는 것만으로 발급이 늘어난다.
+     */
+    @Test
+    @DisplayName("회원가입: 성공하면 MemberSignedUpEvent 발행 — 실패하면 발행하지 않는다")
+    void signup_publishesEvent() {
+        when(memberRepository.existsByLoginId("kim")).thenReturn(false);
+        when(memberRepository.existsByNickname("닉")).thenReturn(false);
+        when(passwordEncoder.encode("pw")).thenReturn("ENC");
+        when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.glassvue.domain.member.event.MemberSignedUpEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().loginId()).isEqualTo("kim");
+    }
+
+    @Test
+    @DisplayName("회원가입: 중복으로 실패하면 이벤트도 없다")
+    void signup_noEventOnFailure() {
+        when(memberRepository.existsByLoginId("kim")).thenReturn(true);
+
+        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com")),
+                ErrorCode.DUPLICATE_LOGIN_ID);
+
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
