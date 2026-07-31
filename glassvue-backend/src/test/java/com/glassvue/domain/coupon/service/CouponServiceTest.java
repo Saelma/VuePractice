@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
-import com.glassvue.domain.coupon.config.CouponProperties;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.entity.Coupon;
 import com.glassvue.domain.coupon.entity.DiscountType;
@@ -136,41 +136,73 @@ class CouponServiceTest {
         assertErrorCode(() -> couponService.redeem(MC_ID, OWNER, 50_000L), ErrorCode.COUPON_NOT_FOUND);
     }
 
-    // ── 가입 쿠폰 안내(G-2) ───────────────────────────────────
-
-    /** 설정값에 따라 갈리는 기능이라 설정만 진짜 객체로 갈아 끼운다(목으로는 분기가 안 보인다). */
-    private CouponService serviceWith(String configured) {
-        return new CouponService(couponRepository, memberCouponRepository, new CouponProperties(configured));
-    }
+    // ── 가입 쿠폰 지정·안내 (G-2 / V36) ──────────────────────
 
     @Test
-    @DisplayName("가입 쿠폰: 설정된 쿠폰이 있으면 그 정의를 돌려준다")
+    @DisplayName("가입 쿠폰 안내: 지정된 쿠폰이 있으면 그 정의를 돌려준다")
     void welcomeCouponPresent() {
-        UUID couponId = UUID.randomUUID();
-        given(couponRepository.findById(couponId))
+        given(couponRepository.findByWelcomeTrue())
                 .willReturn(Optional.of(coupon(0L, YEAR_AGO, NEXT_YEAR)));
 
-        Optional<CouponResponse> welcome = serviceWith(couponId.toString()).welcomeCoupon();
-
-        assertThat(welcome).isPresent();
-        assertThat(welcome.get().name()).isEqualTo("ZZ 5천원");
+        assertThat(couponService.welcomeCoupon()).isPresent()
+                .get().extracting(CouponResponse::name).isEqualTo("ZZ 5천원");
     }
 
     @Test
-    @DisplayName("가입 쿠폰: 설정이 없으면 **DB 를 보지도 않는다**")
-    void welcomeCouponNotConfigured() {
-        assertThat(serviceWith("").welcomeCoupon()).isEmpty();
+    @DisplayName("가입 쿠폰 안내: 지정된 게 없으면 비어 있다 — 화면이 문구를 감춘다")
+    void welcomeCouponAbsent() {
+        given(couponRepository.findByWelcomeTrue()).willReturn(Optional.empty());
 
-        verifyNoInteractions(couponRepository);
+        assertThat(couponService.welcomeCoupon()).isEmpty();
     }
 
     @Test
-    @DisplayName("⚠ 가입 쿠폰: 설정된 쿠폰이 지워졌으면 비어 있다 — 화면이 없는 혜택을 광고하지 않게")
-    void welcomeCouponDeleted() {
-        UUID couponId = UUID.randomUUID();
-        given(couponRepository.findById(couponId)).willReturn(Optional.empty());
+    @DisplayName("⚠ 지정하면 **기존 지정은 해제된다** — 가입 쿠폰은 한 장뿐이다")
+    void designateClearsPrevious() {
+        Coupon previous = coupon(0L, YEAR_AGO, NEXT_YEAR);
+        previous.markWelcome(true);
+        Coupon next = coupon(0L, YEAR_AGO, NEXT_YEAR);
+        given(couponRepository.findById(MC_ID)).willReturn(Optional.of(next));
+        given(couponRepository.findByWelcomeTrue()).willReturn(Optional.of(previous));
 
-        assertThat(serviceWith(couponId.toString()).welcomeCoupon()).isEmpty();
+        couponService.setWelcome(MC_ID, true);
+
+        assertThat(next.isWelcome()).isTrue();
+        assertThat(previous.isWelcome()).isFalse();   // 안 풀면 둘이 되어 어느 쪽이 나갈지 알 수 없다
+    }
+
+    @Test
+    @DisplayName("이미 지정된 쿠폰을 다시 지정해도 자기 자신을 해제하지 않는다")
+    void designateSameCouponIsIdempotent() {
+        Coupon coupon = coupon(0L, YEAR_AGO, NEXT_YEAR);
+        coupon.markWelcome(true);
+        given(couponRepository.findById(MC_ID)).willReturn(Optional.of(coupon));
+        given(couponRepository.findByWelcomeTrue()).willReturn(Optional.of(coupon));
+
+        couponService.setWelcome(MC_ID, true);
+
+        assertThat(coupon.isWelcome()).isTrue();
+    }
+
+    @Test
+    @DisplayName("해제는 다른 쿠폰을 건드리지 않는다 — 조회조차 하지 않는다")
+    void clearDoesNotTouchOthers() {
+        Coupon coupon = coupon(0L, YEAR_AGO, NEXT_YEAR);
+        coupon.markWelcome(true);
+        given(couponRepository.findById(MC_ID)).willReturn(Optional.of(coupon));
+
+        couponService.setWelcome(MC_ID, false);
+
+        assertThat(coupon.isWelcome()).isFalse();
+        verify(couponRepository, never()).findByWelcomeTrue();
+    }
+
+    @Test
+    @DisplayName("없는 쿠폰을 지정하려 하면 COUPON_NOT_FOUND")
+    void designateMissingCoupon() {
+        given(couponRepository.findById(MC_ID)).willReturn(Optional.empty());
+
+        assertErrorCode(() -> couponService.setWelcome(MC_ID, true), ErrorCode.COUPON_NOT_FOUND);
     }
 
     // ── 주문 스냅샷용 이름 ────────────────────────────────────

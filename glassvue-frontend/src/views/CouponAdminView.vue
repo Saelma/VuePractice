@@ -7,7 +7,7 @@
  * member 도메인 admin API 를 그대로 쓴다(도메인 경계).
  */
 import { reactive, ref, computed, onMounted } from 'vue';
-import { fetchAdminCoupons, createCoupon, issueCoupon, couponDiscountText } from '../api/coupon';
+import { fetchAdminCoupons, createCoupon, issueCoupon, couponDiscountText, setWelcomeCoupon } from '../api/coupon';
 import { fetchAdminMembers, roleText } from '../api/member';
 import { priceText } from '../api/product';
 import EmptyState from '../components/EmptyState.vue';
@@ -29,6 +29,27 @@ async function loadCoupons() {
   }
 }
 onMounted(loadCoupons);
+
+/*
+ * 가입 쿠폰 지정(V36, 2026-07-31).
+ *
+ * ⚠ 예전엔 서버 설정(.env WELCOME_COUPON_ID)이라 **바꿀 때마다 재시작**이 필요했고, 무엇이 가입
+ * 쿠폰인지 이 화면에서 보이지 않았다. 지금은 데이터라 여기서 바로 켜고 끈다.
+ * 지정은 **한 장뿐** — 다른 걸 지정하면 이전 것은 서버가 자동으로 해제한다(그래서 목록을 다시 읽는다).
+ */
+const welcomeBusy = ref('');
+async function toggleWelcome(c) {
+  welcomeBusy.value = c.id;
+  listError.value = '';
+  try {
+    await setWelcomeCoupon(c.id, !c.welcome);
+    await loadCoupons(); // 이전 지정이 풀린 것까지 화면에 반영하려면 목록을 다시 받아야 한다
+  } catch (e) {
+    listError.value = e.message;
+  } finally {
+    welcomeBusy.value = '';
+  }
+}
 
 // ---------- 생성 ----------
 const form = reactive({
@@ -201,7 +222,13 @@ async function onIssue(member) {
       <ul v-else-if="coupons.length" class="divide-y divide-line">
         <li v-for="c in coupons" :key="c.id" class="flex flex-wrap items-center justify-between gap-3 py-3">
           <div class="min-w-0">
-            <p class="text-sm font-medium text-ink-900">{{ c.name }}</p>
+            <p class="text-sm font-medium text-ink-900">
+              {{ c.name }}
+              <!-- 무채색 원칙(DESIGN §2): 강조는 테두리·굵기로, 색은 쓰지 않는다. -->
+              <span v-if="c.welcome" class="ml-1 rounded-full border border-ink-900 px-2 py-0.5 text-[11px] text-ink-900">
+                가입 쿠폰
+              </span>
+            </p>
             <p class="muted tabular-nums">
               {{ couponDiscountText(c) }}
               · {{ c.minOrderAmount ? priceText(c.minOrderAmount) + ' 이상' : '금액 조건 없음' }}
@@ -209,9 +236,20 @@ async function onIssue(member) {
               · {{ fmtDate(c.validFrom) }}~{{ fmtDate(c.validUntil) }}
             </p>
           </div>
-          <button type="button" class="btn btn-secondary btn-sm" :class="selected?.id === c.id ? 'border-brand-600 text-ink-900' : ''" @click="pickCoupon(c)">
-            {{ selected?.id === c.id ? '선택됨' : '발급' }}
-          </button>
+          <div class="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              :class="c.welcome ? 'border-ink-900 text-ink-900' : ''"
+              :disabled="welcomeBusy === c.id"
+              @click="toggleWelcome(c)"
+            >
+              {{ c.welcome ? '가입 쿠폰 해제' : '가입 쿠폰으로' }}
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" :class="selected?.id === c.id ? 'border-brand-600 text-ink-900' : ''" @click="pickCoupon(c)">
+              {{ selected?.id === c.id ? '선택됨' : '발급' }}
+            </button>
+          </div>
         </li>
       </ul>
 

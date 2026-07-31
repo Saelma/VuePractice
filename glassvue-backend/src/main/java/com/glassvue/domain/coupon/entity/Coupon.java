@@ -43,6 +43,16 @@ public class Coupon extends BaseTimeEntity {
     @Column(name = "valid_until", nullable = false)
     private Instant validUntil;
 
+    /**
+     * 가입 즉시 자동 발급되는 쿠폰인가(G-2 후속, V36). <b>전체에서 한 장만</b> true —
+     * 함수기반 유니크 인덱스(`ux_coupon_welcome`)가 DB 에서 보장한다.
+     *
+     * <p>설정(.env)이 아니라 여기 두는 이유: 쿠폰을 바꿀 때마다 **재시작**해야 했고,
+     * 무엇이 가입 쿠폰인지 **화면에서 안 보였다**. 쿠폰이 데이터니 지정도 데이터다.
+     */
+    @Column(nullable = false)
+    private boolean welcome;
+
     @Builder
     private Coupon(String name, DiscountType discountType, long discountValue,
                    long minOrderAmount, Long maxDiscountAmount, Instant validFrom, Instant validUntil) {
@@ -53,6 +63,11 @@ public class Coupon extends BaseTimeEntity {
         this.maxDiscountAmount = maxDiscountAmount;
         this.validFrom = validFrom;
         this.validUntil = validUntil;
+    }
+
+    /** 가입 쿠폰으로 지정/해제(관리자). "하나만" 규칙은 서비스가 기존 것을 해제해 지킨다. */
+    public void markWelcome(boolean welcome) {
+        this.welcome = welcome;
     }
 
     public boolean isValidAt(Instant at) {

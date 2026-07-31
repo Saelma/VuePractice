@@ -94,15 +94,9 @@ notice:
 catalog:
   low-stock-threshold: 5
 
-# 가입 즉시 자동 발급할 쿠폰(G-2). **비워 두면 기능이 꺼진다**(운영 기본값).
-#
-# 켜는 순서: ①관리자 화면에서 쿠폰을 만들고 ②그 id 를 .env 의 WELCOME_COUPON_ID 에 넣고 ③서비스 재시작.
-# 재배포가 아니라 재시작이면 되도록 설정값이 아니라 **환경변수**에서 온다.
-#
-# ⚠ 값이 틀려도(지워진 쿠폰·잘못된 형식) 기동은 막지 않는다 — 화면은 `GET /api/coupons/welcome` 이
-#    실제로 쿠폰을 돌려줄 때만 문구를 띄우므로, 설정이 틀리면 광고도 안 나간다(거짓말이 생기지 않는다).
-coupon:
-  welcome-coupon-id: ${WELCOME_COUPON_ID:}
+# (2026-07-31) 가입 쿠폰은 **설정이 아니라 데이터**다 — 관리자 화면에서 지정한다(V36 `coupon.welcome`).
+#   처음엔 여기 `coupon.welcome-coupon-id` 로 뒀는데 바꿀 때마다 재시작이 필요했고,
+#   무엇이 가입 쿠폰인지 화면에서 보이지 않았다. `.env` 의 WELCOME_COUPON_ID 도 함께 없앴다.
 
 # 고아 이미지(업로드만 하고 어디에도 안 붙은 것) 정리
 image:

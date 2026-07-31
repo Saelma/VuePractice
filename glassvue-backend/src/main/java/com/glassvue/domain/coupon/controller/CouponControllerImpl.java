@@ -14,6 +14,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -56,6 +57,21 @@ public class CouponControllerImpl implements CouponController {
     @PostMapping("/admin/coupons")
     public ResponseEntity<ApiResponse<UUID>> create(@Valid @RequestBody CouponCreateRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(couponService.create(request)));
+    }
+
+    // 지정/해제를 POST·DELETE 로 나눈다 — 회원 정지/해제(suspend·unsuspend)와 같은 결.
+    @Override
+    @PostMapping("/admin/coupons/{couponId}/welcome")
+    public ResponseEntity<ApiResponse<Void>> designateWelcome(@PathVariable UUID couponId) {
+        couponService.setWelcome(couponId, true);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Override
+    @DeleteMapping("/admin/coupons/{couponId}/welcome")
+    public ResponseEntity<ApiResponse<Void>> clearWelcome(@PathVariable UUID couponId) {
+        couponService.setWelcome(couponId, false);
+        return ResponseEntity.ok(ApiResponse.ok());
     }
 
     @Override

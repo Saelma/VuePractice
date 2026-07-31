@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './client';
+import { apiGet, apiPost, apiDelete } from './client';
 import { priceText } from './product';
 
 /**
@@ -24,6 +24,18 @@ export function fetchMyCoupons(itemsTotal = 0) {
  */
 export function fetchWelcomeCoupon() {
   return apiGet('/api/coupons/welcome');
+}
+
+/**
+ * 가입 쿠폰으로 지정/해제(관리자, V36).
+ *
+ * ⚠ **전체에서 한 장만** 지정된다 — 다른 쿠폰이 지정돼 있으면 서버가 자동으로 해제한다.
+ * 설정(.env)이던 것을 데이터로 옮긴 자리라 **재시작 없이 즉시** 홈·가입 화면 문구에 반영된다.
+ */
+export function setWelcomeCoupon(couponId, welcome) {
+  return welcome
+    ? apiPost(`/api/admin/coupons/${couponId}/welcome`)
+    : apiDelete(`/api/admin/coupons/${couponId}/welcome`);
 }
 
 /** 쿠폰 할인 표기 — 정액(FIXED)은 금액, 정률(PERCENT)은 %. */

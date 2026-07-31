@@ -1,6 +1,5 @@
 package com.glassvue.domain.coupon.service;
 
-import com.glassvue.domain.coupon.config.CouponProperties;
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
@@ -36,7 +35,6 @@ public class CouponService {
 
     private final CouponRepository couponRepository;
     private final MemberCouponRepository memberCouponRepository;
-    private final CouponProperties couponProperties;
 
     /** 쿠폰 생성(관리자). */
     @Transactional
@@ -67,15 +65,35 @@ public class CouponService {
      * 가입 시 자동 발급되는 쿠폰 — <b>비로그인도 볼 수 있는 공개 정보</b>다(G-2).
      *
      * <p>화면이 *"가입하면 5,000원 쿠폰"* 을 쓰려면 <b>그 쿠폰이 실제로 있는지</b>를 서버가 답해야 한다.
-     * 설정이 비었거나(기능 꺼짐) 가리키는 쿠폰이 지워졌으면 <b>비어 있는 값</b>을 주고, 화면은
-     * 그때 문구를 감춘다 — 정책을 화면에 적으면 설정만 바꿨을 때 <b>안내가 거짓말이 된다</b>
-     * (`HomeView` 혜택 스트립의 원칙).
+     * 지정된 게 없으면(기능 꺼짐) <b>비어 있는 값</b>을 주고, 화면은 그때 문구를 감춘다 —
+     * 정책을 화면에 적으면 설정만 바꿨을 때 <b>안내가 거짓말이 된다</b>(`HomeView` 혜택 스트립의 원칙).
+     *
+     * <p>⚠ 지정은 <b>설정이 아니라 데이터</b>다(V36) — 예전엔 {@code .env} 의 쿠폰 id 였는데
+     * 바꿀 때마다 재시작이 필요했고, 무엇이 가입 쿠폰인지 화면에서 안 보였다.
      */
     @Transactional(readOnly = true)
     public Optional<CouponResponse> welcomeCoupon() {
-        return couponProperties.welcomeCoupon()
-                .flatMap(couponRepository::findById)
-                .map(CouponResponse::from);
+        return couponRepository.findByWelcomeTrue().map(CouponResponse::from);
+    }
+
+    /**
+     * 가입 쿠폰으로 지정/해제(관리자, V36).
+     *
+     * <p>⚠ 지정할 때 <b>기존 지정을 먼저 해제</b>한다 — 같은 트랜잭션이라 중간 상태가 밖에서 안 보인다.
+     * 그래도 두 관리자가 동시에 지정하면 서로의 미커밋 변경을 못 봐 둘 다 1 이 될 수 있는데,
+     * 그건 <b>함수기반 유니크 인덱스가 DB 에서 막는다</b>(V36). 앱과 DB 가 같은 규칙을 이중으로 지킨다.
+     */
+    @Transactional
+    public void setWelcome(UUID couponId, boolean welcome) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+        if (welcome) {
+            couponRepository.findByWelcomeTrue()
+                    .filter(current -> !current.getId().equals(couponId))
+                    .ifPresent(current -> current.markWelcome(false));
+        }
+        coupon.markWelcome(welcome);
+        log.info("Welcome coupon {}: {} ({})", welcome ? "designated" : "cleared", couponId, coupon.getName());
     }
 
     /** 회원에게 발급(관리자). 같은 쿠폰을 여러 장 주는 것도 허용한다(이벤트 재발급 등). */

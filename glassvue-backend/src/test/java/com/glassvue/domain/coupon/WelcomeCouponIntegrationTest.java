@@ -1,6 +1,8 @@
 package com.glassvue.domain.coupon;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -11,7 +13,6 @@ import com.glassvue.domain.coupon.entity.DiscountType;
 import com.glassvue.domain.coupon.repository.CouponRepository;
 import com.glassvue.domain.member.event.MemberSignedUpEvent;
 import com.glassvue.domain.member.repository.MemberRepository;
-import com.glassvue.global.common.BaseTimeEntity;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -22,7 +23,6 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
@@ -43,24 +43,21 @@ import org.springframework.transaction.annotation.Transactional;
  * 하지 않아 리스너가 안 뜬다. 그래서 <b>발행</b>만 여기서 보고 <b>소비</b>는 단위 테스트가 본다
  * (B-15·H-6 과 같은 방식).
  *
- * <p>설정({@code coupon.welcome-coupon-id})은 <b>이 테스트 안에서만</b> 실제 값으로 바꾼다 —
- * 운영 기본값은 "비어 있음(기능 꺼짐)" 이라 그 상태로는 발급 경로를 못 본다.
+ * <p>가입 쿠폰 <b>지정도 관리자 API 로 한다</b>(V36) — 설정 파일이 아니라 데이터라서, 테스트도
+ * 운영과 같은 경로(관리자가 지정 → 그때부터 발급·안내)를 그대로 탄다.
  */
 @EnabledIfEnvironmentVariable(named = "DB_HOST", matches = ".+")
 @SpringBootTest
 @AutoConfigureMockMvc
 @RecordApplicationEvents
 @Transactional
-@TestPropertySource(properties = "coupon.welcome-coupon-id=" + WelcomeCouponIntegrationTest.WELCOME_ID)
 class WelcomeCouponIntegrationTest {
-
-    /** 고정 UUID — 테스트가 이 id 로 쿠폰을 만들고, 설정도 같은 값을 가리키게 한다. */
-    static final String WELCOME_ID = "0198f000-0000-7000-8000-00000000c001";
 
     @Autowired MockMvc mockMvc;
     @Autowired MemberRepository memberRepository;
     @Autowired CouponRepository couponRepository;
     @Autowired WelcomeCouponHandler handler;
+    @Autowired org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     @Autowired ApplicationEvents events;
 
     private static final String JSON = "application/json";
@@ -74,31 +71,34 @@ class WelcomeCouponIntegrationTest {
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     }
 
-    private Coupon saveWelcomeCoupon() {
-        Coupon coupon = Coupon.builder()
+    /** 쿠폰을 만들고 **가입 쿠폰으로 지정**한다(지정은 리포지토리가 아니라 관리자 API 로). */
+    private UUID designateWelcomeCoupon(String adminToken) throws Exception {
+        Coupon coupon = couponRepository.save(Coupon.builder()
                 .name("ZZ 가입축하 5천원").discountType(DiscountType.FIXED).discountValue(5_000L)
                 .minOrderAmount(10_000L)
                 .validFrom(Instant.now().minus(1, ChronoUnit.DAYS))
                 .validUntil(Instant.now().plus(365, ChronoUnit.DAYS))
-                .build();
-        // 설정이 가리키는 id 와 같아야 하므로 id 를 지정해 저장한다(UUIDv7 자동 생성 대신).
-        return couponRepository.save(withId(coupon, UUID.fromString(WELCOME_ID)));
+                .build());
+        mockMvc.perform(post("/api/admin/coupons/" + coupon.getId() + "/welcome")
+                        .header("Authorization", adminToken))
+                .andExpect(status().isOk());
+        return coupon.getId();
     }
 
-    /**
-     * {@code BaseTimeEntity.id} 는 앱이 UUIDv7 로 자동 생성하고 setter 가 없다 —
-     * <b>설정값이 가리키는 id 와 맞춰야</b> 하므로 여기서만 리플렉션으로 심는다.
-     * ({@code isNew()} 는 {@code createdAt} 으로 판단하므로 id 를 미리 채워도 INSERT 로 나간다.)
-     */
-    private static Coupon withId(Coupon coupon, UUID id) {
-        try {
-            var field = BaseTimeEntity.class.getDeclaredField("id");
-            field.setAccessible(true);
-            field.set(coupon, id);
-            return coupon;
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("테스트 쿠폰 id 주입 실패", e);
-        }
+    private String adminToken() throws Exception {
+        String loginId = "zzwa" + UUID.randomUUID().toString().substring(0, 6);
+        memberRepository.save(com.glassvue.domain.member.entity.Member.builder()
+                .loginId(loginId).password(passwordEncoder.encode(PW))
+                .nickname("ZZ쿠폰관리자" + loginId)
+                .role(com.glassvue.domain.member.entity.Role.ADMIN).build());
+        return login(loginId);
+    }
+
+    private String login(String loginId) throws Exception {
+        return "Bearer " + JsonPath.read(mockMvc.perform(post("/api/auth/login").contentType(JSON)
+                        .content("{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(),
+                "$.data.accessToken");
     }
 
     @Test
@@ -116,18 +116,14 @@ class WelcomeCouponIntegrationTest {
     @Test
     @DisplayName("이벤트 소비 → 그 회원의 쿠폰함에 가입 쿠폰이 들어온다")
     void handlerIssuesWelcomeCoupon() throws Exception {
-        saveWelcomeCoupon();
+        designateWelcomeCoupon(adminToken());
         String loginId = "zzwc" + UUID.randomUUID().toString().substring(0, 6);
         signup(loginId);
         UUID memberId = memberRepository.findByLoginId(loginId).orElseThrow().getId();
 
         handler.handle(new MemberSignedUpEvent(memberId, loginId));
 
-        String token = "Bearer " + JsonPath.read(mockMvc.perform(post("/api/auth/login").contentType(JSON)
-                        .content("{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\"}"))
-                .andReturn().getResponse().getContentAsString(), "$.data.accessToken");
-
-        mockMvc.perform(get("/api/coupons/me?itemsTotal=20000").header("Authorization", token))
+        mockMvc.perform(get("/api/coupons/me?itemsTotal=20000").header("Authorization", login(loginId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].name").value("ZZ 가입축하 5천원"))
                 .andExpect(jsonPath("$.data[0].usable").value(true));
@@ -136,7 +132,7 @@ class WelcomeCouponIntegrationTest {
     @Test
     @DisplayName("⚠ 가입 쿠폰 안내는 **비로그인도** 볼 수 있다 — 그래야 홈이 문구를 띄운다")
     void welcomeEndpointIsPublic() throws Exception {
-        saveWelcomeCoupon();
+        designateWelcomeCoupon(adminToken());
 
         mockMvc.perform(get("/api/coupons/welcome"))
                 .andExpect(status().isOk())
@@ -148,5 +144,68 @@ class WelcomeCouponIntegrationTest {
     @DisplayName("⚠ 예외를 뚫었어도 **내 쿠폰 목록은 여전히 401** — 옆칸까지 열리면 안 된다")
     void myCouponsStillRequiresLogin() throws Exception {
         mockMvc.perform(get("/api/coupons/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("지정을 해제하면 안내가 사라진다 — **끄는 쪽도 재시작 없이** 즉시 반영")
+    void clearingDesignationHidesTheOffer() throws Exception {
+        String admin = adminToken();
+        UUID couponId = designateWelcomeCoupon(admin);
+
+        mockMvc.perform(delete("/api/admin/coupons/" + couponId + "/welcome").header("Authorization", admin))
+                .andExpect(status().isOk());
+
+        // data 가 비면 화면은 문구를 감춘다(없는 혜택을 광고하지 않는다).
+        mockMvc.perform(get("/api/coupons/welcome"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("⚠ 지정은 **한 장만** — 새로 지정하면 이전 것은 자동 해제된다")
+    void designatingAnotherClearsPrevious() throws Exception {
+        String admin = adminToken();
+        UUID first = designateWelcomeCoupon(admin);
+        UUID second = designateWelcomeCoupon(admin);
+
+        assertThat(couponRepository.findById(first).orElseThrow().isWelcome()).isFalse();
+        assertThat(couponRepository.findById(second).orElseThrow().isWelcome()).isTrue();
+        mockMvc.perform(get("/api/coupons/welcome"))
+                .andExpect(jsonPath("$.data.id").value(second.toString()));
+    }
+
+    /**
+     * ⚠ <b>DB 가 정말로 막는지</b>를 본다 — 서비스가 "기존 해제 후 지정" 을 하므로 앱 경로로는
+     * 둘이 될 수 없지만, 그 방어는 <b>동시 지정에서 뚫린다</b>(서로의 미커밋 변경을 못 본다).
+     * 그래서 V36 이 함수기반 유니크 인덱스를 걸었고, 여기서 <b>리포지토리로 직접</b> 우회해 확인한다.
+     */
+    @Test
+    @DisplayName("⚠ 가입 쿠폰 둘은 **DB 가 거부**한다(ux_coupon_welcome)")
+    void twoWelcomeCouponsAreRejectedByDb() throws Exception {
+        designateWelcomeCoupon(adminToken());
+        Coupon another = couponRepository.save(Coupon.builder()
+                .name("ZZ 두번째").discountType(DiscountType.FIXED).discountValue(1_000L)
+                .minOrderAmount(0L)
+                .validFrom(Instant.now().minus(1, ChronoUnit.DAYS))
+                .validUntil(Instant.now().plus(1, ChronoUnit.DAYS))
+                .build());
+        another.markWelcome(true);   // 서비스를 거치지 않고 직접 — 앱 방어를 우회한 상황
+
+        assertThatThrownBy(() -> couponRepository.flush())
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("지정 권한 — 비로그인 401 / 일반 회원 403 (§2-4)")
+    void designatePermissions() throws Exception {
+        String loginId = "zzwu" + UUID.randomUUID().toString().substring(0, 6);
+        signup(loginId);
+        UUID someCoupon = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/admin/coupons/" + someCoupon + "/welcome"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/admin/coupons/" + someCoupon + "/welcome")
+                        .header("Authorization", login(loginId)))
+                .andExpect(status().isForbidden());
     }
 }
