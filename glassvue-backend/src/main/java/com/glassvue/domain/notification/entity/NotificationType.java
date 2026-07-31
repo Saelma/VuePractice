@@ -5,13 +5,21 @@ package com.glassvue.domain.notification.entity;
  *
  * <p>주문 세부 이벤트(생성·배송완료·취소)를 {@code ORDER} 하나로 묶은 이유: 설정에서 사용자가
  * "주문 알림"을 통째로 켜고 끄는 게 자연스럽고, 이벤트마다 토글을 두면 설정이 번잡해진다.
- * 제목·내용은 이벤트마다 다르게 담고, 분류만 굵게 잡는다. 재입고(B-9) 등은 여기 값을 추가해 확장한다.
+ * 제목·내용은 이벤트마다 다르게 담고, 분류만 굵게 잡는다. 재입고(B-9)·문의 답변(B-15) 등은 여기 값을 추가해 확장한다.
+ *
+ * <p>⚠ <b>값을 늘려도 마이그레이션이 필요 없다</b> — {@code notification.type}·
+ * {@code member_notification_pref.type} 은 {@code VARCHAR2(30)} 이고 <b>CHECK 제약이 없다</b>(V26 실측).
+ * {@code orders.status}(2026-07-16)·{@code point_history.type} 처럼 제약이 걸린 컬럼이면 값 추가마다
+ * ALTER 마이그레이션이 따라오는데, 여기는 그 함정이 없다. 설정 화면도 서버가
+ * {@code NotificationType.values()} 를 통째로 내려주므로(NotificationQueryService.settings)
+ * <b>토글이 저절로 하나 늘어난다</b> — 프론트 변경 불필요.
  */
 public enum NotificationType {
 
     ORDER("주문 알림"),   // 주문 생성·배송완료·취소 (구매자 대상)
     STOCK("재고 알림"),   // 재고 부족 (관리자 대상)
-    RESTOCK("재입고 알림"); // 품절 상품 재입고 (신청한 구매자 대상, B-9)
+    RESTOCK("재입고 알림"), // 품절 상품 재입고 (신청한 구매자 대상, B-9)
+    INQUIRY("문의 답변 알림"); // 내 상품 문의에 관리자 답변이 달림 (작성자 대상, B-15)
 
     private final String label;
 

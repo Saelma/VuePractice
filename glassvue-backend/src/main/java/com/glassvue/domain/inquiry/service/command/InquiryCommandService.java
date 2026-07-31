@@ -6,6 +6,7 @@ import com.glassvue.domain.inquiry.dto.InquiryAnswerRequest;
 import com.glassvue.domain.inquiry.dto.InquiryCreateRequest;
 import com.glassvue.domain.inquiry.dto.InquiryUpdateRequest;
 import com.glassvue.domain.inquiry.entity.Inquiry;
+import com.glassvue.domain.inquiry.event.InquiryAnsweredEvent;
 import com.glassvue.domain.inquiry.repository.InquiryRepository;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.global.exception.BusinessException;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +33,7 @@ public class InquiryCommandService {
     private final InquiryRepository inquiryRepository;
     private final ProductQueryService productQueryService;
     private final ImageService imageService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public UUID create(UUID productId, InquiryCreateRequest req, AuthUser user) {
         productQueryService.ensureExists(productId);
@@ -85,8 +88,16 @@ public class InquiryCommandService {
         if (inquiry.isOwnedBy(user.id())) {
             throw new BusinessException(ErrorCode.INQUIRY_SELF_ANSWER);
         }
+        // ⚠ 상태를 **바꾸기 전에** 읽는다. answer() 가 ANSWERED 로 올려 버리므로 뒤에서 보면 항상 true 다.
+        boolean firstAnswer = !inquiry.isAnswered();
         inquiry.answer(req.answer());
-        log.info("Inquiry answered: id={} by={}", id, user.id());
+        log.info("Inquiry answered: id={} by={} first={}", id, user.id(), firstAnswer);
+        if (firstAnswer) {
+            // 처음 답이 달렸을 때만 알린다(B-15) — 수정마다 보내면 오타 고칠 때마다 알림이 간다.
+            // 알림 생성은 notification 도메인이 이벤트를 받아서 한다(도메인 간 직접 참조 금지).
+            eventPublisher.publishEvent(new InquiryAnsweredEvent(
+                    inquiry.getId(), inquiry.getProductId(), inquiry.getAuthorId(), inquiry.getTitle()));
+        }
     }
 
     private Inquiry findById(UUID id) {

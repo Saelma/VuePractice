@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -14,6 +15,7 @@ import com.glassvue.domain.inquiry.dto.InquiryCreateRequest;
 import com.glassvue.domain.inquiry.dto.InquiryUpdateRequest;
 import com.glassvue.domain.inquiry.entity.Inquiry;
 import com.glassvue.domain.inquiry.entity.InquiryStatus;
+import com.glassvue.domain.inquiry.event.InquiryAnsweredEvent;
 import com.glassvue.domain.inquiry.repository.InquiryRepository;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.global.exception.BusinessException;
@@ -29,6 +31,7 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class InquiryCommandServiceTest {
@@ -36,6 +39,7 @@ class InquiryCommandServiceTest {
     @Mock InquiryRepository inquiryRepository;
     @Mock ProductQueryService productQueryService;
     @Mock ImageService imageService;
+    @Mock ApplicationEventPublisher eventPublisher;
     @InjectMocks InquiryCommandService service;
 
     private final AuthUser user = new AuthUser(UUID.randomUUID(), Role.USER, "kim");
@@ -143,5 +147,49 @@ class InquiryCommandServiceTest {
         service.delete(UUID.randomUUID(), admin);
         verify(inquiryRepository).delete(other);
         verify(imageService).deleteGroup(group);
+    }
+
+    // --- 답변 알림 이벤트 (B-15, 2026-07-31) ---
+
+    @Test
+    @DisplayName("답변: 첫 답변이면 InquiryAnsweredEvent 발행 — 작성자·상품·제목이 실린다")
+    void answer_publishesEventOnFirstAnswer() {
+        Inquiry q = inquiryBy(user.id());
+        when(inquiryRepository.findById(any())).thenReturn(Optional.of(q));
+
+        service.answer(UUID.randomUUID(), new InquiryAnswerRequest("네 답변드립니다"), admin);
+
+        org.mockito.ArgumentCaptor<InquiryAnsweredEvent> captor =
+                org.mockito.ArgumentCaptor.forClass(InquiryAnsweredEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        InquiryAnsweredEvent event = captor.getValue();
+        assertThat(event.authorId()).isEqualTo(user.id());        // 답변자(admin)가 아니라 **작성자**에게 간다
+        assertThat(event.productId()).isEqualTo(q.getProductId());
+        assertThat(event.inquiryTitle()).isEqualTo("t");          // 문구에 어느 문의인지가 있어야 쓸모가 있다
+    }
+
+    @Test
+    @DisplayName("⚠ 답변 **수정**은 이벤트를 발행하지 않는다 — 오타 고칠 때마다 알림이 가면 안 된다")
+    void answer_doesNotPublishOnEdit() {
+        Inquiry q = inquiryBy(user.id());
+        q.answer("첫 답변");                                        // 이미 ANSWERED
+        when(inquiryRepository.findById(any())).thenReturn(Optional.of(q));
+
+        service.answer(UUID.randomUUID(), new InquiryAnswerRequest("고친 답변"), admin);
+
+        assertThat(q.getAnswer()).isEqualTo("고친 답변");            // 수정 자체는 된다
+        verify(eventPublisher, never()).publishEvent(any(InquiryAnsweredEvent.class));
+    }
+
+    @Test
+    @DisplayName("답변: 본인 문의라 거부되면 이벤트도 없다")
+    void answer_selfAnswer_publishesNothing() {
+        Inquiry mine = inquiryBy(admin.id());
+        when(inquiryRepository.findById(any())).thenReturn(Optional.of(mine));
+
+        assertErrorCode(() -> service.answer(UUID.randomUUID(), new InquiryAnswerRequest("셀프"), admin),
+                ErrorCode.INQUIRY_SELF_ANSWER);
+
+        verify(eventPublisher, never()).publishEvent(any(InquiryAnsweredEvent.class));
     }
 }

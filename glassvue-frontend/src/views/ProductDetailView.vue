@@ -4,7 +4,7 @@
  * 정보를 한 줄에 늘어놓지 않고 카테고리 → 이름 → 가격 → 별점 → 재고 → 구매 순으로 읽히게 한다.
  */
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discountRate } from '../api/product';
 import { addToCart } from '../api/cart';
@@ -20,6 +20,7 @@ import ProductReviews from '../components/ProductReviews.vue';
 import ProductInquiries from '../components/ProductInquiries.vue';
 
 const props = defineProps({ id: { type: String, required: true } });
+const route = useRoute();
 const router = useRouter();
 
 const product = ref(null);
@@ -119,6 +120,10 @@ onMounted(async () => {
     pushRecentlyViewed(product.value); // 홈 "최근 본 상품" 에 남긴다(localStorage, B-8)
     await nextTick(); // 하단 섹션이 렌더된 뒤에 스크롤스파이를 건다
     setupSpy();
+    // 문의 답변 알림(B-15)에서 /products/{id}#inquiries 로 들어오면 그 섹션까지 데려간다.
+    // ⚠ 라우터 scrollBehavior 로 하지 않았다 — 그 시점엔 상품을 아직 못 받아 섹션이 렌더되기 전이라
+    //    앵커 요소가 없다. 데이터가 온 **뒤**인 여기가 맞는 자리다(탭 클릭과 같은 scrollTo 를 쓴다).
+    if (route.hash === '#inquiries') scrollTo(inquirySec.value);
   } catch (e) {
     error.value = e.message;
   } finally {

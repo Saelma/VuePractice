@@ -197,6 +197,22 @@ audit           관리자 조작 감사 이력 (append-only, 이벤트로만 유
 > 않도록 `<> CANCELLED`가 아닌 **명시적 열거**로 둔다. ②**포토 리뷰** — `review.image_group_id`로
 > ImageGroup 재사용 구조의 두 번째 사용처(FK 없는 느슨한 UUID, `ImageService` 공개 API로만 접근).
 > ③상품 목록 평균별점은 **비정규화 + 이벤트 동기화**(§6.0 이벤트 항목 참조).
+>
+> **✅ 2026-07-31 (B-15) 문의 답변 알림** — 문의는 **읽기 전용 종착점이 아니다.** 그동안
+> `answer()` 는 상태만 바꾸고 아무에게도 알리지 않아, **물어본 사람이 답을 못 보는** 구조였다
+> (문의 화면에 다시 들어와야 안다). `InquiryAnsweredEvent` → `InquiryEventListener` →
+> `InquiryNotificationHandler` 3층으로 붙였다. 두 가지가 이 자리 고유의 것이다:
+> - ⚠ **"첫 답변에서만" 발행한다.** 같은 API 가 등록·수정 겸용이라 무조건 발행하면 관리자가 오타를
+>   고칠 때마다 알림이 간다. 판정(`!inquiry.isAnswered()`)은 반드시 `inquiry.answer()` **앞**에서 —
+>   뒤에서 읽으면 이미 `ANSWERED` 라 영영 `false` 가 되어 **알림이 아예 안 나간다**(둘 다 컴파일되고
+>   답변 기능은 멀쩡하다. 이 한 줄 위치가 기능의 전부라 테스트 3건으로 못박았다).
+> - ⚠ **문의는 자기 URL 이 없다** — 상품 상세 안에 붙어 있다. 알림 링크는 `/products/{id}#inquiries`
+>   이고, 앵커 처리는 라우터 `scrollBehavior` 가 **아니라** `ProductDetailView` 안에서 한다
+>   (라우팅 시점엔 상품을 아직 못 받아 문의 섹션이 렌더 전이라 앵커 요소가 없다).
+>
+> 알림 타입은 `NotificationType.INQUIRY` 추가만으로 끝났다 — `notification.type`·
+> `member_notification_pref.type` 에 **CHECK 제약이 없어**(V26 실측) 마이그레이션이 없고,
+> 설정 화면은 서버가 `NotificationType.values()` 를 통째로 내려주므로 **토글이 저절로 생긴다**.
 
 ### 이미지 생명주기 규칙 (2026-07-20)
 
@@ -633,7 +649,7 @@ Spring Boot ──(로그)──┐
 | ~~**HTTPS** (nginx TLS 종단)~~ | ✅ **완료** 2026-07-16 — self-signed(SAN IP), 80→443 리다이렉트 (§6.0) |
 | **Sentry** (에러추적) | ⏸ 보류 — 관측/MSA 단계에 관측 스택과 함께 (모노레포 단계엔 오버엔지니어링, 2026-07-16 재판단) |
 | **Spring Batch** | 대량·재시작 배치 작업이 생길 때 (§6.0) |
-| ApplicationEventPublisher (스프링 내부 이벤트) | ✅ **도입 시작**(2026-07-16). **3층 구조**: ①`DomainEvent`(global/messaging 마커 인터페이스, 이벤트가 implements) ②`OrderEventListener`(어댑터 — `@TransactionalEventListener` AFTER_COMMIT + **`@Async`** 수신·위임만) ③`OrderNotificationHandler`(진짜 주체 — 로직). `OrderPlacedEvent`(checkout 발행) → 리스너 → 핸들러. order는 구독자를 모름. 비동기는 `AsyncConfig`(바운드 풀). 인프로세스 @Async는 best-effort → 유실 금지는 아웃박스/RabbitMQ. **MSA 시 리스너 자리에 RabbitMQ 컨슈머, Handler는 재사용**<br>**2026-07-20 확장**: `OrderCancelledEvent`(cancel 발행, Placed와 대칭) + **`StockRunningLowEvent`** 추가. 재고 이벤트는 **catalog가 발행 주체** — 재고는 catalog 소유이고 주문 외 경로(관리자 수정 등)로 줄어도 같은 알림이 나가야 하므로. 덕분에 order는 재고 알림의 존재를 모르고 `OrderService`는 무수정(fan-out 실증: 주문 1건 → Handler 2개가 각각 `event-*` 스레드에서 반응). 임계치는 `catalog.low-stock-threshold`(기본 5, 0=품절 포함). **재고 복원은 이벤트로 빼지 않는다** — 취소 처리의 일부(동기 성공 필수)지 best-effort 후처리가 아님<br>**2026-07-27 확장**: **`StockReplenishedEvent`**(재입고, B-9/V28) — `StockRunningLowEvent` 와 대칭으로 **catalog 가 발행 주체**. 상품 **총재고 0→양수** 전환 시 발행하며 경로는 셋(주문취소·반품복원=`increaseStock`, 관리자 재고편집=`update`). 구독자는 **restock 도메인**의 `RestockEventListener`→`RestockNotificationHandler`(신청자에게 RESTOCK 알림 + 구독 소진). 재고부족(STOCK)은 notification 이 받지만 재입고는 구독 생명주기를 소유한 restock 이 받는다(catalog→restock→notification, 순환 없음). 단위가 옵션이 아니라 상품인 이유는 §5 restock 참조<br>**2026-07-20 확장 2**: **`ReviewRatingChangedEvent`**(review 발행, 작성·수정·삭제) → catalog `ReviewEventListener` → `RatingSyncHandler`가 `product.avg_rating`/`review_count` 비정규화 갱신 + `products:list` 캐시 evict. **이벤트를 쓴 이유는 성능이 아니라 순환 회피** — catalog가 review를 조회하면 기존 `review → catalog`와 합쳐져 도메인 순환이 되고 MSA 분리가 깨진다. 그래서 **집계값을 이벤트 페이로드에 실어 보낸다**(`productId`만 보내면 구독자가 review를 되물어야 해서 순환이 되살아남). 결과: 상품 목록이 조인·추가쿼리 **0회**로 별점을 읽고, 의존 방향은 `review → catalog` 한쪽뿐 |
+| ApplicationEventPublisher (스프링 내부 이벤트) | ✅ **도입 시작**(2026-07-16). **3층 구조**: ①`DomainEvent`(global/messaging 마커 인터페이스, 이벤트가 implements) ②`OrderEventListener`(어댑터 — `@TransactionalEventListener` AFTER_COMMIT + **`@Async`** 수신·위임만) ③`OrderNotificationHandler`(진짜 주체 — 로직). `OrderPlacedEvent`(checkout 발행) → 리스너 → 핸들러. order는 구독자를 모름. 비동기는 `AsyncConfig`(바운드 풀). 인프로세스 @Async는 best-effort → 유실 금지는 아웃박스/RabbitMQ. **MSA 시 리스너 자리에 RabbitMQ 컨슈머, Handler는 재사용**<br>**2026-07-20 확장**: `OrderCancelledEvent`(cancel 발행, Placed와 대칭) + **`StockRunningLowEvent`** 추가. 재고 이벤트는 **catalog가 발행 주체** — 재고는 catalog 소유이고 주문 외 경로(관리자 수정 등)로 줄어도 같은 알림이 나가야 하므로. 덕분에 order는 재고 알림의 존재를 모르고 `OrderService`는 무수정(fan-out 실증: 주문 1건 → Handler 2개가 각각 `event-*` 스레드에서 반응). 임계치는 `catalog.low-stock-threshold`(기본 5, 0=품절 포함). **재고 복원은 이벤트로 빼지 않는다** — 취소 처리의 일부(동기 성공 필수)지 best-effort 후처리가 아님<br>**2026-07-27 확장**: **`StockReplenishedEvent`**(재입고, B-9/V28) — `StockRunningLowEvent` 와 대칭으로 **catalog 가 발행 주체**. 상품 **총재고 0→양수** 전환 시 발행하며 경로는 셋(주문취소·반품복원=`increaseStock`, 관리자 재고편집=`update`). 구독자는 **restock 도메인**의 `RestockEventListener`→`RestockNotificationHandler`(신청자에게 RESTOCK 알림 + 구독 소진). 재고부족(STOCK)은 notification 이 받지만 재입고는 구독 생명주기를 소유한 restock 이 받는다(catalog→restock→notification, 순환 없음). 단위가 옵션이 아니라 상품인 이유는 §5 restock 참조<br>**2026-07-20 확장 2**: **`ReviewRatingChangedEvent`**(review 발행, 작성·수정·삭제) → catalog `ReviewEventListener` → `RatingSyncHandler`가 `product.avg_rating`/`review_count` 비정규화 갱신 + `products:list` 캐시 evict. **이벤트를 쓴 이유는 성능이 아니라 순환 회피** — catalog가 review를 조회하면 기존 `review → catalog`와 합쳐져 도메인 순환이 되고 MSA 분리가 깨진다. 그래서 **집계값을 이벤트 페이로드에 실어 보낸다**(`productId`만 보내면 구독자가 review를 되물어야 해서 순환이 되살아남). 결과: 상품 목록이 조인·추가쿼리 **0회**로 별점을 읽고, 의존 방향은 `review → catalog` 한쪽뿐<br>**2026-07-31 확장**: **`InquiryAnsweredEvent`**(B-15) — inquiry 가 발행 주체, 구독자는 notification(`InquiryEventListener`→`InquiryNotificationHandler`). 알림 대상이 **발행자(관리자)가 아니라 이벤트에 실린 작성자**인 첫 사례라 페이로드에 `authorId`·`productId`·`inquiryTitle` 을 함께 싣는다(구독자가 inquiry 를 되물으면 `notification → inquiry` 역방향이 생긴다 — `ReviewRatingChangedEvent` 와 같은 이유). ⚠ **발행 조건이 로직의 전부**: 등록·수정 겸용 API 라 **첫 답변에서만** 발행하고, 판정은 `inquiry.answer()` **앞**에서 읽어야 한다(뒤면 항상 `ANSWERED` → 영영 발행 안 됨) |
 | Spring Modulith (도메인 경계 검증) | 도메인이 늘어 경계 규칙을 테스트로 강제하고 싶을 때 |
 | Docker | 첫 서비스 분리를 시작할 때 (k8s 제외, compose까지) |
 | 컨테이너 모니터링 (Portainer/ctop + cAdvisor→Grafana) | Docker 전환과 세트. Docker Desktop은 서버엔 제외 |
