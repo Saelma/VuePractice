@@ -150,6 +150,23 @@ function signedPoint(n) {
             </span>
           </dd>
           <dt class="text-ink-500">가입일</dt><dd class="text-ink-900">{{ fmt(member.createdAt) }}</dd>
+
+          <!--
+            약관 동의 (B-21, 2026-08-03).
+            ⚠ **null 을 「미동의」로 쓰지 않는다.** V37 이전 가입자는 동의 절차 자체가 없던 시절이라
+            거부한 게 아니라 **물어본 적이 없는** 것이다 — 둘을 같게 표시하면 화면이 거짓말을 한다.
+            그래서 「기록 없음」이라고 적고 회색으로 둔다(값이 있는 줄과 구분되게).
+          -->
+          <dt class="text-ink-500">약관 동의</dt>
+          <dd :class="member.termsAgreedAt ? 'text-ink-900' : 'text-ink-500'">
+            {{ member.termsAgreedAt ? fmt(member.termsAgreedAt) : '기록 없음 (동의 절차 이전 가입)' }}
+          </dd>
+
+          <!-- 마케팅은 선택이라 null 이 「미동의」가 맞다 — 위와 뜻이 다르므로 문구도 다르다. -->
+          <dt class="text-ink-500">마케팅 수신</dt>
+          <dd :class="member.marketingAgreedAt ? 'text-ink-900' : 'text-ink-500'">
+            {{ member.marketingAgreedAt ? fmt(member.marketingAgreedAt) + ' 동의' : '미동의' }}
+          </dd>
         </dl>
 
         <!-- 관리: 계층·본인에 따라 버튼을 감추고 안내만 (서버가 최종 방어선) -->
