@@ -10,6 +10,7 @@ import SignupView from '../views/SignupView.vue';
 import ForgotPasswordView from '../views/ForgotPasswordView.vue';
 import ResetPasswordView from '../views/ResetPasswordView.vue';
 import FindIdView from '../views/FindIdView.vue';
+import PolicyDocView from '../views/PolicyDocView.vue';
 import MyPageView from '../views/MyPageView.vue';
 import BenefitsView from '../views/BenefitsView.vue';
 import ProductListView from '../views/ProductListView.vue';
@@ -41,6 +42,10 @@ const routes = [
   { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView },
   { path: '/find-id', name: 'find-id', component: FindIdView },
   { path: '/reset-password', name: 'reset-password', component: ResetPasswordView },
+  // 약관·개인정보 처리방침 (B-21, 2026-08-03). **공개**여야 한다 — 가입 화면에서 여는 문서라
+  // 로그인 뒤에 있으면 동의하기 전에 읽을 수가 없다. 컴포넌트 하나가 라우트 이름으로 갈린다.
+  { path: '/terms', name: 'terms', component: PolicyDocView },
+  { path: '/privacy', name: 'privacy', component: PolicyDocView },
   { path: '/settings', name: 'settings', component: MyPageView, meta: { requiresAuth: true } },
   { path: '/benefits', name: 'benefits', component: BenefitsView, meta: { requiresAuth: true } },
   { path: '/notices', name: 'notice-list', component: NoticeListView },

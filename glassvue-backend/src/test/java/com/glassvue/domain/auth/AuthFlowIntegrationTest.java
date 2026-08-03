@@ -46,7 +46,7 @@ class AuthFlowIntegrationTest {
     void fullFlow() throws Exception {
         // 1) 회원가입
         mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
-                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\",\"nickname\":\"통합테스터\",\"email\":\"" + loginId + "@example.com\"}"))
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\",\"nickname\":\"통합테스터\",\"email\":\"" + loginId + "@example.com\",\"agreeTerms\":true}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.nickname").value("통합테스터"));
 
@@ -84,7 +84,7 @@ class AuthFlowIntegrationTest {
     void passwordResetFlow() throws Exception {
         // 1) 가입
         mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
-                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\",\"nickname\":\"재설정테스터\",\"email\":\"" + loginId + "@example.com\"}"))
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\",\"nickname\":\"재설정테스터\",\"email\":\"" + loginId + "@example.com\",\"agreeTerms\":true}"))
                 .andExpect(status().isCreated());
 
         // 2) 재설정 토큰 발급(서비스로 직접 — 응답 노출은 dev만)
@@ -130,7 +130,7 @@ class AuthFlowIntegrationTest {
 
     private String signupBody(String id, String nickname, String email) {
         return "{\"loginId\":\"" + id + "\",\"password\":\"" + PW + "\",\"nickname\":\"" + nickname
-                + "\",\"email\":\"" + email + "\"}";
+                + "\",\"email\":\"" + email + "\",\"agreeTerms\":true}";
     }
 
     @Test
@@ -139,7 +139,7 @@ class AuthFlowIntegrationTest {
         String id = "em_" + UUID.randomUUID().toString().substring(0, 8);
         // 누락 — DB 는 nullable 이지만 API 계층에서 막는다(@NotBlank)
         mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
-                        "{\"loginId\":\"" + id + "\",\"password\":\"" + PW + "\",\"nickname\":\"ZZ이메일없음\"}"))
+                        "{\"loginId\":\"" + id + "\",\"password\":\"" + PW + "\",\"nickname\":\"ZZ이메일없음\",\"agreeTerms\":true}"))
                 .andExpect(status().isBadRequest());
         // 형식 오류
         mockMvc.perform(post("/api/auth/signup").contentType(JSON)

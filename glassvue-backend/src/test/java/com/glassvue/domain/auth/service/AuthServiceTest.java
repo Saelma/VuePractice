@@ -74,7 +74,7 @@ class AuthServiceTest {
     @DisplayName("회원가입: 아이디 중복 → DUPLICATE_LOGIN_ID, 저장 안 함")
     void signup_duplicate() {
         when(memberRepository.existsByLoginId("kim")).thenReturn(true);
-        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com")), ErrorCode.DUPLICATE_LOGIN_ID);
+        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com", true, null)), ErrorCode.DUPLICATE_LOGIN_ID);
         verify(memberRepository, never()).save(any());
     }
 
@@ -83,7 +83,7 @@ class AuthServiceTest {
     void signup_duplicateNickname() {
         when(memberRepository.existsByLoginId("kim")).thenReturn(false);
         when(memberRepository.existsByNickname("닉")).thenReturn(true);
-        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com")), ErrorCode.DUPLICATE_NICKNAME);
+        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com", true, null)), ErrorCode.DUPLICATE_NICKNAME);
         verify(memberRepository, never()).save(any());
     }
 
@@ -94,7 +94,7 @@ class AuthServiceTest {
         when(memberRepository.existsByNickname("닉")).thenReturn(false);
         when(passwordEncoder.encode("pw")).thenReturn("ENC");
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
-        var res = service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com"));
+        var res = service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com", true, null));
         assertThat(res.nickname()).isEqualTo("닉");
         verify(memberRepository).save(any(Member.class));
     }
@@ -112,7 +112,7 @@ class AuthServiceTest {
         when(passwordEncoder.encode("pw")).thenReturn("ENC");
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com"));
+        service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com", true, null));
 
         var captor = org.mockito.ArgumentCaptor.forClass(
                 com.glassvue.domain.member.event.MemberSignedUpEvent.class);
@@ -125,7 +125,7 @@ class AuthServiceTest {
     void signup_noEventOnFailure() {
         when(memberRepository.existsByLoginId("kim")).thenReturn(true);
 
-        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com")),
+        assertErrorCode(() -> service.signup(new SignupRequest("kim", "pw", "닉", "kim@example.com", true, null)),
                 ErrorCode.DUPLICATE_LOGIN_ID);
 
         verify(eventPublisher, never()).publishEvent(any(Object.class));

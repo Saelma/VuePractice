@@ -25,6 +25,7 @@ import com.glassvue.global.security.RefreshTokenStore;
 import com.glassvue.global.security.TokenBlacklist;
 import com.glassvue.global.security.TokenRevocationStore;
 import io.jsonwebtoken.Claims;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -75,12 +76,22 @@ public class AuthService {
         }
         // 비밀번호 정책(E-3) — 아이디·닉네임을 함께 봐야 하므로 DTO 애노테이션으로는 못 하는 검사다.
         passwordPolicy.validate(req.password(), req.loginId(), req.nickname());
+        // 필수 동의(B-21). ⚠ null 과 false 를 같이 막는다 — 필드를 아예 안 보내는 것도 "동의 안 함"이다.
+        if (!Boolean.TRUE.equals(req.agreeTerms())) {
+            throw new BusinessException(ErrorCode.TERMS_NOT_AGREED);
+        }
+        // ⚠ 동의 시각은 **서버가 찍는다.** 요청에 시각을 받지 않는 이유가 이것이다(SignupRequest 주석).
+        //    필수·선택 둘 다 같은 시각을 쓴다 — 한 번의 가입에서 함께 일어난 일이다.
+        Instant agreedAt = Instant.now();
         Member member = Member.builder()
                 .loginId(req.loginId())
                 .password(passwordEncoder.encode(req.password()))
                 .nickname(req.nickname())
                 .role(Role.USER)
                 .email(email)
+                .termsAgreedAt(agreedAt)
+                // 선택 동의는 **동의했을 때만** 시각이 남는다. false·null 이면 null(미동의).
+                .marketingAgreedAt(Boolean.TRUE.equals(req.agreeMarketing()) ? agreedAt : null)
                 .build();
         memberRepository.save(member);
         // 적립금 계정은 **가입 시** 만든다. 조회할 때 "없으면 만드는" 방식은 읽기가 쓰기를 하게 되고

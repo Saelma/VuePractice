@@ -67,7 +67,7 @@ class WelcomeCouponIntegrationTest {
     private String signup(String loginId) throws Exception {
         return mockMvc.perform(post("/api/auth/signup").contentType(JSON)
                         .content("{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\","
-                                + "\"nickname\":\"ZZ가입" + loginId + "\",\"email\":\"" + loginId + "@example.com\"}"))
+                                + "\"nickname\":\"ZZ가입" + loginId + "\",\"email\":\"" + loginId + "@example.com\",\"agreeTerms\":true}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     }
 

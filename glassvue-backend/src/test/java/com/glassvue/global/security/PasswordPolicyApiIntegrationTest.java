@@ -65,7 +65,7 @@ class PasswordPolicyApiIntegrationTest {
 
     private String signupBody(String id, String nickname, String password) {
         return "{\"loginId\":\"" + id + "\",\"password\":\"" + password
-                + "\",\"nickname\":\"" + nickname + "\",\"email\":\"" + id + "@example.com\"}";
+                + "\",\"nickname\":\"" + nickname + "\",\"email\":\"" + id + "@example.com\",\"agreeTerms\":true}";
     }
 
     private String login(String id, String password) throws Exception {
