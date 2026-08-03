@@ -53,6 +53,9 @@ public record OrderResponse(
         String shipZipcode,
         String shipAddress1,
         String shipAddress2,
+        // 배송 요청사항(V38, B-20). 주문 시점 스냅샷이라 주소록을 고쳐도 안 변한다.
+        // null 이면 화면이 줄 자체를 안 그린다(요청 없는 주문이 대부분이라 빈 줄을 남기지 않는다).
+        String shipMemo,
         // 배송 추적(V13). 운송장 도입 이전 주문은 전부 null이라 화면이 추적 영역을 감춘다.
         DeliveryCarrier shipCarrier,
         String shipCarrierName,
@@ -95,6 +98,7 @@ public record OrderResponse(
                 o.getShipZipcode(),
                 o.getShipAddress1(),
                 o.getShipAddress2(),
+                o.getShipMemo(),
                 o.getShipCarrier(),
                 o.getShipCarrier() == null ? null : o.getShipCarrier().getDisplayName(),
                 o.getShipTrackingNo(),

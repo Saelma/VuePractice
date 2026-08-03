@@ -116,6 +116,7 @@ public class OrderService {
         // (품목·가격을 장바구니에서 읽는 것과 같은 이유).
         Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems,
                 req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2(),
+                req.shipMemo(),
                 shippingFee, nextOrderNo(), couponName, couponDiscount, usedPoint));
 
         // 차감은 **주문을 만든 뒤**에 한다 — 적립금 이력이 "어느 주문 때문인지"를 담아야 하는데

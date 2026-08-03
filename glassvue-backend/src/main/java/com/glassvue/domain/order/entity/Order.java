@@ -110,6 +110,18 @@ public class Order extends BaseTimeEntity {
     @Column(name = "ship_address2", length = 200)
     private String shipAddress2;
 
+    /**
+     * 배송 요청사항 (V38, 2026-08-03 B-20) — <b>주문 시점 스냅샷</b>이다.
+     *
+     * <p>배송지 5필드와 같은 성격이라 나란히 둔다: 회원이 나중에 주소록을 고쳐도
+     * <b>과거 주문의 요청사항은 그대로여야</b> CS 가 맞는다.
+     *
+     * <p>{@code null} 이 정상값이다 — 요청이 없는 주문이 대부분이고, V38 이전 주문은
+     * <b>실제로 요청사항이 없었다</b>(백필하지 않는 이유).
+     */
+    @Column(name = "ship_memo", length = 200)
+    private String shipMemo;
+
     // 취소 시각. 결제·발송과 마찬가지로 "언제 그렇게 됐는지"가 CS·정산에서 필요하다.
     // updated_at으로는 대체할 수 없다 — 다른 변경에도 갱신되므로 취소 시각이라 단정할 수 없다.
     private Instant cancelledAt;
@@ -156,6 +168,7 @@ public class Order extends BaseTimeEntity {
     public static Order create(UUID memberId, String buyerNickname, List<OrderItem> orderItems,
                                String shipRecipient, String shipPhone,
                                String shipZipcode, String shipAddress1, String shipAddress2,
+                               String shipMemo,
                                long shippingFee, String orderNo,
                                String couponName, long couponDiscount, long usedPoint) {
         Order order = new Order(memberId, buyerNickname, orderNo);
@@ -168,6 +181,7 @@ public class Order extends BaseTimeEntity {
         order.shipZipcode = shipZipcode;
         order.shipAddress1 = shipAddress1;
         order.shipAddress2 = shipAddress2;
+        order.shipMemo = shipMemo;
         orderItems.forEach(order::addItem);
         return order;
     }

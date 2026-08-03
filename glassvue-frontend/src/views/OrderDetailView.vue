@@ -209,6 +209,14 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <dt class="w-20 shrink-0 text-ink-500">주소</dt>
             <dd class="text-ink-900">{{ addressText(order) }}</dd>
           </div>
+          <!--
+            배송 요청사항(V38, B-20). ⚠ **없으면 줄 자체를 안 그린다** — 요청 없는 주문이 대부분이라
+            빈 칸을 남기면 배송지 카드가 매번 들쭉날쭉해진다(배송지·추적 카드와 같은 규칙).
+          -->
+          <div v-if="order.shipMemo" class="flex gap-4">
+            <dt class="w-20 shrink-0 text-ink-500">요청사항</dt>
+            <dd class="text-ink-900">{{ order.shipMemo }}</dd>
+          </div>
         </dl>
       </div>
 

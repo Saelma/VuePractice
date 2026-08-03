@@ -1,7 +1,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { DxTextArea } from 'devextreme-vue/text-area';
-import { fetchProductReviews, createReview, updateReview, deleteReview, REVIEW_IMAGE_MAX } from '../api/review';
+import {
+  fetchProductReviews, createReview, updateReview, deleteReview,
+  REVIEW_IMAGE_MAX, REVIEW_SORT_OPTIONS,
+} from '../api/review';
 import { authState, isLoggedIn, isAdmin } from '../stores/auth';
 import StarRating from './StarRating.vue';
 import ImageUploader from './ImageUploader.vue';
@@ -29,11 +32,22 @@ const formError = ref('');
 const editingId = ref(null);
 const editForm = ref({ rating: 5, content: '', images: [] });
 
+// 정렬·필터 (B-22). 바꾸면 **0페이지부터** 다시 읽는다 — 3페이지에서 정렬만 바꾸면
+// 그 페이지에 뭐가 있을지 알 수 없어 사용자가 길을 잃는다.
+const sort = ref(REVIEW_SORT_OPTIONS[0].value);
+const photoOnly = ref(false);
+
+function changeView() {
+  load(0);
+}
+
 async function load(p = 0) {
   loading.value = true;
   error.value = '';
   try {
-    const data = await fetchProductReviews(props.productId, { page: p, size: 5 });
+    const data = await fetchProductReviews(props.productId, {
+      page: p, size: 5, sort: sort.value, photoOnly: photoOnly.value,
+    });
     summary.value = { averageRating: data.averageRating, reviewCount: data.reviewCount };
     page.value = data.page;
   } catch (e) {
@@ -135,6 +149,21 @@ onMounted(() => load(0));
     </div>
     <p v-else class="mb-6 text-sm text-ink-500">리뷰 작성은 로그인 후 가능합니다.</p>
 
+    <!--
+      정렬·사진만 보기 (B-22). ⚠ **리뷰가 없으면 통째로 감춘다** — 고를 게 없는데 컨트롤만
+      떠 있으면 "필터 때문에 비었나?" 로 읽힌다(빈 상태 문구는 상황에 맞게, DESIGN §5).
+      ⚠ 「사진 있는 리뷰만」으로 걸러 0건이 될 때는 **감추지 않는다** — 그때는 필터를 풀 수 있어야 한다.
+    -->
+    <div v-if="summary.reviewCount > 0" class="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <label class="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
+        <input v-model="photoOnly" type="checkbox" class="review-filter-box" @change="changeView" />
+        사진 있는 리뷰만
+      </label>
+      <select v-model="sort" class="review-sort" @change="changeView">
+        <option v-for="o in REVIEW_SORT_OPTIONS" :key="o.value" :value="o.value">{{ o.text }}</option>
+      </select>
+    </div>
+
     <!-- 로딩: 텍스트 대신 스켈레톤 (DESIGN.md §5) -->
     <SkeletonList v-if="loading" />
 
@@ -143,8 +172,10 @@ onMounted(() => load(0));
       v-else-if="!page.content.length"
       density="section"
       icon="💬"
-      message="아직 리뷰가 없어요."
-      :hint="isLoggedIn ? '이 상품을 구매하셨다면 첫 리뷰를 남겨보세요.' : null"
+      :message="photoOnly ? '사진이 있는 리뷰가 없어요.' : '아직 리뷰가 없어요.'"
+      :hint="photoOnly
+        ? '「사진 있는 리뷰만」을 끄면 전체 리뷰를 볼 수 있어요.'
+        : (isLoggedIn ? '이 상품을 구매하셨다면 첫 리뷰를 남겨보세요.' : null)"
     />
 
     <!-- 목록 -->
@@ -196,3 +227,30 @@ onMounted(() => load(0));
     </div>
   </section>
 </template>
+
+<style scoped>
+/*
+ * 정렬 select·필터 체크박스는 **네이티브**를 쓴다 — DevExtreme 로 바꾸면 라벨 클릭·포커스 링을
+ * 다시 만들어야 하는데, 브라우저 기본이 이미 갖추고 있다(가입 동의 체크박스와 같은 판단, DESIGN §6).
+ * 색·radius 만 토큰에 맞춘다.
+ */
+.review-filter-box {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-brand-600);
+  cursor: pointer;
+}
+.review-sort {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  padding: 0.375rem 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-ink-700);
+  cursor: pointer;
+}
+.review-sort:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
+</style>

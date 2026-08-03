@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -44,8 +45,11 @@ public class ReviewControllerImpl implements ReviewController {
     @Override
     @GetMapping("/products/{productId}/reviews")
     public ResponseEntity<ApiResponse<ProductReviewsResponse>> list(
-            @PathVariable UUID productId, Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(queryService.getProductReviews(productId, pageable)));
+            @PathVariable UUID productId,
+            @RequestParam(defaultValue = "false") boolean photoOnly,
+            Pageable pageable) {
+        return ResponseEntity.ok(
+                ApiResponse.ok(queryService.getProductReviews(productId, photoOnly, pageable)));
     }
 
     @Override

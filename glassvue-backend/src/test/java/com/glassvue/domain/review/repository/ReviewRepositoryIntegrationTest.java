@@ -65,7 +65,7 @@ class ReviewRepositoryIntegrationTest {
     @Test
     @DisplayName("상품별 목록: 3건")
     void findByProduct() {
-        var page = reviewRepository.findByProduct(productId, PageRequest.of(0, 10));
+        var page = reviewRepository.findByProduct(productId, false, PageRequest.of(0, 10));
         assertThat(page.getContent()).hasSize(3)
                 .allSatisfy(r -> assertThat(r.getProductId()).isEqualTo(productId));
     }

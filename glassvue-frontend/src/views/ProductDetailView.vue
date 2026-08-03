@@ -18,6 +18,7 @@ import WishlistButton from '../components/WishlistButton.vue';
 import RestockButton from '../components/RestockButton.vue';
 import ProductReviews from '../components/ProductReviews.vue';
 import ProductInquiries from '../components/ProductInquiries.vue';
+import RelatedProducts from '../components/RelatedProducts.vue';
 
 const props = defineProps({ id: { type: String, required: true } });
 const route = useRoute();
@@ -377,6 +378,15 @@ async function onDelete() {
       <section id="inquiries" ref="inquirySec" class="mt-12 scroll-mt-28 border-t border-line pt-12">
         <ProductInquiries :product-id="id" />
       </section>
+
+      <!--
+        연관 상품(B-23) — **맨 아래**에 둔다. 리뷰·문의를 다 보고 "그래서 다른 건 뭐가 있지" 가
+        나오는 자리라, 위에 두면 상품 정보를 읽기도 전에 이탈 경로를 먼저 보여주는 셈이 된다.
+        ⚠ 섹션 구분선(border-t)은 리뷰·문의와 같은 규칙을 따른다.
+      -->
+      <div class="mt-12 border-t border-line pt-12">
+        <RelatedProducts :product-id="id" :category-id="product.categoryId" />
+      </div>
     </template>
   </section>
 </template>

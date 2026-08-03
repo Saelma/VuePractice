@@ -36,7 +36,7 @@ class ReviewQueryServiceIntegrationTest {
         UUID pid = UUID.randomUUID();
         save(pid, 5);
         save(pid, 4);
-        ProductReviewsResponse r = queryService.getProductReviews(pid, PageRequest.of(0, 10));
+        ProductReviewsResponse r = queryService.getProductReviews(pid, false, PageRequest.of(0, 10));
         assertThat(r.averageRating()).isEqualTo(4.5);
         assertThat(r.reviewCount()).isEqualTo(2);
         assertThat(r.page().content()).hasSize(2);
@@ -45,7 +45,7 @@ class ReviewQueryServiceIntegrationTest {
     @Test
     @DisplayName("리뷰 없는 상품: 평균 0.0 · 개수 0 · 빈 페이지")
     void empty() {
-        ProductReviewsResponse r = queryService.getProductReviews(UUID.randomUUID(), PageRequest.of(0, 10));
+        ProductReviewsResponse r = queryService.getProductReviews(UUID.randomUUID(), false, PageRequest.of(0, 10));
         assertThat(r.averageRating()).isEqualTo(0.0);
         assertThat(r.reviewCount()).isZero();
         assertThat(r.page().content()).isEmpty();

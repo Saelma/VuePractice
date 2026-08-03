@@ -23,7 +23,7 @@ class SoldLineTest {
                         OrderItem.of(productA, UUID.randomUUID(), "빨강", "지바", null, 10_000, null, 2),
                         OrderItem.of(productA, UUID.randomUUID(), "파랑", "지바", null, 10_000, null, 1),
                         OrderItem.of(productB, UUID.randomUUID(), null, "마우스", null, 5_000, null, 4)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 1", "3층", 3_000, "20260101-0001", null, 0L, 0L);
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 1", "3층", null, 3_000, "20260101-0001", null, 0L, 0L);
 
         List<SoldLine> lines = SoldLine.from(order);
 

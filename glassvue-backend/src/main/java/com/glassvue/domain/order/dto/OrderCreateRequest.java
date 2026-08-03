@@ -32,6 +32,15 @@ public record OrderCreateRequest(
         @Size(max = 200)
         String address2,
 
+        /*
+         * 배송 요청사항(선택, B-20 2026-08-03). 주문 시점 스냅샷으로 orders.ship_memo 에 남는다.
+         * ⚠ 200자 상한은 DB 컬럼(VARCHAR2(200 CHAR))과 맞춘 값이다 — 여기가 더 크면
+         *   ORA-12899 로 주문 자체가 실패한다(V12 닉네임 스냅샷 사고와 같은 자리).
+         */
+        @Schema(description = "배송 요청사항(선택)", example = "부재 시 경비실에 맡겨 주세요")
+        @Size(max = 200)
+        String shipMemo,
+
         @Schema(description = "사용할 쿠폰(내 쿠폰 id). 비우면 쿠폰 미사용")
         java.util.UUID memberCouponId,
 

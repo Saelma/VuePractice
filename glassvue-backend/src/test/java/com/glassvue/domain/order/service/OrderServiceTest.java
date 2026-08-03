@@ -65,10 +65,10 @@ class OrderServiceTest {
     private final UUID orderId = UUID.randomUUID();
 
     private static final OrderCreateRequest SHIP = new OrderCreateRequest(
-            "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, null);
+            "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, null, null);
 
     private Order orderWith(OrderItem... items) {
-        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", 3_000, "20260101-0001", null, 0L, 0L);
+        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000, "20260101-0001", null, 0L, 0L);
     }
     private Order sampleOrder() {
         return orderWith(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, "지바", "/uploads/z_t.webp", 10_000, null, 2));

@@ -16,6 +16,7 @@ import { fetchPointAccount, maxUsablePoint, clampPoint, gradeText } from '../api
 import { addressFromUser, hasAddress, validateAddress, trimAddress } from '../api/shipping';
 import { fetchAddresses, addressToForm, addressSummary } from '../api/address';
 import { authState } from '../stores/auth';
+import { DxTextBox } from 'devextreme-vue/text-box';
 import ItemThumb from '../components/ItemThumb.vue';
 import ShippingAddressFields from '../components/ShippingAddressFields.vue';
 
@@ -50,6 +51,16 @@ const error = ref('');
 
 // 기본 배송지가 있으면 채워 둔다(없으면 빈 폼). 여기서 고쳐도 저장된 주소는 그대로다.
 const form = reactive(addressFromUser(authState.user));
+
+/**
+ * 배송 요청사항 (B-20, 2026-08-03).
+ *
+ * ⚠ **`form`(배송지) 밖에 따로 둔다.** 「기본 배송지로 저장」을 켜면 `updateShippingAddress(address)`
+ * 가 도는데, 요청사항이 그 안에 섞이면 **주문 단위 요청이 주소록에 저장**된다 — 다음 주문에도
+ * "부재 시 경비실에" 가 딸려오는 셈이다. 규율(안 넣기로 하자)이 아니라 **구조**로 막는다:
+ * `trimAddress(form)` 이 이 값을 볼 방법 자체가 없다.
+ */
+const shipMemo = ref('');
 const hadDefault = hasAddress(authState.user);
 // 기본 배송지가 없던 사람은 저장을 기본값으로 켜 둔다 — 다음 주문에서 다시 안 쓰게.
 const saveAsDefault = ref(!hadDefault);
@@ -113,6 +124,8 @@ async function submit() {
     // 쿠폰 id만 보낸다 — 할인액은 서버가 다시 계산한다(본문으로 받으면 위조 가능).
     const orderId = await apiCheckout({
       ...address,
+      // 배송지가 아니라 **주문**에 붙는 값이라 address 스프레드 밖에서 따로 실는다.
+      shipMemo: shipMemo.value.trim() || null,
       memberCouponId: selectedCouponId.value,
       // 서버가 잔액과 상한을 다시 검증한다 — 화면 값은 편의일 뿐 신뢰 대상이 아니다.
       usePoint: appliedPoint.value > 0 ? appliedPoint.value : null,
@@ -184,6 +197,20 @@ async function submit() {
         <div class="mt-4">
           <ShippingAddressFields :form="form" />
         </div>
+
+        <!--
+          배송 요청사항 (B-20). ⚠ **주소 입력 컴포넌트 밖**에 둔다 — ShippingAddressFields 는
+          주소록 편집에서도 쓰는데, 요청사항은 **주문마다 다른 값**이라 주소에 딸려서는 안 된다.
+        -->
+        <label class="field mt-4">
+          <span class="field-label">배송 요청사항 (선택)</span>
+          <DxTextBox
+            v-model:value="shipMemo"
+            :max-length="200"
+            placeholder="예: 부재 시 경비실에 맡겨 주세요"
+          />
+          <span class="muted">이번 주문에만 적용됩니다. 최대 200자.</span>
+        </label>
 
         <label class="mt-4 flex items-center gap-2 text-sm text-ink-700">
           <input v-model="saveAsDefault" type="checkbox" class="h-4 w-4 accent-brand-600" />
