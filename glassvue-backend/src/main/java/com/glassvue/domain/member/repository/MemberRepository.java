@@ -32,6 +32,20 @@ public interface MemberRepository extends JpaRepository<Member, UUID> {
     @Query("select m.id from Member m where m.role = :role")
     List<UUID> findIdsByRole(@Param("role") Role role);
 
+    /**
+     * 마케팅 수신에 <b>동의한</b> 회원 id 목록 (2026-08-03, B-21 후속).
+     *
+     * <p>⚠ 여기서 보는 것은 <b>동의(근거)뿐</b>이다. "지금 받고 싶은가"(알림 설정 토글)는
+     * notification 도메인의 관심사라 여기서 알 수 없고, 알 필요도 없다 —
+     * 그쪽은 {@code NotificationCommandService.create} 가 알아서 존중한다.
+     * 두 조건을 한 쿼리에 합치려면 member 가 notification 테이블을 조인해야 하는데 그건 경계를 깬다.
+     *
+     * <p>V37 이전 가입자는 {@code marketing_agreed_at} 이 {@code null} 이라 자연히 빠진다
+     * (동의를 거부한 게 아니라 <b>물어본 적이 없는</b> 사람들이다 — 그래서 안 보내는 게 맞다).
+     */
+    @Query("select m.id from Member m where m.marketingAgreedAt is not null")
+    List<UUID> findIdsWithMarketingAgreement();
+
     boolean existsByLoginId(String loginId);
 
     boolean existsByNickname(String nickname);

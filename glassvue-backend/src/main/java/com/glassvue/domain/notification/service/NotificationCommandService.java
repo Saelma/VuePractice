@@ -33,17 +33,23 @@ public class NotificationCommandService {
      *
      * <p>저장 뒤 SSE 로 미는데, 페이로드가 알림 전체라 화면은 재조회 없이 목록·토스트에 바로 넣는다.
      * 푸시는 best-effort — 실패해도(끊긴 연결 등) 알림은 DB 에 남아 재조회 때 보인다.
+     *
+     * @return <b>실제로 만들었으면</b> {@code true}, 설정에서 꺼져 있어 건너뛰었으면 {@code false}.
+     *         ⚠ 이 반환값은 <b>마케팅 발송(B-21 후속)이 "몇 명에게 갔는지" 를 정직하게 세기 위해</b>
+     *         생겼다. 대상 수만 세고 발송 결과를 안 세면 <b>토글을 끈 사람까지 "보냈다"로 보고</b>하게 된다.
+     *         기존 호출부(이벤트 핸들러들)는 반환값을 쓰지 않는다 — 무시해도 무해하다.
      */
     @Transactional
-    public void create(UUID memberId, NotificationType type, String title, String message, String link) {
+    public boolean create(UUID memberId, NotificationType type, String title, String message, String link) {
         boolean enabled = prefRepository.findByMemberIdAndType(memberId, type)
                 .map(NotificationPref::isEnabled)
                 .orElse(true); // 행이 없으면 켜짐(기본 on)
         if (!enabled) {
-            return;
+            return false;
         }
         Notification saved = notificationRepository.save(Notification.of(memberId, type, title, message, link));
         stream.push(memberId, NotificationResponse.from(saved));
+        return true;
     }
 
     /** 읽음 처리 — 본인 알림만. 멱등(이미 읽었어도 정상). */

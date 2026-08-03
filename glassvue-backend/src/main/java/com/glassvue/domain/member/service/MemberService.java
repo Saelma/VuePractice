@@ -52,6 +52,22 @@ public class MemberService {
         return memberRepository.findIdsByRole(Role.ADMIN);
     }
 
+    /**
+     * 마케팅 수신에 <b>동의한</b> 회원 id 목록 — notification 도메인용 공개 API (2026-08-03, B-21 후속).
+     *
+     * <p>{@link #adminIds()} 와 같은 자리다: <b>대상 선정의 근거는 member 가 갖고, 알림을 만드는 일은
+     * notification 이 한다.</b> 그래야 notification 이 member 테이블을 직접 만지지 않는다(도메인 경계).
+     *
+     * <p>⚠ 여기서 주는 것은 <b>"동의한 사람" 전부</b>이고 <b>"보낼 사람"이 아니다.</b>
+     * 알림 설정에서 마케팅을 끈 사람은 이 목록에 <b>그대로 들어 있고</b>, 걸러내는 것은
+     * {@code NotificationCommandService.create} 다. 동의(근거)와 수신 거부(선호)는 다른 것이라
+     * 판단하는 주체도 다르다.
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<UUID> marketingAgreedIds() {
+        return memberRepository.findIdsWithMarketingAgreement();
+    }
+
     /** 정지 여부 — 주문(order) 도메인이 정지 회원의 주문을 막을 때 쓰는 공개 API(B-11 후속). */
     @Transactional(readOnly = true)
     public boolean isSuspended(UUID memberId) {

@@ -90,6 +90,7 @@ const shortcuts = [
   { to: '/admin/orders', label: '주문 관리', hint: '발송·반품 처리' },
   { to: '/admin/members', label: '회원 관리', hint: '정지·등급·강제 탈퇴' },
   { to: '/admin/coupons', label: '쿠폰', hint: '발급·가입 쿠폰 지정' },
+  { to: '/admin/marketing', label: '마케팅 발송', hint: '동의 회원에게 알림' },
   { to: '/admin/categories', label: '카테고리', hint: '분류 추가·수정' },
   { to: '/products/new', label: '상품 등록', hint: '새 상품 올리기' },
   { to: '/admin/stats', label: '매출 통계', hint: '추이·상품별 TOP' },
