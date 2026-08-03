@@ -24,6 +24,15 @@ if [ -x "$DRIFT_CHECK" ] && ! "$DRIFT_CHECK" >/dev/null 2>&1; then
   echo "⚠ infra/ 사본이 서버 설정과 다르다 — './scripts/check-infra-drift.sh'로 확인할 것 (배포는 계속한다)"
 fi
 
+# --- 핸드오프 집계 어긋남 경고 ---
+# 커밋 표·총괄·종결 기록·조건부 잔여는 **모든 항목이 함께 쓰는 자리**라, 하루가 길어지면 조용히
+# 어긋난다(2026-08-03 에 하루 8건 작업하며 세 번 어긋났고, 세 번 다 "다 됐다"고 답한 뒤 드러났다).
+# 배포는 그 항목의 기록이 **확정되는 지점**이고 실측값도 손에 있어, 여기가 닫기 가장 싼 자리다
+# (WORKING-AGREEMENTS §4-0-1). 규약만으로는 안 걸러져서(규약을 올린 직후 또 안 셌다) 여기서 알린다.
+# **막지는 않는다** — 위 두 검사와 같은 판단.
+HANDOFF_CHECK="$(dirname "${BASH_SOURCE[0]}")/check-handoff.sh"
+[ -x "$HANDOFF_CHECK" ] && "$HANDOFF_CHECK" || true
+
 echo "▶ 빌드…"
 if [ "$(id -un)" = "root" ]; then
   runuser -l ecstel -c "pnpm -C '$FRONT_DIR' build"   # 빌드는 프로젝트 소유자(ecstel)로
