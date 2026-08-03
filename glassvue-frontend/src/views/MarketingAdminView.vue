@@ -16,7 +16,11 @@
  * (혜택 문구를 서버가 줄 때만 노출하기로 한 것과 같은 규칙, DESIGN §7).
  */
 import { computed, onMounted, ref } from 'vue';
-import { DxTextBox, DxTextArea } from 'devextreme-vue/text-box';
+import { DxTextBox } from 'devextreme-vue/text-box';
+// ⚠ DxTextArea 는 **text-box 가 아니라 text-area** 모듈이다(text-box 는 DxTextBox·DxButton 만 내보낸다).
+// 처음에 text-box 에서 가져왔더니 undefined 가 되어 **내용 칸이 통째로 안 그려졌다** —
+// 없는 named export 라 빌드도 테스트도 통과했고, 화면을 열어서야 드러났다(2026-08-03).
+import { DxTextArea } from 'devextreme-vue/text-area';
 import { fetchMarketingAudience, sendMarketing } from '../api/notification';
 
 const form = ref({ title: '', message: '', link: '' });
