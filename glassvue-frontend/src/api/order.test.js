@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT,
-  DELIVERY_CARRIERS, shipOrder, deliverOrder,
+  DELIVERY_CARRIERS, shipOrder, deliverOrder, resolveOrderStatusFilter,
 } from './order';
 import { clearSession } from '../stores/auth';
 
@@ -79,5 +79,29 @@ describe('발송·배송완료 요청', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url.pathname).toBe('/api/orders/order-1/deliver');
     expect(init.method).toBe('POST');
+  });
+});
+
+describe('resolveOrderStatusFilter — 관리자 홈에서 "할 일"을 집어 올 때 (B-16)', () => {
+  it('아는 상태는 그대로 쓴다', () => {
+    expect(resolveOrderStatusFilter('PAID')).toBe('PAID');
+    expect(resolveOrderStatusFilter('RETURN_REQUESTED')).toBe('RETURN_REQUESTED');
+  });
+
+  it('값이 없으면 발송 대기(PAID) — 이 화면에 오는 가장 흔한 이유', () => {
+    expect(resolveOrderStatusFilter(undefined)).toBe('PAID');
+    expect(resolveOrderStatusFilter(null)).toBe('PAID');
+    expect(resolveOrderStatusFilter('')).toBe('PAID');
+  });
+
+  it('⚠ 모르는 값은 통과시키지 않는다 — 400이 "주문이 없다"로 보이는 걸 막는다', () => {
+    expect(resolveOrderStatusFilter('PAIDD')).toBe('PAID');
+    expect(resolveOrderStatusFilter('paid')).toBe('PAID'); // 서버 enum은 대문자
+    expect(resolveOrderStatusFilter(['PAID', 'SHIPPED'])).toBe('PAID'); // ?status=a&status=b
+  });
+
+  it('⚠ Object 프로토타입 속성에 속지 않는다 (?status=toString)', () => {
+    expect(resolveOrderStatusFilter('toString')).toBe('PAID');
+    expect(resolveOrderStatusFilter('constructor')).toBe('PAID');
   });
 });

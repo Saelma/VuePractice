@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -56,4 +57,39 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
             where v.id = :id and p.id = v.productId
             """)
     Optional<VariantStockSnapshot> findStockSnapshot(@Param("id") UUID id);
+
+    /**
+     * 재고가 임계치 <b>이하</b>인 옵션 목록 — 관리자 대시보드의 「재고 부족」 (2026-08-03, B-16).
+     *
+     * <p>⚠ <b>{@code HIDDEN} 상품은 뺀다.</b> 숨긴 상품은 팔리지 않으므로 재고를 채울 이유가 없다 —
+     * 넣으면 "처리해야 할 것" 목록에 아무도 손댈 필요 없는 줄이 섞인다. {@code SOLD_OUT} 은
+     * <b>남긴다</b>(관리자가 손으로 붙이는 표시일 뿐, 재입고가 필요한 상태인 건 그대로다).
+     *
+     * <p>정렬은 <b>재고 적은 순</b> — 0(품절)이 맨 위로 온다. 같은 재고면 상품명·옵션 순서로 안정화한다
+     * (안 그러면 새로고침마다 줄 순서가 바뀐다).
+     */
+    @Query("""
+            select new com.glassvue.domain.catalog.repository.LowStockVariant(
+                v.productId, p.name, v.name, v.stock)
+            from ProductVariant v, Product p
+            where p.id = v.productId
+              and p.status <> com.glassvue.domain.catalog.entity.ProductStatus.HIDDEN
+              and v.stock <= :threshold
+            order by v.stock asc, p.name asc, v.sortOrder asc
+            """)
+    List<LowStockVariant> findLowStock(@Param("threshold") long threshold, Pageable pageable);
+
+    /**
+     * 재고 부족 옵션의 <b>전체</b> 건수. 목록은 상위 몇 줄만 보여주므로 카드 숫자는 따로 센다 —
+     * {@code items.size()} 를 쓰면 "10건 넘게 있는데 10으로 보이는" 거짓말이 된다.
+     * 조건은 {@link #findLowStock} 과 <b>반드시 같아야 한다</b>(둘이 갈리면 숫자와 목록이 어긋난다).
+     */
+    @Query("""
+            select count(v)
+            from ProductVariant v, Product p
+            where p.id = v.productId
+              and p.status <> com.glassvue.domain.catalog.entity.ProductStatus.HIDDEN
+              and v.stock <= :threshold
+            """)
+    long countLowStock(@Param("threshold") long threshold);
 }

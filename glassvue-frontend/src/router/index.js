@@ -15,6 +15,7 @@ import BenefitsView from '../views/BenefitsView.vue';
 import ProductListView from '../views/ProductListView.vue';
 import ProductDetailView from '../views/ProductDetailView.vue';
 import ProductFormView from '../views/ProductFormView.vue';
+import AdminDashboardView from '../views/AdminDashboardView.vue';
 import OrderAdminView from '../views/OrderAdminView.vue';
 import CategoryAdminView from '../views/CategoryAdminView.vue';
 import CouponAdminView from '../views/CouponAdminView.vue';
@@ -51,6 +52,9 @@ const routes = [
   { path: '/products/new', name: 'product-create', component: ProductFormView, meta: { requiresAdmin: true } },
   { path: '/products/:id', name: 'product-detail', component: ProductDetailView, props: true },
   { path: '/products/:id/edit', name: 'product-edit', component: ProductFormView, props: true, meta: { requiresAdmin: true } },
+  // 관리자 홈(B-16, 2026-08-03). ⚠ 이 라우트가 없을 때 `/admin` 은 아래 404 규칙에 걸려
+  // **`/products` 로 튕겼다** — 관리자가 주소를 제대로 쳐도 상품 목록으로 갔다는 뜻이다.
+  { path: '/admin', name: 'admin-dashboard', component: AdminDashboardView, meta: { requiresAdmin: true } },
   { path: '/admin/categories', name: 'category-admin', component: CategoryAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/stats', name: 'stats-admin', component: StatsAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/coupons', name: 'coupon-admin', component: CouponAdminView, meta: { requiresAdmin: true } },

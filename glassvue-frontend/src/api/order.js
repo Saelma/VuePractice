@@ -106,6 +106,21 @@ export function orderStatusText(status) {
   return ORDER_STATUS_TEXT[status] || status;
 }
 
+/**
+ * 주소창(`?status=`)에서 받은 값을 관리자 주문 목록의 초기 필터로 바꾼다 (2026-08-03, B-16).
+ *
+ * 관리자 홈의 「발송 대기」·「반품 요청」 카드가 **할 일을 집어서** 이 화면으로 보내면서 생긴 자리다.
+ * 기본값은 그대로 `PAID`(발송 대기) — 이 화면에 오는 가장 흔한 이유다.
+ *
+ * ⚠ **아는 값만 통과시킨다.** 모르는 상태를 백엔드에 보내면 400 이 나고, 화면에는 그게
+ * **"주문이 없다"로 보인다** — 오타 하나가 고장으로 안 보이는 종류라 여기서 막는다.
+ * (`?status=paid` 처럼 소문자도 막힌다. 서버 enum 은 대문자다.)
+ * 배열(`?status=a&status=b`)이 와도 키 조회가 실패해 기본값으로 떨어진다.
+ */
+export function resolveOrderStatusFilter(queryStatus) {
+  return Object.prototype.hasOwnProperty.call(ORDER_STATUS_TEXT, queryStatus) ? queryStatus : 'PAID';
+}
+
 // 상태별 배지 변형(DESIGN.md §5). 색을 직접 쓰지 않고 공용 `badge-*` 클래스를 돌려준다
 // — 화면마다 매핑을 따로 두면 목록/상세/관리자에서 같은 상태가 다른 색으로 보인다(실제로 그랬다).
 // 쓰는 쪽: <span class="badge" :class="orderStatusClass(status)">

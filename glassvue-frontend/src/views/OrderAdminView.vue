@@ -7,19 +7,25 @@
  * "발송할 주문 찾기"이기 때문. 전체를 보려면 필터를 바꾸면 된다.
  */
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import {
   fetchAdminOrders, fetchAdminOrderCounts, shipOrder, deliverOrder, approveReturn, rejectReturn,
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT, DELIVERY_CARRIERS,
+  resolveOrderStatusFilter,
 } from '../api/order';
 import { priceText } from '../api/product';
 
 const router = useRouter();
+const route = useRoute();
 const error = ref('');
-const form = ref({ status: 'PAID', buyer: '', orderNo: '' }); // 발송 대기 주문이 기본
+
+// 기본은 **결제완료(PAID)** = 발송 대기. `?status=` 로 들어오면 그쪽을 우선한다 —
+// 관리자 홈(B-16)의 「반품 요청」 카드처럼 **다른 할 일을 집어서 오는 진입점**이 생겼다.
+// 값 판정은 api/order.js 에 두고 테스트로 고정했다(모르는 값이 빈 목록으로 보이는 걸 막는다).
+const form = ref({ status: resolveOrderStatusFilter(route.query.status), buyer: '', orderNo: '' });
 const applied = ref({ ...form.value });
 const gridRef = ref(null);
 

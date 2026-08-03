@@ -1,5 +1,8 @@
 package com.glassvue.domain.catalog.service.query;
 
+import com.glassvue.domain.catalog.config.CatalogProperties;
+import com.glassvue.domain.catalog.dto.LowStockItemResponse;
+import com.glassvue.domain.catalog.dto.LowStockResponse;
 import com.glassvue.domain.catalog.dto.ProductResponse;
 import com.glassvue.domain.catalog.dto.ProductSearchCondition;
 import com.glassvue.domain.catalog.entity.Product;
@@ -20,6 +23,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,9 +33,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class ProductQueryService {
 
+    /**
+     * 대시보드 「재고 부족」 목록에 실어 보내는 줄 수. 카드 한 장에 들어가는 만큼만 준다 —
+     * 전체 건수는 {@code count} 로 따로 가므로 목록이 잘려도 숫자는 거짓말하지 않는다.
+     */
+    private static final int LOW_STOCK_ITEMS = 8;
+
     private final ProductRepository productRepository;
     private final ProductVariantRepository variantRepository;
     private final ImageService imageService;
+    private final CatalogProperties catalogProperties;
 
     public ProductResponse get(UUID id) {
         Product product = productRepository.findById(id)
@@ -115,5 +126,22 @@ public class ProductQueryService {
         return variantRepository.findAllById(variantIds).stream()
                 .collect(Collectors.toMap(com.glassvue.domain.catalog.entity.ProductVariant::getId,
                         com.glassvue.domain.catalog.entity.ProductVariant::getProductId));
+    }
+
+    /**
+     * 재고 부족 옵션 — 관리자 대시보드용 (2026-08-03, 백로그 B-16).
+     *
+     * <p><b>기준값을 화면이 정하지 않는다.</b> 판정 기준은 {@code catalog.low-stock-threshold} 하나이고,
+     * 그 값은 <b>재고 부족 알림({@code StockRunningLowEvent})과 같은 것</b>이다 — 알림은 "3개 남았다"고
+     * 하는데 대시보드는 안 세는 식으로 갈리면 어느 쪽을 믿어야 할지 알 수 없다.
+     * 그래서 응답에 기준값을 함께 실어 화면 문구까지 서버가 책임진다.
+     */
+    public LowStockResponse lowStock() {
+        long threshold = catalogProperties.lowStockThreshold();
+        List<LowStockItemResponse> items =
+                variantRepository.findLowStock(threshold, PageRequest.of(0, LOW_STOCK_ITEMS)).stream()
+                        .map(LowStockItemResponse::from)
+                        .toList();
+        return new LowStockResponse(threshold, variantRepository.countLowStock(threshold), items);
     }
 }

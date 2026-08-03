@@ -66,3 +66,18 @@ export function discountRate(item) {
   if (!hasDiscount(item)) return 0;
   return Math.round(((item.listPrice - item.price) / item.listPrice) * 100);
 }
+
+/**
+ * 재고 부족 옵션 — 관리자 대시보드용 (2026-08-03, 백로그 B-16).
+ *
+ * 응답: `{ threshold, count, items: [{ productId, productName, variantName, stock }] }`
+ *
+ * ⚠ **기준값(`threshold`)을 화면이 적지 않는다.** 서버 설정(`catalog.low-stock-threshold`)이
+ * 판정 기준이고 재고 부족 알림도 같은 값을 쓴다 — 화면에 "5개 이하"를 박아 두면 설정을 바꾼 순간
+ * 문구가 거짓말이 된다(혜택 문구를 서버가 줄 때만 노출하기로 한 것과 같은 자리, DESIGN §7).
+ *
+ * ⚠ `items` 는 상위 몇 줄이라 **`count` 보다 짧을 수 있다.** 숫자는 `count` 를 쓴다.
+ */
+export function fetchLowStock() {
+  return apiGet('/api/admin/products/low-stock');
+}
