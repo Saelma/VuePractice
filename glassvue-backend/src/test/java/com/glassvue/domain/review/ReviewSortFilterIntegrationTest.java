@@ -126,10 +126,20 @@ class ReviewSortFilterIntegrationTest {
     @Test
     @DisplayName("⚠ 필터가 **목록과 총 건수에 함께** 걸린다 — 한쪽만 걸리면 숫자와 줄이 어긋난다")
     void filterAppliesToCountToo() throws Exception {
-        mockMvc.perform(get(url + "?photoOnly=true"))
+        // ⚠ **count 쿼리가 실제로 돌게 만들어야 한다.** PageableExecutionUtils 는 첫 페이지에서
+        //    결과가 페이지 크기보다 작으면 **count 를 아예 실행하지 않고** content.size() 를 쓴다.
+        //    처음엔 사진 리뷰 1건 · size 기본값으로 검증했는데, 그래서 **count 를 망가뜨린 변형이
+        //    안 잡혔다**(2026-08-03 변형 주입에서 드러남). 사진 리뷰를 page size 보다 많이 만들어
+        //    count 경로를 강제로 태운다.
+        review(5, UUID.randomUUID());
+        review(4, UUID.randomUUID());
+        review(2, UUID.randomUUID());   // 사진 리뷰 총 4건(setUp 의 1 + 여기 3)
+
+        mockMvc.perform(get(url + "?photoOnly=true&size=2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.page.content.length()").value(1))
-                .andExpect(jsonPath("$.data.page.totalElements").value(1));
+                .andExpect(jsonPath("$.data.page.content.length()").value(2))   // 한 페이지엔 2건
+                .andExpect(jsonPath("$.data.page.totalElements").value(4))     // ← count 가 여기서 돈다
+                .andExpect(jsonPath("$.data.page.totalPages").value(2));
     }
 
     @Test
