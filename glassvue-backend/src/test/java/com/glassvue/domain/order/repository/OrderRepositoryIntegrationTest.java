@@ -71,7 +71,7 @@ class OrderRepositoryIntegrationTest {
     @Test
     @DisplayName("CANCELLED 주문 → 구매 안 함")
     void cancelled_excluded() {
-        orderWithStatus(Order::cancel);
+        orderWithStatus(o -> o.cancel(null)); // 사유는 선택(B-17) — 여기선 상태만 본다
         assertThat(orderRepository.existsPurchase(memberId, productId)).isFalse();
     }
 

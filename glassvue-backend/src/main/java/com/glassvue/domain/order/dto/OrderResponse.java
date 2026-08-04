@@ -41,6 +41,9 @@ public record OrderResponse(
         Instant paidAt,
         Instant shippedAt,
         Instant cancelledAt,
+        // 취소 사유(V40, B-17). **선택**이라 취소된 주문이어도 null 일 수 있고,
+        // V40 이전에 취소된 주문은 **전부** null 이다(백필하지 않았다) — 화면은 값이 있을 때만 줄을 그린다.
+        String cancelReason,
         Instant deliveredAt,
         // 반품(V24). 요청·완료 시각과 사유·환불액. 반품이 없었으면 전부 null/0.
         String returnReason,
@@ -86,6 +89,7 @@ public record OrderResponse(
                 o.getPaidAt(),
                 o.getShippedAt(),
                 o.getCancelledAt(),
+                o.getCancelReason(),
                 o.getDeliveredAt(),
                 o.getReturnReason(),
                 o.getReturnRequestedAt(),

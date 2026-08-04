@@ -98,10 +98,41 @@ class OrderTest {
     @DisplayName("취소: CANCELLED로 전이 · 이후 결제·취소 불가")
     void cancel() {
         Order o = newOrder();
-        o.cancel();
+        o.cancel("단순 변심");
         assertThat(o.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(o.isCancellable()).isFalse();
         assertThat(o.isPayable()).isFalse();
+        assertThat(o.getCancelReason()).isEqualTo("단순 변심");
+    }
+
+    // ── 취소 사유 (2026-08-04, B-17) ────────────────────────────
+    //
+    // 사유는 **선택**이라 "없음" 을 어떻게 다루느냐가 규칙이다. 공백을 그대로 저장하면
+    // 화면이 "사유가 있다" 로 읽어 **빈 칸을 그린다** — 없는 것과 다르게 보여야 하므로 NULL 로 눕힌다.
+
+    @Test
+    @DisplayName("취소 사유: null 이면 그대로 null (사유 없이도 취소된다)")
+    void cancel_nullReason() {
+        Order o = newOrder();
+        o.cancel(null);
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(o.getCancelReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("취소 사유: 공백만 있으면 **null 로 눕힌다**(빈 칸을 그리지 않게)")
+    void cancel_blankReason() {
+        Order o = newOrder();
+        o.cancel("   ");
+        assertThat(o.getCancelReason()).as("공백은 '사유가 있다'는 거짓 신호다").isNull();
+    }
+
+    @Test
+    @DisplayName("취소 사유: 앞뒤 공백은 잘라서 저장한다")
+    void cancel_trimsReason() {
+        Order o = newOrder();
+        o.cancel("  배송이 늦어서  ");
+        assertThat(o.getCancelReason()).isEqualTo("배송이 늦어서");
     }
 
     @Test

@@ -126,6 +126,18 @@ public class Order extends BaseTimeEntity {
     // updated_at으로는 대체할 수 없다 — 다른 변경에도 갱신되므로 취소 시각이라 단정할 수 없다.
     private Instant cancelledAt;
 
+    /**
+     * 취소 사유 (2026-08-04, V40, 백로그 B-17) — <b>선택</b>이다.
+     *
+     * <p>반품에는 사유가 있는데 취소에는 없어 관리자가 "왜 취소됐는지" 를 알 수 없었다.
+     * 길이·semantics 는 {@link #returnReason} 과 <b>같게</b> 맞춘다 — 같은 성격의 값이라 갈리면
+     * 한쪽에서 되던 입력이 다른 쪽에서 터진다(WA §2-2-1).
+     *
+     * <p>⚠ 행위자 컬럼은 두지 않는다 — <b>취소자는 항상 주문자 본인</b>이다(관리자 취소 API 가 없다).
+     */
+    @Column(name = "cancel_reason", length = 500)
+    private String cancelReason;
+
     // --- 배송 추적(V13) ---
     // 발송 처리는 있었지만 고객이 추적할 방법이 없었다. 배송지(V11)가 "어디로 보낼지"라면 이건 "어떻게 갔는지"다.
     // 이전 주문은 운송장을 알 방법이 없어 nullable(백필 불가) — 화면은 값이 없으면 추적 영역을 감춘다.
@@ -266,9 +278,17 @@ public class Order extends BaseTimeEntity {
         this.earnedPoint = Math.max(0L, earned);
     }
 
-    public void cancel() {
+    /**
+     * 주문 취소. {@code reason} 은 <b>선택</b>이라 null·공백이면 저장하지 않는다(B-17).
+     *
+     * <p>공백만 적힌 사유를 그대로 넣으면 화면이 <b>"사유가 있다"</b> 로 읽어 빈 칸을 그린다 —
+     * 없는 것과 있는데 비어 보이는 것은 다르게 다뤄야 하므로 여기서 NULL 로 눕힌다.
+     * {@code requestReturn} 은 사유가 필수라 이 가드가 없다(그쪽은 화면·DTO 가 빈 값을 막는다).
+     */
+    public void cancel(String reason) {
         this.status = OrderStatus.CANCELLED;
         this.cancelledAt = Instant.now();
+        this.cancelReason = (reason == null || reason.isBlank()) ? null : reason.trim();
     }
 
     /** 배송완료 주문만 반품 요청할 수 있다(운송 중·미결제 주문은 취소로 처리). */

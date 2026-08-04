@@ -76,8 +76,15 @@ export function deliverOrder(id) {
   return apiPost(`/api/orders/${id}/deliver`);
 }
 
-export function cancelOrder(id) {
-  return apiPost(`/api/orders/${id}/cancel`);
+/**
+ * 주문 취소(본인, ORDERED·PAID만). **사유는 선택**이다 (2026-08-04, 백로그 B-17).
+ *
+ * 반품 사유는 필수인데 이쪽만 선택인 이유: 취소는 돈이 오가기 전 단계라 입력을 강제하면
+ * 마찰이 값보다 크다. 비워서 보내면 서버가 `cancelReason` 을 **null** 로 남긴다
+ * (공백을 저장하면 화면이 "사유가 있다"로 읽어 빈 칸을 그린다).
+ */
+export function cancelOrder(id, reason) {
+  return apiPost(`/api/orders/${id}/cancel`, { reason: reason || null });
 }
 
 /** 반품 요청(본인, DELIVERED만). 사유 필수. 승인 시 재고 복원 + 적립금 환불(2026-07-24 C-9). */

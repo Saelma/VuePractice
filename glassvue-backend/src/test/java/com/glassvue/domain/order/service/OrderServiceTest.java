@@ -175,10 +175,12 @@ class OrderServiceTest {
         UUID p1 = UUID.randomUUID();
         Order order = orderWith(OrderItem.of(p1, p1, null, "지바", null, 10_000, null, 3));
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
-        orderService.cancel(orderId, memberId);
+        orderService.cancel(orderId, memberId, "단순 변심");
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         // 언제 취소됐는지도 남긴다 — updated_at은 다른 변경에도 갱신돼 취소 시각이라 단정할 수 없다.
         assertThat(order.getCancelledAt()).isNotNull();
+        // 취소 사유도 같은 자리에 남는다(B-17) — 반품에만 있던 것을 취소에도 뒀다.
+        assertThat(order.getCancelReason()).isEqualTo("단순 변심");
         verify(productCommandService, times(1)).increaseStock(p1, 3, StockChangeReason.CANCEL, orderId);
         verify(eventPublisher).publishEvent(any(OrderCancelledEvent.class));
     }
@@ -190,7 +192,8 @@ class OrderServiceTest {
         order.pay();
         order.ship(DeliveryCarrier.CJ, "123");
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
-        assertErrorCode(() -> orderService.cancel(orderId, memberId), ErrorCode.ORDER_NOT_CANCELLABLE);
+        assertErrorCode(() -> orderService.cancel(orderId, memberId, "바로 취소"),
+                ErrorCode.ORDER_NOT_CANCELLABLE);
         verify(productCommandService, never()).increaseStock(
                 any(), org.mockito.ArgumentMatchers.anyLong(), any(), any());
         verify(eventPublisher, never()).publishEvent(any());

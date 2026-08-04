@@ -280,15 +280,22 @@ public class OrderService {
         log.info("Order delivered: {} earned={}", id, earned);
     }
 
-    /** 주문 취소 — 본인 주문·취소가능(ORDERED/PAID) 상태만. 재고 복원. */
+    /**
+     * 주문 취소 — 본인 주문·취소가능(ORDERED/PAID) 상태만. 재고 복원.
+     *
+     * <p>2026-08-04(B-17): {@code reason} 을 받는다 — <b>선택</b>이다(null 가능).
+     * 반품엔 사유가 있는데 취소엔 없어 관리자가 "왜 취소됐는지" 를 알 수 없던 비대칭을 없앤다.
+     * 재고 이력의 {@code CANCEL} 줄은 {@code order_id} 를 갖고 있으므로 여기 사유가 있으면
+     * 되짚어진다 — <b>이력에 사유를 복사하지 않는다</b>(같은 정보를 두 번 적지 않는다, V39 와 같은 규칙).
+     */
     @Transactional
-    public void cancel(UUID id, UUID memberId) {
+    public void cancel(UUID id, UUID memberId, String reason) {
         Order order = orderRepository.findByIdAndMemberId(id, memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!order.isCancellable()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_CANCELLABLE);
         }
-        order.cancel();
+        order.cancel(reason);
         order.getItems().forEach(it -> productCommandService.increaseStock(
                 it.getVariantId(), it.getQuantity(), StockChangeReason.CANCEL, id));
         eventPublisher.publishEvent(OrderCancelledEvent.from(order));

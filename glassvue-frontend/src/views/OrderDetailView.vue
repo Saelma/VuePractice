@@ -48,8 +48,24 @@ async function act(fn, confirmMsg) {
   }
 }
 const onPay = () => act(payOrder, '결제를 진행할까요? (실제 결제 없이 상태만 결제완료로)');
-const onCancel = () => act(cancelOrder, '주문을 취소할까요? (재고가 복원됩니다)');
 const onDeliver = () => act(deliverOrder, '이 주문을 배송완료로 처리할까요?');
+
+// 취소(2026-08-04 B-17). 사유를 **선택**으로 받으려고 인라인 폼으로 바꿨다(전엔 window.confirm).
+// 폼 자체가 확인 단계다 — 되돌릴 수 없는 조작이라 확인을 없애지 않는다(DESIGN §7).
+// ⚠ 반품 폼과 달리 **빈 사유로도 진행**된다. 강제하면 취소에 마찰이 생기는데, 취소는 고객이
+//   빨리 끝내고 싶은 조작이라 그 마찰이 사유를 얻는 값보다 크다.
+const cancelForm = ref(null);
+function openCancelForm() { cancelForm.value = { reason: '' }; }
+async function submitCancel() {
+  error.value = '';
+  try {
+    await cancelOrder(props.id, (cancelForm.value?.reason || '').trim());
+    cancelForm.value = null;
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
 
 // 반품(2026-07-24 C-9). 요청은 사유 입력이 필요해 인라인 폼으로 받는다(취소·발송과 같은 이유).
 const returnForm = ref(null);
@@ -158,12 +174,23 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
 
       <!-- 주문 진행 상태: 지금 어디까지 왔는지 -->
       <div class="card mb-6 p-5">
-        <p v-if="isCancelled" class="flex flex-wrap items-center gap-2 text-sm text-ink-500">
-          <span class="badge badge-danger">취소됨</span>
-          <span>이 주문은 취소되어 진행이 멈췄어요.</span>
-          <!-- 취소 시각은 V10부터 기록된다. 그 이전 주문은 값이 없어 시각을 감춘다(지어내지 않는다). -->
-          <span v-if="order.cancelledAt" class="tabular-nums">{{ fmt(order.cancelledAt) }}</span>
-        </p>
+        <template v-if="isCancelled">
+          <p class="flex flex-wrap items-center gap-2 text-sm text-ink-500">
+            <span class="badge badge-danger">취소됨</span>
+            <span>이 주문은 취소되어 진행이 멈췄어요.</span>
+            <!-- 취소 시각은 V10부터 기록된다. 그 이전 주문은 값이 없어 시각을 감춘다(지어내지 않는다). -->
+            <span v-if="order.cancelledAt" class="tabular-nums">{{ fmt(order.cancelledAt) }}</span>
+          </p>
+          <!--
+            취소 사유(V40, B-17). 시각과 **같은 규칙**으로 다룬다 — 값이 없으면 줄 자체를 감춘다.
+            사유는 선택이고 V40 이전 취소 주문은 전부 없으므로 **비어 있는 게 흔한 정상**이다.
+            "사유 없음" 같은 문구를 지어 넣지 않는다(없는 것을 있는 것처럼 그리지 않는다).
+          -->
+          <p v-if="order.cancelReason" class="mt-2 flex gap-3 text-sm">
+            <span class="shrink-0 text-ink-500">사유</span>
+            <span class="text-ink-900">{{ order.cancelReason }}</span>
+          </p>
+        </template>
         <ol v-else class="flex items-start">
           <li v-for="(st, i) in STEPS" :key="st.key" class="flex flex-1 flex-col items-center text-center">
             <!-- 연결선 + 점 -->
@@ -307,10 +334,10 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
           <!-- 구매자 액션: 본인 주문일 때만(관리자도 본인 주문이면 보인다) -->
           <template v-if="isMine">
             <button
-              v-if="order.status === 'ORDERED' || order.status === 'PAID'"
+              v-if="(order.status === 'ORDERED' || order.status === 'PAID') && !cancelForm"
               type="button"
               class="btn btn-danger"
-              @click="onCancel"
+              @click="openCancelForm"
             >주문 취소</button>
             <button
               v-if="order.status === 'ORDERED'"
@@ -343,6 +370,29 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <button type="button" class="btn btn-primary" @click="onApproveReturn">반품 승인</button>
             <button type="button" class="btn btn-secondary" @click="onRejectReturn">반품 거절</button>
           </template>
+        </div>
+      </div>
+
+      <!--
+        취소 폼(구매자, B-17). 사유는 **선택**이라 비워도 「취소하기」가 눌린다 —
+        그래서 라벨에 (선택)을 붙이고 버튼도 비활성화하지 않는다(반품 폼과 다른 점).
+        폼이 곧 확인 단계다: 주 버튼이 btn-danger 이고, 무엇이 되돌아오는지(재고)를 먼저 적는다.
+      -->
+      <div v-if="cancelForm" class="card mt-4 p-5">
+        <h2 class="section-title">주문 취소</h2>
+        <p class="muted mt-1">취소하면 <strong>재고가 복원</strong>됩니다. 되돌릴 수 없습니다.</p>
+        <label class="field mt-3">
+          <span class="field-label">사유 <span class="muted">(선택)</span></span>
+          <input
+            v-model="cancelForm.reason"
+            class="field"
+            maxlength="500"
+            placeholder="예: 단순 변심, 배송이 늦어서 (안 적어도 됩니다)"
+          />
+        </label>
+        <div class="mt-3 flex gap-2">
+          <button type="button" class="btn btn-danger" @click="submitCancel">취소하기</button>
+          <button type="button" class="btn btn-secondary" @click="cancelForm = null">닫기</button>
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT,
-  DELIVERY_CARRIERS, shipOrder, deliverOrder, resolveOrderStatusFilter,
+  DELIVERY_CARRIERS, shipOrder, deliverOrder, cancelOrder, resolveOrderStatusFilter,
 } from './order';
 import { clearSession } from '../stores/auth';
 
@@ -79,6 +79,31 @@ describe('발송·배송완료 요청', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url.pathname).toBe('/api/orders/order-1/deliver');
     expect(init.method).toBe('POST');
+  });
+
+  // 취소 사유(2026-08-04, B-17). **선택**이라 "안 보낸 것" 과 "빈 문자열" 이 같은 뜻이어야 한다 —
+  // 빈 문자열을 그대로 보내면 서버가 공백을 받고, 화면은 나중에 "사유가 있다" 로 읽어 빈 칸을 그린다.
+  it('cancelOrder는 사유를 본문에 담아 POST한다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okRes);
+    global.fetch = fetchMock;
+
+    await cancelOrder('order-1', '배송이 늦어서');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url.pathname).toBe('/api/orders/order-1/cancel');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ reason: '배송이 늦어서' });
+  });
+
+  it('⚠ cancelOrder는 사유가 없거나 빈 문자열이면 **null** 로 보낸다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okRes);
+    global.fetch = fetchMock;
+
+    await cancelOrder('order-1');
+    await cancelOrder('order-2', '');
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ reason: null });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ reason: null });
   });
 });
 

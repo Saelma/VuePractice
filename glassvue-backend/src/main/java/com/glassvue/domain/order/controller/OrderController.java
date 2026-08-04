@@ -1,5 +1,6 @@
 package com.glassvue.domain.order.controller;
 
+import com.glassvue.domain.order.dto.OrderCancelRequest;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
@@ -11,6 +12,7 @@ import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
@@ -43,8 +45,19 @@ public interface OrderController {
             description = "지금은 관리자 수동 전이. 택배사 웹훅 연동은 이후 단계.")
     ResponseEntity<ApiResponse<Void>> deliver(UUID id);
 
-    @Operation(summary = "주문 취소 (본인, ORDERED·PAID만)")
-    ResponseEntity<ApiResponse<Void>> cancel(@Parameter(hidden = true) AuthUser user, UUID id);
+    @Operation(summary = "주문 취소 (본인, ORDERED·PAID만)",
+            description = """
+                    **본문은 선택**이다(2026-08-04, B-17) — 사유 없이 취소할 수 있다.
+                    `{"reason":"단순 변심"}` 처럼 보내면 주문에 남고, 안 보내거나 공백이면 `cancelReason` 은 **null** 이다
+                    (공백을 그대로 저장하면 화면이 "사유가 있다"로 읽어 빈 칸을 그린다).
+
+                    반품 사유(`return-request`)는 **필수**인데 이쪽만 선택인 이유: 취소는 돈이 오가기 전 단계라
+                    입력을 강제하면 마찰이 값보다 크다.
+
+                    ⚠ **V40 이전에 취소된 주문은 사유가 없다**(백필하지 않았다).
+                    """)
+    ResponseEntity<ApiResponse<Void>> cancel(@Parameter(hidden = true) AuthUser user, UUID id,
+            @Valid OrderCancelRequest request);
 
     @Operation(summary = "반품 요청 (본인, DELIVERED만)",
             description = "관리자 승인 시 옵션 재고 복원 + 결제금액을 적립금으로 환불하고 그 주문의 적립을 회수한다.")

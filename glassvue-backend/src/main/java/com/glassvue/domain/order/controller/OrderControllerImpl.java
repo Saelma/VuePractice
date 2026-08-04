@@ -5,6 +5,7 @@ import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.domain.order.dto.ReturnRequest;
 import com.glassvue.domain.order.service.OrderService;
+import com.glassvue.domain.order.dto.OrderCancelRequest;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderShipRequest;
 import com.glassvue.global.response.ApiResponse;
@@ -75,8 +76,11 @@ public class OrderControllerImpl implements OrderController {
 
     @Override
     @PostMapping("/{id}/cancel")
-    public ResponseEntity<ApiResponse<Void>> cancel(@LoginUser AuthUser user, @PathVariable UUID id) {
-        orderService.cancel(id, user.id());
+    public ResponseEntity<ApiResponse<Void>> cancel(@LoginUser AuthUser user, @PathVariable UUID id,
+            // ⚠ required = false — 사유는 선택이라 **본문 없이도** 취소돼야 한다(B-17).
+            //    이걸 빼면 기존 호출(본문 없는 POST)이 전부 400 이 된다.
+            @Valid @RequestBody(required = false) OrderCancelRequest request) {
+        orderService.cancel(id, user.id(), OrderCancelRequest.reasonOf(request));
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
