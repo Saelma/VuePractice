@@ -212,7 +212,7 @@ tabular-nums + Pretendard. `index.css` 한 곳으로 전 관리 그리드(회원
 
 #### B-18. 리뷰·문의 관리(신고/숨김) — ✅ **최소안 완료 (2026-08-04)** · 신고는 미착수
 
-근거: `handoffs/2026-08-04-handoff.md` §5. **V41** `review.hidden`. 화면은 `/admin/reviews`,
+근거: `handoffs/2026-08-04-handoff.md` §4. **V41** `review.hidden`. 화면은 `/admin/reviews`,
 API 는 `GET /api/admin/reviews` + `POST .../{id}/hide`·`/unhide`.
 
 > **어림(중)이 맞았고, 오늘 유일하게 «전제가 안 뒤집힌» 항목**이다 — 관리자 리뷰 API 0개도,
