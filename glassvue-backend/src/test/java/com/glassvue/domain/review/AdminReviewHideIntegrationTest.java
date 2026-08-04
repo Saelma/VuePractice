@@ -15,6 +15,7 @@ import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.glassvue.domain.review.entity.Review;
+import com.glassvue.domain.review.event.ReviewRatingChangedEvent;
 import com.glassvue.domain.review.repository.ReviewRepository;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManager;
@@ -27,6 +28,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +54,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@RecordApplicationEvents // 이벤트 발행 여부를 보려면 필요하다(WA §3, H-6)
 class AdminReviewHideIntegrationTest {
 
     @Autowired MockMvc mockMvc;
@@ -60,6 +64,7 @@ class AdminReviewHideIntegrationTest {
     @Autowired ProductRepository productRepository;
     @Autowired ReviewRepository reviewRepository;
     @Autowired EntityManager entityManager;
+    @Autowired ApplicationEvents events;
 
     private static final String JSON = "application/json";
     private static final String PW = "password123";
@@ -236,6 +241,31 @@ class AdminReviewHideIntegrationTest {
         hide(reviewId);
 
         assertThat(reviewRepository.findById(reviewId).orElseThrow().isHidden()).isTrue();
+    }
+
+    @Test
+    @DisplayName("⚠ 상태가 **안 바뀌면 집계 이벤트를 발행하지 않는다** — 헛된 캐시 무효화를 막는 가드")
+    void hide_unchanged_publishesNoEvent() throws Exception {
+        hide(reviewId);          // 여기서 한 번 발행된다
+        events.clear();          // 그다음부터를 센다
+
+        hide(reviewId);          // 이미 숨겨져 있다 → 아무 일도 없어야 한다
+
+        assertThat(events.stream(ReviewRatingChangedEvent.class).toList())
+                .as("안 바뀐 요청에 이벤트를 또 내면 상품 목록 캐시가 헛되이 비워진다")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("상태가 **바뀌면** 집계 이벤트를 발행한다(위 가드가 진짜 변경까지 막으면 안 된다)")
+    void hide_changed_publishesEvent() throws Exception {
+        events.clear();
+
+        hide(reviewId);
+
+        assertThat(events.stream(ReviewRatingChangedEvent.class).toList())
+                .as("숨기면 상품의 평균 별점이 달라지므로 catalog 가 알아야 한다")
+                .hasSize(1);
     }
 
     @Test
