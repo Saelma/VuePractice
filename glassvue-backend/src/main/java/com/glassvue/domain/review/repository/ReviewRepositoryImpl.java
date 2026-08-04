@@ -39,6 +39,9 @@ public class ReviewRepositoryImpl implements ReviewRepositoryCustom {
         // ⚠ 조건을 **한 곳에서** 만들어 목록·카운트가 같은 것을 쓰게 한다.
         //    둘이 갈리면 "3건" 이라 써 놓고 목록엔 5줄이 뜬다(2026-08-03 B-16 에서 겪은 자리, WA §3).
         BooleanBuilder where = new BooleanBuilder(review.productId.eq(productId));
+        // 숨긴 리뷰는 **작성자 본인에게도** 안 보인다(2026-08-04, B-18). 조건을 한 줄로 끝내면
+        // "누구에게 보이나" 로 갈라지지 않아 어긋날 여지가 없다 — 관리자 목록은 이 메서드를 안 쓴다.
+        where.and(review.hidden.isFalse());
         if (photoOnly) {
             // 포토 리뷰는 image_group_id 로만 구분된다(Review 엔티티 주석) — 그룹이 있으면 사진이 있다.
             where.and(review.imageGroupId.isNotNull());
@@ -53,6 +56,24 @@ public class ReviewRepositoryImpl implements ReviewRepositoryCustom {
                 .select(review.count())
                 .from(review)
                 .where(where);
+
+        return QueryDslSupport.page(content, count, pageable);
+    }
+
+    @Override
+    public Page<Review> findForAdmin(Boolean hidden, Pageable pageable) {
+        OrderSpecifier<?>[] orders = pageable.getSort().isSorted()
+                ? SortSupport.toOrders(pageable.getSort(), review, SORTABLE)
+                : new OrderSpecifier<?>[]{review.createdAt.desc()};
+
+        // ⚠ 목록·카운트가 **같은 조건 객체**를 쓴다(B-16 에서 변형이 잡았던 자리, WA §3).
+        BooleanBuilder where = new BooleanBuilder();
+        if (hidden != null) {
+            where.and(review.hidden.eq(hidden));
+        }
+
+        JPAQuery<Review> content = queryFactory.selectFrom(review).where(where).orderBy(orders);
+        JPAQuery<Long> count = queryFactory.select(review.count()).from(review).where(where);
 
         return QueryDslSupport.page(content, count, pageable);
     }

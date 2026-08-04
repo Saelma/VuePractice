@@ -37,3 +37,44 @@ export function updateReview(id, payload) {
 export function deleteReview(id) {
   return apiDelete(`/api/reviews/${id}`);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 관리자 리뷰 관리 (2026-08-04, 백로그 B-18)
+//
+// 이 셋이 생기기 전까지 **관리자 리뷰 API 는 0개**였다 — 작성자 본인만 지울 수 있어서
+// 욕설·광고 리뷰가 올라오면 아무도 손댈 수 없었다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 관리자 리뷰 목록. 상품을 **가로질러** 전체를 본다(고객 목록은 상품별이다).
+ *
+ * ⚠ `hidden` 은 **세 가지 상태**다 — `null`(전체) · `true`(숨긴 것만) · `false`(보이는 것만).
+ *    `false` 와 `null` 은 다르다: 안 보내면 숨긴 것도 함께 온다.
+ *    `apiGet` 은 `null` 인 파라미터를 빼므로 그대로 넘기면 된다.
+ */
+export function fetchAdminReviews({ hidden = null, page = 0, size = 20, sort = null } = {}) {
+  return apiGet('/api/admin/reviews', { hidden, page, size, sort });
+}
+
+/** 리뷰 숨김(관리자). **삭제가 아니다** — 원문이 남아 되돌릴 수 있다. */
+export function hideReview(id) {
+  return apiPost(`/api/admin/reviews/${id}/hide`);
+}
+
+/** 숨김 해제(관리자). 목록·별점 집계에 다시 들어간다. */
+export function unhideReview(id) {
+  return apiPost(`/api/admin/reviews/${id}/unhide`);
+}
+
+/**
+ * 숨김 상태 필터 선택지.
+ *
+ * ⚠ 「전체」의 값이 `null` 이어야 파라미터가 빠진다 — `'all'` 같은 문자열을 보내면
+ * 서버가 Boolean 변환에 실패해 **400** 이 나고, 화면에는 그게 "리뷰가 없다" 로 보인다
+ * (관리자 주문 목록의 `?status` 에서 배운 것과 같은 자리).
+ */
+export const REVIEW_HIDDEN_OPTIONS = [
+  { value: null, text: '전체' },
+  { value: false, text: '보이는 것만' },
+  { value: true, text: '숨긴 것만' },
+];

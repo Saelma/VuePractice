@@ -25,6 +25,7 @@ import StatsAdminView from '../views/StatsAdminView.vue';
 import MemberAdminView from '../views/MemberAdminView.vue';
 import MemberDetailAdminView from '../views/MemberDetailAdminView.vue';
 import AuditLogAdminView from '../views/AuditLogAdminView.vue';
+import ReviewAdminView from '../views/ReviewAdminView.vue';
 import CartView from '../views/CartView.vue';
 import WishlistView from '../views/WishlistView.vue';
 import CheckoutView from '../views/CheckoutView.vue';
@@ -66,6 +67,8 @@ const routes = [
   { path: '/admin/coupons', name: 'coupon-admin', component: CouponAdminView, meta: { requiresAdmin: true } },
   // 마케팅 발송(B-21 후속). ⚠ 되돌릴 수 없는 조작이라 화면에서 확인 단계를 한 번 더 둔다.
   { path: '/admin/marketing', name: 'marketing-admin', component: MarketingAdminView, meta: { requiresAdmin: true } },
+  // 리뷰 관리(B-18). 숨김은 되돌릴 수 있어 ADMIN 이면 된다 — 감사 이력처럼 SUPER 로 좁히지 않는다.
+  { path: '/admin/reviews', name: 'review-admin', component: ReviewAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members', name: 'member-admin', component: MemberAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members/:id', name: 'member-admin-detail', component: MemberDetailAdminView, props: true, meta: { requiresAdmin: true } },
   // 감사 이력은 최상위 관리자만 — 조작 당사자(ADMIN)가 자기 이력을 보는 구조를 막는다.

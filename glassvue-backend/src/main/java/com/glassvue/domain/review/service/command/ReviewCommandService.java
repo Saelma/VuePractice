@@ -79,6 +79,26 @@ public class ReviewCommandService {
     }
 
     /**
+     * 관리자 숨김·해제 (2026-08-04, B-18) — <b>삭제가 아니다</b>(되돌릴 수 있어야 한다).
+     *
+     * <p>권한은 경로(<code>/api/admin/**</code>)가 건다(WA §2-4). 여기서 역할을 다시 보지 않는 이유는
+     * {@code findManageable} 과 다르다 — 저건 <b>본인이거나 관리자</b>를 가리는 자리고, 이건
+     * <b>관리자만</b> 닿는 경로라 매처가 이미 답을 냈다.
+     *
+     * <p>⚠ <b>상태가 실제로 바뀔 때만 집계를 다시 낸다.</b> 이미 숨겨진 것을 또 숨기는 요청에
+     * 이벤트를 발행하면 상품 목록 캐시가 헛되이 비워진다(같은 값을 다시 써 넣으면서).
+     */
+    @Transactional
+    public void setHidden(UUID id, boolean hidden) {
+        Review review = reviewRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.REVIEW_NOT_FOUND));
+        if (review.setHidden(hidden)) {
+            // 숨긴 리뷰는 별점 집계에서 빠지므로(statsByProduct) 상품의 평균·개수가 달라진다.
+            publishRatingChanged(review.getProductId());
+        }
+    }
+
+    /**
      * 리뷰 집계를 다시 계산해 이벤트로 알린다 — 구독자(catalog의 상품 목록 비정규화)는 review가 모른다.
      *
      * <p>집계 쿼리는 JPQL이라 Hibernate가 실행 직전 **자동 플러시**하므로, 방금 save/update/delete한

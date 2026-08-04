@@ -49,6 +49,23 @@ public class Review extends BaseTimeEntity {
     @Column(name = "image_group_id", columnDefinition = "RAW(16)")
     private UUID imageGroupId;
 
+    /**
+     * 관리자 숨김 (2026-08-04, V41, 백로그 B-18) — <b>삭제가 아니다.</b>
+     *
+     * <p>되돌릴 수 있어야 해서 원문을 남긴다. 관리자가 잘못 판단할 수 있고, 그때 본문이 있어야 되돌린다
+     * (감사 로그는 "누가 숨겼는지" 를 남기지만 지워진 본문은 복구하지 못한다).
+     *
+     * <p>⚠ <b>같은 값을 세 곳이 다르게 다룬다</b> — 헷갈리기 쉬운 자리다:
+     * <ul>
+     *   <li><b>목록 조회</b> — 빠진다(작성자 본인에게도).</li>
+     *   <li><b>별점 집계</b> — 빠진다. 안 빼면 보이지도 않는 리뷰가 별점을 끌어내린다.</li>
+     *   <li>🔴 <b>상품당 1회 제한</b> — <b>그대로 센다.</b> 빼면 숨기자마자 새 리뷰를 쓸 수 있어
+     *       숨김이 무의미해진다.</li>
+     * </ul>
+     */
+    @Column(nullable = false)
+    private boolean hidden;
+
     @Builder
     private Review(UUID productId, UUID authorId, String author, int rating, String content, UUID imageGroupId) {
         this.productId = productId;
@@ -67,5 +84,21 @@ public class Review extends BaseTimeEntity {
         this.rating = rating;
         this.content = content;
         this.imageGroupId = imageGroupId;
+    }
+
+    /**
+     * 관리자 숨김·해제 (B-18). {@code hidden} 만 바꾼다 — 본문·별점은 그대로 둔다(되돌릴 수 있어야 한다).
+     *
+     * <p>이미 그 상태면 <b>아무 일도 하지 않는다</b>. 호출부가 그걸로 "집계를 다시 낼 필요가 있는지" 를
+     * 판단하므로 반환값이 필요하다 — 안 바뀐 요청에 이벤트를 또 발행하면 캐시가 헛되이 비워진다.
+     *
+     * @return 실제로 바뀌었으면 {@code true}
+     */
+    public boolean setHidden(boolean hidden) {
+        if (this.hidden == hidden) {
+            return false;
+        }
+        this.hidden = hidden;
+        return true;
     }
 }

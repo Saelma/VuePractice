@@ -57,6 +57,7 @@ const onAdminRoute = computed(() => route.path.startsWith('/admin'));
       <span class="my-1 block border-t border-line" aria-hidden="true"></span>
       <RouterLink to="/admin/orders" class="admin-menu-item" @click="open = false">주문 관리</RouterLink>
       <RouterLink to="/admin/members" class="admin-menu-item" @click="open = false">회원 관리</RouterLink>
+      <RouterLink to="/admin/reviews" class="admin-menu-item" @click="open = false">리뷰 관리</RouterLink>
       <RouterLink to="/admin/coupons" class="admin-menu-item" @click="open = false">쿠폰</RouterLink>
       <RouterLink to="/admin/stats" class="admin-menu-item" @click="open = false">매출</RouterLink>
       <template v-if="isSuperAdmin">
