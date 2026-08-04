@@ -8,6 +8,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
@@ -57,6 +58,34 @@ public class GlobalExceptionHandler {
         // 파싱 실패 메시지는 내부 구조를 드러내므로 그대로 내보내지 않는다.
         return ResponseEntity.status(ec.getStatus())
                 .body(ApiResponse.error(ec.getCode(), "요청 본문을 읽을 수 없습니다."));
+    }
+
+    /**
+     * <b>클라이언트가 이미 끊긴 뒤</b>의 실패는 예외 처리 대상이 아니다 (2026-08-04).
+     *
+     * <p>알림 SSE({@code NotificationStream})는 오래 열려 있는 응답이라, 브라우저가 페이지를 옮기거나
+     * 서버가 재시작하면 연결이 끊긴다. 그때 톰캣이 {@link AsyncRequestNotUsableException}
+     * ({@code Caused by: Broken pipe})를 올리는데, 아래 {@code Exception} 핸들러가 이걸 받아
+     * <b>두 가지를 한다 — 둘 다 쓸모없다</b>:
+     * <ol>
+     *   <li>{@code ERROR "Unhandled exception"} 을 스택트레이스와 함께 남긴다.
+     *       <b>이게 진짜 문제다</b> — 배포 확인에서 *"ERROR 0건"* 을 근거로 쓰는데, 브라우저를 몇 번
+     *       움직이기만 해도 오염돼 <b>그 확인이 의미를 잃는다.</b></li>
+     *   <li>{@code ApiResponse} 를 응답에 쓰려다 <b>2차로 실패</b>한다
+     *       ({@code No converter for ApiResponse with preset Content-Type 'text/event-stream'}) —
+     *       애초에 <b>받을 사람이 없는데</b> 답을 쓰려 해서다.</li>
+     * </ol>
+     *
+     * <p>그래서 여기서 먼저 잡아 <b>조용히 흘린다</b>. 응답 본문을 만들지 않으므로({@code void})
+     * 2차 실패도 사라진다. 로그는 {@code debug} 로만 남긴다 — 진짜로 궁금할 때만 켜서 본다.
+     *
+     * <p>⚠ 이건 <b>실패를 숨기는 것이 아니다</b>. 우리가 손쓸 수 있는 일이 없고(상대가 이미 갔다),
+     * 남겨 봐야 <b>다른 ERROR 를 가리는</b> 잡음이라 지운다. 서버가 처리 중 죽는 예외는 그대로
+     * 아래 핸들러가 받는다.
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleDisconnectedClient(AsyncRequestNotUsableException e) {
+        log.debug("Client disconnected before the response was written: {}", e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
