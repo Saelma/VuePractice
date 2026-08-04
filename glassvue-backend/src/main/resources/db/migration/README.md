@@ -68,10 +68,27 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
   EOF
 
   # 2) 그 계정으로 기동 (기본 DB를 안 건드리게 자격증명만 덮어쓴다)
-  ./gradlew bootRun --args="--server.port=8083 --spring.profiles.active=dev \
-      --spring.datasource.username=esptest --spring.datasource.password=$ESPTEST_PASSWORD"
+  #
+  # ⚠ **자격증명을 `--args` 로 넘기지 않는다**(2026-08-04 확정). 커맨드라인 인자는
+  #    `/proc/<pid>/cmdline` 이 **누구에게나 읽히므로** 같은 호스트의 다른 사용자에게 평문으로 보인다
+  #    (2026-08-03 V37 검증 때 실제로 프로세스 목록에서 확인했다).
+  #    스프링이 읽는 **환경변수**로 넘기면 인자에 값이 남지 않는다(relaxed binding).
+  export SPRING_DATASOURCE_USERNAME=esptest
+  export SPRING_DATASOURCE_PASSWORD="$ESPTEST_PASSWORD"
+  ./gradlew bootRun --args="--server.port=8083 --spring.profiles.active=dev"
   # 로그에 V1→…→Vn이 순서대로 applied 되고 앱이 뜨면 성공(ddl-auto=validate 통과 = 엔티티와 일치).
   # 확인 후 반드시 내린다 — 8083이 떠 있으면 다음 검증이 포트 충돌로 죽는다.
+
+  # 2-1) 노출이 실제로 사라졌는지 **떠 있는 동안** 확인한다 (내려간 뒤엔 볼 수 없다)
+  PID=$(ss -ltnp | sed -n 's/.*:8083 .*pid=\([0-9]*\).*/\1/p' | head -1)
+  tr '\0' '\n' < /proc/$PID/cmdline | grep -i password   # 아무것도 안 나와야 한다
+  ps -ef | grep -v grep | grep -cF "$ESPTEST_PASSWORD"   # 0 이어야 한다
+  # 2026-08-04 V39 실측: cmdline 인자는 --server.port=8083 · --spring.profiles.active=dev **둘뿐**,
+  # ps 전수에서 값 0건.
+  #
+  # ⚠ 다만 값이 **사라진 게 아니라 옮겨간 것**이다 — 환경변수는 `/proc/<pid>/environ` 에 남는다.
+  #    그쪽은 **프로세스 소유자만** 읽을 수 있어 cmdline 보다 낫지만, 같은 계정으로 들어온 사람에겐
+  #    여전히 보인다. 검증 전용 로컬 계정이라 여기까지로 둔다(운영 자격증명은 이 경로로 넘기지 않는다).
   ```
 
   > 계정이 없어졌다면 다시 만든다(DBA 필요):
