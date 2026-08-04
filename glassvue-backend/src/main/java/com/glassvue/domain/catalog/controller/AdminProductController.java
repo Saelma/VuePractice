@@ -1,9 +1,14 @@
 package com.glassvue.domain.catalog.controller;
 
 import com.glassvue.domain.catalog.dto.LowStockResponse;
+import com.glassvue.domain.catalog.dto.StockHistoryResponse;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.global.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.UUID;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 
 /**
@@ -31,4 +36,27 @@ public interface AdminProductController {
                     `count` 는 전체 건수, `items` 는 상위 몇 줄이라 **`items.size()` 가 `count` 보다 작을 수 있다.**
                     """)
     ResponseEntity<ApiResponse<LowStockResponse>> lowStock();
+
+    @Operation(summary = "상품의 재고 변경 이력 (최신순)",
+            description = """
+                    재고가 왜 지금 숫자인지 되짚는 **원장**이다(2026-08-04, B-19).
+                    `quantity` 는 **부호 있는 값**(주문 차감 −, 취소·반품 복원 +)이고
+                    `stockAfter` 는 그 변동 **직후**의 재고다.
+
+                    **기준은 옵션 id 가 아니라 상품 + 옵션명**이다 — 관리자가 상품을 저장하면 옵션이
+                    통째로 교체돼 옵션 id 가 바뀌기 때문이다. 그래서 **지금 옵션 목록에 없는 이름**이
+                    나올 수 있다(삭제된 옵션의 과거 이력).
+
+                    `reason` 별 나머지 필드:
+                    - `ORDER`·`CANCEL`·`RETURN` → `orderId` 가 있고 `actorName` 은 **null**
+                      (누가 했는지는 그 주문으로 되짚는다)
+                    - `ADMIN_CREATE`·`ADMIN_EDIT` → `actorName` 이 있고 `orderId` 는 **null**
+
+                    ⚠ **V39 이전의 변동은 기록이 없다**(백필하지 않았다). 따라서 오래된 상품은
+                    `quantity` 합계가 현재 재고와 다를 수 있다 — 화면이 합계로 검산하면 안 된다.
+
+                    없는 상품 id 면 **404**다(빈 목록이 아니다).
+                    """)
+    ResponseEntity<ApiResponse<PageResponse<StockHistoryResponse>>> stockHistory(
+            UUID id, @ParameterObject Pageable pageable);
 }

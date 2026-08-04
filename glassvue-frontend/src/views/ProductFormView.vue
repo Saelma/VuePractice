@@ -8,6 +8,7 @@ import { DxSelectBox } from 'devextreme-vue/select-box';
 import { getProduct, createProduct, updateProduct, STATUS_OPTIONS } from '../api/product';
 import { fetchCategories } from '../api/category';
 import ImageUploader from '../components/ImageUploader.vue';
+import StockHistoryPanel from '../components/StockHistoryPanel.vue';
 
 const props = defineProps({ id: { type: String, default: null } });
 const router = useRouter();
@@ -172,6 +173,15 @@ async function onSave() {
         </button>
         <button type="button" class="btn btn-secondary" @click="router.back()">취소</button>
       </div>
+    </div>
+
+    <!--
+      재고 변경 이력 (B-19, 2026-08-04) — **수정 화면에만** 둔다. 등록 화면엔 상품이 아직 없어
+      물어볼 대상이 없다. 저장 버튼 아래 별도 카드로 두는 이유: 이건 **입력이 아니라 읽는 것**이라
+      폼 안에 섞으면 "고쳐야 할 칸"으로 보인다.
+    -->
+    <div v-if="isEdit" class="card mt-5 p-5">
+      <StockHistoryPanel :product-id="props.id" />
     </div>
   </section>
 </template>

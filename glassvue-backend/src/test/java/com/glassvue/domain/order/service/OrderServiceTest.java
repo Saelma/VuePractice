@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.glassvue.domain.cart.dto.CartItemResponse;
+import com.glassvue.domain.catalog.entity.StockChangeReason;
 import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.cart.service.CartService;
 import com.glassvue.domain.catalog.entity.ProductStatus;
@@ -178,7 +179,7 @@ class OrderServiceTest {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         // 언제 취소됐는지도 남긴다 — updated_at은 다른 변경에도 갱신돼 취소 시각이라 단정할 수 없다.
         assertThat(order.getCancelledAt()).isNotNull();
-        verify(productCommandService, times(1)).increaseStock(p1, 3);
+        verify(productCommandService, times(1)).increaseStock(p1, 3, StockChangeReason.CANCEL, orderId);
         verify(eventPublisher).publishEvent(any(OrderCancelledEvent.class));
     }
 
@@ -190,7 +191,8 @@ class OrderServiceTest {
         order.ship(DeliveryCarrier.CJ, "123");
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
         assertErrorCode(() -> orderService.cancel(orderId, memberId), ErrorCode.ORDER_NOT_CANCELLABLE);
-        verify(productCommandService, never()).increaseStock(any(), org.mockito.ArgumentMatchers.anyLong());
+        verify(productCommandService, never()).increaseStock(
+                any(), org.mockito.ArgumentMatchers.anyLong(), any(), any());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -242,9 +244,26 @@ class OrderServiceTest {
 
         orderService.checkout(buyer, SHIP);
 
-        verify(productCommandService).decreaseStock(pid, 2);
+        verify(productCommandService).decreaseStock(eq(pid), eq(2L), any());
         verify(cartService).clear(memberId);
         verify(eventPublisher).publishEvent(any(OrderPlacedEvent.class));
+    }
+
+    @Test
+    @DisplayName("결제: 재고 차감에 **그 주문의 id** 를 넘긴다 (재고 이력의 근거, B-19)")
+    void checkout_passesOrderIdToStockDecrease() {
+        UUID pid = UUID.randomUUID();
+        when(cartService.getCart(memberId)).thenReturn(cartWith(availableItem(pid, 2)));
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+        when(orderRepository.save(orderCaptor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.checkout(buyer, SHIP);
+
+        // any() 로는 **null 을 넘겨도 통과**한다 — 실제 주문 id 인지까지 봐야 이력이 근거를 갖는다.
+        // 이 단언이 "차감을 주문 생성 뒤로 옮긴" 이유를 지킨다(적립금 이력과 같은 자리).
+        ArgumentCaptor<UUID> orderIdCaptor = ArgumentCaptor.forClass(UUID.class);
+        verify(productCommandService).decreaseStock(eq(pid), eq(2L), orderIdCaptor.capture());
+        assertThat(orderIdCaptor.getValue()).isEqualTo(orderCaptor.getValue().getId());
     }
 
     @Test

@@ -8,6 +8,8 @@ import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.global.security.AuthUser;
+import com.glassvue.global.security.LoginUser;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -33,8 +35,9 @@ public class ProductControllerImpl implements ProductController {
 
     @Override
     @PostMapping
-    public ResponseEntity<ApiResponse<UUID>> create(@Valid @RequestBody ProductCreateRequest request) {
-        UUID id = commandService.create(request);
+    public ResponseEntity<ApiResponse<UUID>> create(
+            @LoginUser AuthUser user, @Valid @RequestBody ProductCreateRequest request) {
+        UUID id = commandService.create(request, user);
         return ResponseEntity.created(URI.create("/api/products/" + id)).body(ApiResponse.ok(id));
     }
 
@@ -53,9 +56,9 @@ public class ProductControllerImpl implements ProductController {
 
     @Override
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> update(
+    public ResponseEntity<ApiResponse<Void>> update(@LoginUser AuthUser user,
             @PathVariable UUID id, @Valid @RequestBody ProductUpdateRequest request) {
-        commandService.update(id, request);
+        commandService.update(id, request, user);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 

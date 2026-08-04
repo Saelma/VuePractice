@@ -81,3 +81,42 @@ export function discountRate(item) {
 export function fetchLowStock() {
   return apiGet('/api/admin/products/low-stock');
 }
+
+/**
+ * 상품의 재고 변경 이력 — 관리자 (2026-08-04, 백로그 B-19).
+ *
+ * 응답: `PageResponse<{ id, variantName, reason, quantity, stockAfter, orderId, actorName, createdAt }>`
+ *
+ * ⚠ **기준은 옵션 id 가 아니라 상품 + 옵션명**이다 — 관리자가 상품을 저장하면 옵션이 통째로
+ * 교체돼 옵션 id 가 바뀌기 때문이다. 그래서 **지금 옵션 목록에 없는 이름**이 나올 수 있다
+ * (삭제된 옵션의 과거 이력) — 화면이 "모르는 옵션"으로 취급해 감추면 안 된다.
+ *
+ * ⚠ **합계로 현재 재고를 검산하지 않는다.** V39 이전 변동은 기록이 없어(백필 안 함) 오래된 상품은
+ * 합계가 현재 재고와 다르다.
+ */
+export function fetchStockHistory(productId, { page = 0, size = 20 } = {}) {
+  return apiGet(`/api/admin/products/${productId}/stock-history`, { page, size });
+}
+
+/**
+ * 재고 변동 사유 표시.
+ *
+ * ⚠ 서버 enum 에 값이 늘면 여기 없는 키가 온다 — 그때 빈칸이 되지 않게 원문을 그대로 되돌린다
+ * (`auditActionText` 와 같은 방식).
+ */
+export const STOCK_REASON_LABEL = {
+  ORDER: '주문',
+  CANCEL: '주문 취소',
+  RETURN: '반품 승인',
+  ADMIN_CREATE: '등록',
+  ADMIN_EDIT: '관리자 편집',
+};
+export function stockReasonText(reason) {
+  return STOCK_REASON_LABEL[reason] || reason || '';
+}
+
+/** 변동량 표시 — 부호를 **항상** 붙인다. `+3`/`-3` 이라 0 이 될 일은 없다(변동 0은 기록되지 않는다). */
+export function stockDeltaText(quantity) {
+  const n = Number(quantity);
+  return (n > 0 ? '+' : '') + n.toLocaleString('ko-KR');
+}

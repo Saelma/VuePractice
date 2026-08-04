@@ -3,6 +3,7 @@ package com.glassvue.domain.order.service;
 import com.glassvue.domain.cart.dto.CartItemResponse;
 import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.cart.service.CartService;
+import com.glassvue.domain.catalog.entity.StockChangeReason;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.coupon.service.CouponService;
 import com.glassvue.domain.point.service.PointService;
@@ -81,8 +82,6 @@ public class OrderService {
 
         List<OrderItem> orderItems = new ArrayList<>();
         for (CartItemResponse i : cart.items()) {
-            // 재고는 옵션(variant) 단위로 차감한다(2026-07-24 C-8). 부족하면 OUT_OF_STOCK.
-            productCommandService.decreaseStock(i.variantId(), i.quantity());
             // 옵션 id·이름도 스냅샷한다 — 취소 시 재고 복원 대상이고, 옵션명은 주문 내역 표시용이다
             // (정가·배송지·운송장과 같은 스냅샷 원칙).
             orderItems.add(OrderItem.of(i.productId(), i.variantId(), i.optionName(),
@@ -118,6 +117,19 @@ public class OrderService {
                 req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2(),
                 req.shipMemo(),
                 shippingFee, nextOrderNo(), couponName, couponDiscount, usedPoint));
+
+        // 재고 차감도 **주문을 만든 뒤**로 옮겼다(2026-08-04, B-19) — 아래 적립금과 **같은 이유**다.
+        // 재고 이력이 "어느 주문 때문인지"를 담아야 하는데, 주문보다 먼저 차감하면 order_id 가 없어
+        // 근거 없는 행이 된다. 같은 트랜잭션이라 순서를 바꿔도 원자성은 그대로고, 재고가 부족하면
+        // OUT_OF_STOCK 으로 주문째 롤백된다(2026-07-24 C-8 이후 옵션 단위).
+        //
+        // ⚠ 대가: 롤백돼도 **주문번호 시퀀스는 되돌아가지 않아** 번호에 구멍이 난다(V15 는 NOCACHE 로
+        //    구멍을 피하려 했다). 다만 이건 **이미 있던 성질**이다 — 적립금 부족으로 실패하는 경로가
+        //    원래 save() 뒤에 있었다. 여기서 늘어난 건 "동시에 마지막 재고를 집는 경합" 하나뿐이고,
+        //    장바구니 단계에서 available() 로 이미 걸러지므로 실제로 닿기 어렵다.
+        for (CartItemResponse i : cart.items()) {
+            productCommandService.decreaseStock(i.variantId(), i.quantity(), order.getId());
+        }
 
         // 차감은 **주문을 만든 뒤**에 한다 — 적립금 이력이 "어느 주문 때문인지"를 담아야 하는데
         // 주문보다 먼저 차감하면 order_id 를 넣을 수 없다(이력만 있고 근거가 없는 행이 된다).
@@ -277,7 +289,8 @@ public class OrderService {
             throw new BusinessException(ErrorCode.ORDER_NOT_CANCELLABLE);
         }
         order.cancel();
-        order.getItems().forEach(it -> productCommandService.increaseStock(it.getVariantId(), it.getQuantity()));
+        order.getItems().forEach(it -> productCommandService.increaseStock(
+                it.getVariantId(), it.getQuantity(), StockChangeReason.CANCEL, id));
         eventPublisher.publishEvent(OrderCancelledEvent.from(order));
         log.info("Order cancelled: {}", id);
     }
@@ -312,7 +325,9 @@ public class OrderService {
         }
         order.approveReturn();
         // 물건이 돌아왔으니 재고 복원(취소와 동일 — 옵션 단위).
-        order.getItems().forEach(it -> productCommandService.increaseStock(it.getVariantId(), it.getQuantity()));
+        // 재고 이력에서는 취소와 구분한다(B-19) — 원장에서 "왜 돌아왔는지"가 구분돼야 값이 있다.
+        order.getItems().forEach(it -> productCommandService.increaseStock(
+                it.getVariantId(), it.getQuantity(), StockChangeReason.RETURN, id));
         // 환불 = 상품합계−쿠폰을 적립금으로, 배송완료 적립은 회수, 등급 기준에서도 차감.
         pointService.refundReturnedOrder(order.getMemberId(),
                 order.refundableAmount(), order.getEarnedPoint(), order.rewardableAmount(), id);
