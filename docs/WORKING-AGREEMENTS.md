@@ -196,11 +196,20 @@ Flyway 가 공유 espdb 에 적용하므로(§5), *배포하기 전에* 운영�
       > 배포 직전에 제대로 돌리고서야 실패 1건이 나왔다.
       ```bash
       set -a; . /home/ecstel/work/.env; set +a
-      ./gradlew test
+      ./gradlew cleanTest test          # ⚠ cleanTest 없이는 다시 안 돈다 — 아래 참조
       # 그리고 skipped 수를 확인한다 (0이어야 한다)
       python3 -c "import glob,xml.etree.ElementTree as ET;
       print(sum(int(ET.parse(p).getroot().get('skipped')) for p in glob.glob('build/test-results/test/*.xml')))"
       ```
+      > ⚠ **`.env` 를 소싱해 다시 돌려도 Gradle 이 `Task :test UP-TO-DATE` 로 넘긴다**(2026-08-04 실측).
+      > **환경변수는 Gradle 의 입력이 아니라서** 소스가 그대로면 재실행하지 않는다 — 즉 *"이번엔 제대로
+      > 돌렸다"* 고 믿는 그 실행이 **아무것도 안 돌린 것**일 수 있고, 화면에는 `BUILD SUCCESSFUL` 만 뜬다.
+      > **`cleanTest` 를 붙인다.**
+      > → 이건 위 사고의 **두 번째 층**이다: 7/21 에는 *환경변수를 안 줘서* 건너뛰었고, 8/04 에는
+      > *환경변수를 준 뒤에도* 안 돌았다. 두 번 다 증상이 `BUILD SUCCESSFUL` 로 똑같아서,
+      > **판정은 종료 메시지가 아니라 `tests`·`skipped` 숫자로만 한다.**
+      > (8/04 실측: 안 주고 돌렸을 때 `tests 584 · skipped 280` — 그날 만든 통합 테스트 14건이
+      > 통째로 건너뛰어졌다. 제대로 돌리니 `skipped 0`.)
 - [ ] ⚠ **메일이 얽힌 기능은 "운영에서 브라우저 확인"이 통하지 않는다**(2026-07-29).
       운영은 `application.yml` 에 `spring.mail` 키가 없어 **발송 자체가 꺼져 있다** — 배포 후
       「인증메일 보내기」를 눌러도 200 이 나올 뿐 **메일은 오지 않고, 그게 정상이다.**
