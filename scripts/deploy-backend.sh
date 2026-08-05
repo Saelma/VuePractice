@@ -47,11 +47,30 @@ echo "  jar: $JAR_SRC"
 
 echo "▶ 배포 → $JAR_DST"
 [ -f "$JAR_DST" ] && $SUDO cp -f "$JAR_DST" "$JAR_DST.bak"   # 이전 jar 백업(롤백용)
-$SUDO cp -f "$JAR_SRC" "$JAR_DST"
+
+# --- ⚠ 반드시 «먼저 내리고» 덮어쓴다 (2026-08-05) ---
+# 전에는 cp -f 로 덮어쓴 뒤 restart 했는데, 그러면 **구 프로세스가 살아 있는 채로 자기 jar 가
+# 바뀐다.** JVM 은 클래스를 필요할 때 읽으므로, 종료 경로에서만 쓰는 클래스를 **이미 바뀐 파일**
+# 에서 찾다 실패한다:
+#     WARN  Failed to stop bean 'webServerGracefulShutdown'
+#     NoClassDefFoundError: org/springframework/boot/web/server/GracefulShutdownCallback
+# → 웹서버 종료 단계가 통째로 건너뛰어져 연결이 곱게 닫히지 않고, 종료 로그가 스택트레이스로
+#   더러워진다(배포 확인에서 로그를 근거로 쓰는데 그게 오염된다 — 같은 날 고친 404/405 건과 한 계열).
+# 다운타임은 늘지 않는다: 어차피 restart 로 내렸다 올리던 것이고, 늘어난 건 95M 복사 시간뿐이다.
+echo "▶ 서비스 정지…"
+$SUDO systemctl stop "$SERVICE"
+
+if ! $SUDO cp -f "$JAR_SRC" "$JAR_DST"; then
+  # 내린 상태에서 복사가 깨지면 서비스가 죽은 채로 남는다 — 이전 jar 로 되돌리고 올려 둔다.
+  echo "✗ jar 복사 실패 — 이전 jar($JAR_DST.bak)로 되돌리고 기동한다"
+  [ -f "$JAR_DST.bak" ] && $SUDO cp -f "$JAR_DST.bak" "$JAR_DST" || true
+  $SUDO systemctl start "$SERVICE" || true
+  exit 1
+fi
 $SUDO chmod 644 "$JAR_DST"
 
-echo "▶ 서비스 재시작…"
-$SUDO systemctl restart "$SERVICE"
+echo "▶ 서비스 시작…"
+$SUDO systemctl start "$SERVICE"
 
 echo "▶ 헬스체크…"
 for i in $(seq 1 30); do
