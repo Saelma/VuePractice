@@ -91,13 +91,14 @@ describe('openStream — 401 재연결 정책', () => {
     clearSession();
   });
 
-  it('401 이면 **직접 갱신하고 즉시 다시 붙는다**(다른 REST 호출을 기다리지 않는다)', async () => {
+  it('401 이면 **스스로 갱신하고 다시 붙는다**(다른 REST 호출을 기다리지 않는다)', async () => {
     globalThis.fetch.mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(emptyStream());
     vi.mocked(refreshSession).mockResolvedValue(true);
 
     connectNotifications();
 
-    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
+    // ⚠ 갱신 직후 재연결도 백오프 경로(1초)를 탄다 — 즉시가 아니다(운영 코드 주석 참조).
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2), { timeout: 3000 });
     expect(refreshSession).toHaveBeenCalledTimes(1);
   });
 
@@ -107,9 +108,9 @@ describe('openStream — 401 재연결 정책', () => {
 
     connectNotifications();
 
-    await vi.waitFor(() => expect(refreshSession).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(refreshSession).toHaveBeenCalledTimes(1), { timeout: 3000 });
     // 더 두드리지 않는다
-    await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 1500));
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     // 그리고 토큰은 그대로다 — REST 의 request() 와 달리 clearSession 하지 않는다
     expect(authState.access).toBe('AT');
@@ -122,8 +123,8 @@ describe('openStream — 401 재연결 정책', () => {
 
     connectNotifications();
 
-    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
-    await new Promise((r) => setTimeout(r, 30));
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    await new Promise((r) => setTimeout(r, 1500)); // 다음 백오프(1초)가 지나도
     expect(globalThis.fetch).toHaveBeenCalledTimes(2); // 세 번째는 없다
     expect(refreshSession).toHaveBeenCalledTimes(1); // 갱신도 다시 부르지 않는다
   });

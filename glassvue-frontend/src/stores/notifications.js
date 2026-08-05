@@ -28,6 +28,8 @@ export const latestToast = ref(null);
 let controller = null;
 let stopped = false;
 let backoff = 1000;
+/** 다음 재연결이 «갱신 직후» 인가 — 그때 또 401 이면 더 두드리지 않는다(아래 openStream 참조). */
+let afterRefreshNext = false;
 
 export async function loadUnread() {
   if (!authState.access) return;
@@ -119,14 +121,20 @@ async function openStream(afterRefresh = false) {
       stopped = true;
       return;
     }
+    // ⚠ 갱신 직후에도 **즉시 붙지 않고 백오프 경로를 그대로 탄다**(1초).
+    // 변형 주입에서 드러난 것(2026-08-05, T3): 위 `afterRefresh` 가드를 지우면 즉시 재연결이
+    // **꽉 찬 무한 루프**가 되어 테스트 워커가 메모리 부족으로 죽었다 — 원래 버그(30초마다 401)보다
+    // 나쁜 상태다. **가드 하나에만 기대지 않게** 재연결을 한 경로로 모은다: 가드가 깨져도
+    // 최악이 초당 1회로 묶인다. 사용자가 느끼는 차이는 1초뿐이다.
     backoff = 1000;
-    if (authState.access) openStream(true);
-    return;
+    afterRefreshNext = true;
   }
 
-  // 그 밖의 끊김(정상 타임아웃·네트워크) — 백오프 후 재연결
+  // 끊김 후 재연결 — 401 갱신 직후든 정상 타임아웃이든 **여기 한 곳**을 지난다.
+  const next = afterRefreshNext;
+  afterRefreshNext = false;
   setTimeout(() => {
-    if (!stopped && authState.access) openStream();
+    if (!stopped && authState.access) openStream(next);
   }, backoff);
   backoff = Math.min(backoff * 2, 30000);
 }
