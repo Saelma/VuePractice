@@ -121,7 +121,19 @@ com.glassvue
 - `@RestControllerAdvice` **전역 핸들러** 한 곳에서 `BusinessException` · 검증 실패(`MethodArgumentNotValidException`) · 미처리 예외를 `ApiResponse` 에러로 변환.
 - 목록은 `PageResponse`(content · page · size · totalElements)를 `data`에 담는다. DevExtreme DataGrid에는 프론트에서 매핑.
 
+**⚠ 포괄 `Exception` 핸들러가 「받으면 안 되는 것」을 받지 않게 한다.** 스프링이 던지는 몇몇 예외는 *클라이언트 잘못*이거나 *애초에 처리 대상이 아닌데*, 포괄 핸들러가 받으면 **500 + `ERROR "Unhandled exception"`** 이 된다. 그러면 두 가지가 동시에 나빠진다 — 원인이 클라이언트에 있는데 서버 오류로 보이고, **배포 확인에서 근거로 쓰는 「`ERROR` 0건」이 오염된다.** 그래서 아래는 **전용 핸들러로 먼저 잡는다**:
+
+| 예외 | → | 왜 |
+|---|---|---|
+| `NoResourceFoundException` | **404** `COMMON-404` | 그런 경로가 없다 (2026-08-05) |
+| `HttpRequestMethodNotSupportedException` | **405** `COMMON-405` + `Allow` | 경로는 맞고 메서드가 다르다 (2026-08-05) |
+| `AsyncRequestNotUsableException` | **응답 없음**(`void`, `debug` 로그) | 알림 SSE 가 끊긴 뒤라 **받을 사람이 없다** (2026-08-04) |
+
+- ⚠ `COMMON-404` 는 도메인별 404(`PRODUCT-404` 등)와 **층이 다르다** — 도메인 쪽은 *"그 자원이 없다"*, 이쪽은 *"그런 경로가 없다"* 다. 도메인이 던지는 코드가 아니라 **스프링 예외를 옮겨 담는 자리**다.
+- ⚠ `{id}` 패턴에 걸리는 오타(`/api/products/오타`)는 **여전히 400**(타입 변환 실패)이다. 404로 뭉개면 *"형식이 틀렸다"* 와 *"경로가 없다"* 가 합쳐져 프론트가 원인을 못 좁힌다.
+
 > 참고: 에러를 곧장 반환하는 RFC 9457 ProblemDetail 방식도 있으나, 프론트가 한 포맷만 보도록 공통 래퍼로 통일했다. (ErrorCode 보일러플레이트는 에이전트가 작성)
+> ⚠ 그래서 `ResponseEntityExceptionHandler` 를 상속하는 길은 **택하지 않았다**(2026-08-05 재확인) — 위 404/405 가 거기서도 처리되지만 응답이 `ProblemDetail` 이 되어 **이 규칙과 형식이 갈린다.**
 
 ### 접근 제어 (도메인 경계)
 
