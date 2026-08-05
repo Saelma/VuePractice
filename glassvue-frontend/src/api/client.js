@@ -56,6 +56,22 @@ function tryRefresh() {
   return refreshPromise;
 }
 
+/**
+ * 토큰 재발급을 **밖에서도** 부를 수 있게 연 것 (2026-08-05).
+ *
+ * ⚠ 왜 필요했나: 알림 SSE 는 `request()` 를 안 거치고 **생 fetch** 로 스트림을 연다
+ * (EventSource 가 Authorization 헤더를 못 실어서). 그래서 위 401 → refresh 경로를 **통째로
+ * 비켜갔고**, 토큰이 만료된 탭은 재연결할 때마다 401 을 맞으며 **영영 다시 붙지 못했다**
+ * (실측 2026-08-04: `/api/notifications/stream` 이 200 7건 · 401 108건).
+ *
+ * 스트림 쪽 주석은 *"이 사이 REST 호출이 refresh 하고 다음 연결이 성공한다"* 고 적어 두었는데,
+ * **가만히 둔 탭에는 그 REST 호출이 없다** — 다른 요청에 기대는 설계가 그 조건에서만 성립했다.
+ *
+ * single-flight(`refreshPromise`)를 그대로 타므로 REST 와 스트림이 동시에 401 을 맞아도
+ * **재발급은 한 번만** 일어난다 — 밖으로 여는 것이 새 함수를 만드는 것보다 나은 이유다.
+ */
+export const refreshSession = () => tryRefresh();
+
 async function request(path, { method = 'GET', params, body, _retried } = {}) {
   const url = new URL(path, window.location.origin);
   if (params) {

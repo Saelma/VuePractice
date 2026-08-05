@@ -1,5 +1,6 @@
 import { reactive, ref } from 'vue';
 import { authState } from './auth';
+import { refreshSession } from '../api/client';
 import {
   fetchNotifications,
   fetchUnreadCount,
@@ -64,13 +65,15 @@ export function connectNotifications() {
   openStream();
 }
 
-async function openStream() {
+async function openStream(afterRefresh = false) {
   controller = new AbortController();
+  let status = 0;
   try {
     const res = await fetch('/api/notifications/stream', {
       headers: { Accept: 'text/event-stream', Authorization: 'Bearer ' + authState.access },
       signal: controller.signal,
     });
+    status = res.status;
     if (!res.ok || !res.body) throw new Error('stream ' + res.status);
     backoff = 1000; // 성공적으로 붙었으면 백오프 리셋
 
@@ -92,13 +95,40 @@ async function openStream() {
     /* abort(정상 종료) 또는 네트워크 오류 — 아래 재연결로 처리 */
   }
   controller = null;
-  if (!stopped) {
-    // 끊기면 백오프 후 재연결. 토큰 만료로 401 이면 이 사이 REST 호출이 refresh 하고 다음 연결이 성공한다.
-    setTimeout(() => {
-      if (!stopped && authState.access) openStream();
-    }, backoff);
-    backoff = Math.min(backoff * 2, 30000);
+  if (stopped) return;
+
+  // --- 401 = 토큰 만료. 여기서 직접 갱신한다 (2026-08-05) ---
+  //
+  // ⚠ 전에는 *"이 사이 REST 호출이 refresh 하고 다음 연결이 성공한다"* 고 **다른 요청에 기댔는데**,
+  // 가만히 둔 탭에는 그 REST 호출이 없다. 그래서 백오프 상한(30초)에 얹혀 **31초마다 영원히 401** 을
+  // 맞았다(실측 2026-08-04: 200 7건 · 401 108건). 백오프도 갱신 로직도 이미 있었고,
+  // **스트림이 그 갱신 경로를 안 지나간 것**이 원인이었다.
+  if (status === 401) {
+    // 갱신하고도 또 401 이면 더 두드리지 않는다 — 뜨거운 재시도 루프를 만들지 않기 위한 가드.
+    if (afterRefresh) {
+      stopped = true;
+      return;
+    }
+    const ok = await refreshSession();
+    if (!ok) {
+      // ⚠ 여기서 **세션은 건드리지 않는다**(사용자 결정, 2026-08-05). REST 의 `request()` 는
+      // refresh 실패 시 clearSession() 하지만, 그건 **사용자가 방금 뭔가 눌렀을 때**의 이야기다.
+      // 이 루프는 조작 없이 30초마다 도는 배경 작업이라, 네트워크 일시 장애 한 번이
+      // **가만히 있던 사용자를 튕겨내는** 일이 된다. 스트림만 멈추고 세션의 운명은
+      // 다음 사용자 조작(=REST 경로)이 정한다.
+      stopped = true;
+      return;
+    }
+    backoff = 1000;
+    if (authState.access) openStream(true);
+    return;
   }
+
+  // 그 밖의 끊김(정상 타임아웃·네트워크) — 백오프 후 재연결
+  setTimeout(() => {
+    if (!stopped && authState.access) openStream();
+  }, backoff);
+  backoff = Math.min(backoff * 2, 30000);
 }
 
 function handleFrame(frame) {
