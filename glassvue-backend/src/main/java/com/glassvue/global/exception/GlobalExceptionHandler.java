@@ -1,15 +1,19 @@
 package com.glassvue.global.exception;
 
 import com.glassvue.global.response.ApiResponse;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 전역 예외 처리. 컨트롤러/서비스에서 try-catch로 응답을 만들지 않고 여기서 일괄 변환한다.
@@ -86,6 +90,51 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AsyncRequestNotUsableException.class)
     public void handleDisconnectedClient(AsyncRequestNotUsableException e) {
         log.debug("Client disconnected before the response was written: {}", e.getMessage());
+    }
+
+    /**
+     * <b>그런 경로가 없다</b> → 404 (2026-08-05).
+     *
+     * <p>매핑이 하나도 안 맞으면 스프링이 {@link NoResourceFoundException} 을 던지는데, 아래
+     * {@code Exception} 핸들러가 받아 <b>500 + {@code ERROR "Unhandled exception"}</b> 을 만들고 있었다.
+     * 클라이언트 오타 하나가 서버 오류로 보이고, 어제({@code 2026-08-04}) SSE 건과 <b>같은 이유로</b>
+     * 배포 확인의 <i>"ERROR 0건"</i> 을 오염시킨다.
+     *
+     * <p>⚠ 이 구멍은 <b>경로 모양에 따라 갈려서</b> 잘 안 보였다 — {@code /api/products/오타} 는
+     * {@code {id}} 패턴에 걸려 타입 변환 실패(400)로 잘 나가는데, {@code /api/zzz} 처럼
+     * <b>어느 패턴에도 안 걸리는</b> 것만 500 이 됐다.
+     *
+     * <p>백엔드는 정적 리소스를 서빙하지 않는다(nginx 가 프론트를 맡고 {@code /api/} 만 프록시한다) —
+     * 즉 여기 오는 것은 <b>전부 API 오타</b>다. 로그는 {@code warn} 으로 남긴다: 클라이언트 잘못이라
+     * {@code ERROR} 는 아니지만, <b>프론트가 없는 경로를 부르고 있으면 알아야</b> 한다.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResource(NoResourceFoundException e) {
+        ErrorCode ec = ErrorCode.ENDPOINT_NOT_FOUND;
+        log.warn("No endpoint: {} {}", e.getHttpMethod(), e.getResourcePath());
+        return ResponseEntity.status(ec.getStatus())
+                .body(ApiResponse.error(ec.getCode(), ec.getMessage()));
+    }
+
+    /**
+     * <b>경로는 있는데 메서드가 다르다</b> → 405 (2026-08-05).
+     *
+     * <p>위와 같은 구멍의 다른 얼굴이다({@code DELETE /api/notices} 가 500 이었다). 404 와 갈라 두는
+     * 이유는 <b>답이 다르기 때문</b>이다 — 404 는 *"주소를 다시 봐라"*, 405 는 *"주소는 맞고 메서드가
+     * 틀렸다"* 라, 합치면 프론트가 원인을 못 좁힌다.
+     *
+     * <p>{@code Allow} 헤더를 함께 준다(HTTP 규약). 무엇이 되는지 알려주는 게 405 의 값이다.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e) {
+        ErrorCode ec = ErrorCode.METHOD_NOT_ALLOWED;
+        log.warn("Method not allowed: {} (supported: {})", e.getMethod(), e.getSupportedHttpMethods());
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(ec.getStatus());
+        Set<HttpMethod> supported = e.getSupportedHttpMethods();
+        if (supported != null && !supported.isEmpty()) {
+            builder.allow(supported.toArray(new HttpMethod[0]));
+        }
+        return builder.body(ApiResponse.error(ec.getCode(), ec.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

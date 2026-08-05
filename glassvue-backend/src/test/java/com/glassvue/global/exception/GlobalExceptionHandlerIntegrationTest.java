@@ -1,6 +1,8 @@
 package com.glassvue.global.exception;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -56,5 +58,41 @@ class GlobalExceptionHandlerIntegrationTest {
     void malformedJson_doesNotLeakParserDetail() throws Exception {
         mockMvc.perform(post("/api/auth/login").contentType(JSON).content("{\"loginId\":"))
                 .andExpect(jsonPath("$.error.message").value("요청 본문을 읽을 수 없습니다."));
+    }
+
+    /**
+     * 아래 셋은 2026-08-05에 실측으로 드러난 구멍이다 — <b>매핑이 하나도 안 맞으면 500</b>이었다.
+     * 어제 고친 SSE 건과 같은 계열이라 함께 막는다(포괄 {@code Exception} 핸들러가 받으면 안 되는 것).
+     */
+    @Test
+    @DisplayName("없는 경로 → 500이 아니라 404")
+    void unknownPath_returns404() throws Exception {
+        mockMvc.perform(get("/api/zzz-no-such-endpoint"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMMON-404"));
+    }
+
+    @Test
+    @DisplayName("경로는 있고 메서드가 다르면 → 405, 그리고 Allow 로 무엇이 되는지 알려준다")
+    void wrongMethod_returns405WithAllow() throws Exception {
+        // /api/auth/login 은 POST 전용이다.
+        mockMvc.perform(get("/api/auth/login"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.error.code").value("COMMON-405"))
+                .andExpect(header().string("Allow", org.hamcrest.Matchers.containsString("POST")));
+    }
+
+    /**
+     * ⚠ <b>구멍이 어디였는지도 함께 고정한다.</b> {@code {id}} 패턴에 걸리는 오타는 원래부터
+     * 타입 변환 실패(400)로 잘 나갔다 — 이게 404로 바뀌면 "형식이 틀렸다"와 "그런 경로가 없다"가
+     * 뭉개져 프론트가 원인을 못 좁힌다.
+     */
+    @Test
+    @DisplayName("{id} 패턴에 걸리는 오타는 여전히 400이다(404로 뭉개지 않는다)")
+    void malformedPathVariable_stillReturns400() throws Exception {
+        mockMvc.perform(get("/api/notices/not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON-400"));
     }
 }

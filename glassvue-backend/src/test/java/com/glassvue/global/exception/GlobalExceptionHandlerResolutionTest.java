@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.ExceptionHandlerMethodResolver;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 어떤 예외를 <b>어느 핸들러가 받는지</b>를 고정한다 (2026-08-04).
@@ -44,6 +47,27 @@ class GlobalExceptionHandlerResolutionTest {
         // ApiResponse 를 돌려주면 text/event-stream 응답에 쓰려다
         // HttpMessageNotWritableException 이 또 난다 — 실제로 그렇게 두 번 실패하고 있었다.
         assertThat(method.getReturnType()).isEqualTo(void.class);
+    }
+
+    @Test
+    @DisplayName("없는 경로 예외는 **전용 핸들러**가 받는다 (2026-08-05)")
+    void noResource_resolvesToDedicatedHandler() {
+        Method method = resolver.resolveMethod(
+                new NoResourceFoundException(HttpMethod.GET, "/api/zzz", "api/zzz"));
+
+        assertThat(method).isNotNull();
+        assertThat(method.getName())
+                .as("포괄 핸들러가 받으면 클라이언트 오타 하나가 500 + ERROR 로그가 된다")
+                .isEqualTo("handleNoResource");
+    }
+
+    @Test
+    @DisplayName("메서드 불일치 예외도 **전용 핸들러**가 받는다 (2026-08-05)")
+    void methodNotSupported_resolvesToDedicatedHandler() {
+        Method method = resolver.resolveMethod(new HttpRequestMethodNotSupportedException("DELETE"));
+
+        assertThat(method).isNotNull();
+        assertThat(method.getName()).isEqualTo("handleMethodNotAllowed");
     }
 
     @Test

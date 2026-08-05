@@ -14,6 +14,10 @@ public enum ErrorCode {
 
     // 공통
     INVALID_INPUT("COMMON-400", HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
+    // 아래 둘은 **도메인이 던지지 않는다** — 스프링이 던진 예외를 전역 핸들러가 옮겨 담는 자리다.
+    // 도메인별 404(PRODUCT-404 등)는 "그 자원이 없다"이고, 이건 "그런 경로/메서드가 없다"라 층이 다르다.
+    ENDPOINT_NOT_FOUND("COMMON-404", HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),
+    METHOD_NOT_ALLOWED("COMMON-405", HttpStatus.METHOD_NOT_ALLOWED, "허용되지 않은 메서드입니다."),
     INTERNAL_ERROR("COMMON-500", HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다."),
 
     // 공지(notice)
