@@ -1,9 +1,11 @@
 package com.glassvue.domain.inquiry.repository;
 
 import com.glassvue.domain.inquiry.entity.Inquiry;
+import com.glassvue.domain.inquiry.entity.InquiryStatus;
 import com.glassvue.domain.inquiry.entity.QInquiry;
 import com.glassvue.global.querydsl.QueryDslSupport;
 import com.glassvue.global.querydsl.SortSupport;
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
@@ -41,6 +43,32 @@ public class InquiryRepositoryImpl implements InquiryRepositoryCustom {
                 .select(inquiry.count())
                 .from(inquiry)
                 .where(inquiry.productId.eq(productId));
+
+        return QueryDslSupport.page(content, count, pageable);
+    }
+
+    /**
+     * 관리자 목록 — 상품 조건이 없다(가로지른다). status 가 null 이면 전체.
+     *
+     * <p>⚠ <b>위 {@code findByProduct} 는 이 변화에 손댈 필요가 없다.</b> G-3 2단계에서
+     * {@code product_id} 가 nullable 이 되어도 {@code productId.eq(...)} 는 NULL 행을 못 잡는다
+     * (SQL 에서 {@code = NULL} 은 참이 될 수 없다) — 즉 «일반 문의» 는 상품 문의 목록에
+     * <b>구조적으로 섞이지 않는다.</b> 「전체 문의」를 새로 조회하는 여기서만 신경 쓰면 된다.
+     */
+    @Override
+    public Page<Inquiry> findForAdmin(InquiryStatus status, Pageable pageable) {
+        OrderSpecifier<?>[] orders = pageable.getSort().isSorted()
+                ? SortSupport.toOrders(pageable.getSort(), inquiry, SORTABLE)
+                : new OrderSpecifier<?>[]{inquiry.createdAt.desc()};
+
+        // ⚠ 목록·카운트가 **같은 조건 객체**를 쓴다 — 둘이 갈리면 "3건" 이라 써 놓고 목록엔 5줄이 뜬다.
+        BooleanBuilder where = new BooleanBuilder();
+        if (status != null) {
+            where.and(inquiry.status.eq(status));
+        }
+
+        JPAQuery<Inquiry> content = queryFactory.selectFrom(inquiry).where(where).orderBy(orders);
+        JPAQuery<Long> count = queryFactory.select(inquiry.count()).from(inquiry).where(where);
 
         return QueryDslSupport.page(content, count, pageable);
     }

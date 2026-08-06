@@ -26,6 +26,7 @@ import MemberAdminView from '../views/MemberAdminView.vue';
 import MemberDetailAdminView from '../views/MemberDetailAdminView.vue';
 import AuditLogAdminView from '../views/AuditLogAdminView.vue';
 import ReviewAdminView from '../views/ReviewAdminView.vue';
+import InquiryAdminView from '../views/InquiryAdminView.vue';
 import CartView from '../views/CartView.vue';
 import WishlistView from '../views/WishlistView.vue';
 import CheckoutView from '../views/CheckoutView.vue';
@@ -69,6 +70,8 @@ const routes = [
   { path: '/admin/marketing', name: 'marketing-admin', component: MarketingAdminView, meta: { requiresAdmin: true } },
   // 리뷰 관리(B-18). 숨김은 되돌릴 수 있어 ADMIN 이면 된다 — 감사 이력처럼 SUPER 로 좁히지 않는다.
   { path: '/admin/reviews', name: 'review-admin', component: ReviewAdminView, meta: { requiresAdmin: true } },
+  // 문의 관리(G-3 1단계). 답변은 기존 API 를 쓰고, 이 화면이 더한 것은 「무엇에 답할지 찾는 길」이다.
+  { path: '/admin/inquiries', name: 'inquiry-admin', component: InquiryAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members', name: 'member-admin', component: MemberAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members/:id', name: 'member-admin-detail', component: MemberDetailAdminView, props: true, meta: { requiresAdmin: true } },
   // 감사 이력은 최상위 관리자만 — 조작 당사자(ADMIN)가 자기 이력을 보는 구조를 막는다.
