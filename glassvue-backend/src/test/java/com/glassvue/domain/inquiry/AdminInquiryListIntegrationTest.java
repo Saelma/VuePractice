@@ -164,6 +164,28 @@ class AdminInquiryListIntegrationTest {
     }
 
     @Test
+    @DisplayName("🔴 **총건수도 필터를 따른다** — 목록과 카운트가 갈리면 «N건» 이라 써 놓고 줄 수가 다르다")
+    void adminList_totalCountFollowsFilter() throws Exception {
+        // ⚠ 이 테스트는 **변형 주입에서 구멍이 드러나 뒤늦게 넣은 것**이다(2026-08-06, M4).
+        //    카운트 쿼리에서 조건을 빼도 앞의 테스트들은 전부 통과했다 — 다들 `content[*].id` 만 봤고
+        //    페이지가 한 장이라 목록은 멀쩡했기 때문이다. 어긋남은 **페이저의 총건수**에서만 보인다.
+        //
+        //    ⚠ 절대값으로 못 박지 않는다 — 공유 DB 라 다른 검증이 남긴 문의가 함께 세어진다.
+        //    대신 **쪼갠 합 == 전체** 라는 관계로 본다(둘 중 어느 쪽 데이터가 늘어도 성립한다).
+        answer(openId); // 한쪽으로 쏠린 상태를 만든다 — 둘 다 0 이면 어떤 변형도 안 드러난다
+
+        int all = JsonPath.read(listAs(admin, "?size=1"), "$.data.totalElements");
+        int waiting = JsonPath.read(listAs(admin, "?size=1&status=WAITING"), "$.data.totalElements");
+        int answered = JsonPath.read(listAs(admin, "?size=1&status=ANSWERED"), "$.data.totalElements");
+
+        assertThat(waiting + answered)
+                .as("상태는 둘뿐이라 쪼갠 합이 전체와 같아야 한다 — 카운트가 필터를 무시하면 두 배가 된다")
+                .isEqualTo(all);
+        assertThat(waiting).as("최소한 이 테스트가 만든 미답변 한 건은 있다").isPositive();
+        assertThat(answered).isPositive();
+    }
+
+    @Test
     @DisplayName("⚠ 잘못된 status 값은 400 이다(조용히 전체를 주지 않는다)")
     void adminList_badStatus_400() throws Exception {
         mockMvc.perform(get(LIST + "?status=NOPE").header("Authorization", admin))
