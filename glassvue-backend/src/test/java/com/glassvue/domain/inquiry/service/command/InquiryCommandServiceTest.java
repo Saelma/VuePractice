@@ -14,6 +14,7 @@ import com.glassvue.domain.inquiry.dto.InquiryAnswerRequest;
 import com.glassvue.domain.inquiry.dto.InquiryCreateRequest;
 import com.glassvue.domain.inquiry.dto.InquiryUpdateRequest;
 import com.glassvue.domain.inquiry.entity.Inquiry;
+import com.glassvue.domain.inquiry.entity.InquiryType;
 import com.glassvue.domain.inquiry.entity.InquiryStatus;
 import com.glassvue.domain.inquiry.event.InquiryAnsweredEvent;
 import com.glassvue.domain.inquiry.repository.InquiryRepository;
@@ -46,7 +47,7 @@ class InquiryCommandServiceTest {
     private final AuthUser admin = new AuthUser(UUID.randomUUID(), Role.ADMIN, "admin");
 
     private Inquiry inquiryBy(UUID authorId) {
-        return Inquiry.builder().productId(UUID.randomUUID()).authorId(authorId)
+        return Inquiry.builder().productId(UUID.randomUUID()).type(InquiryType.PRODUCT).authorId(authorId)
                 .author("nick").title("t").content("c").secret(false).build();
     }
     private static void assertErrorCode(Runnable r, ErrorCode expected) {
@@ -122,7 +123,7 @@ class InquiryCommandServiceTest {
     void update_replacesImageGroup() {
         UUID oldGroup = UUID.randomUUID();
         UUID newGroup = UUID.randomUUID();
-        Inquiry mine = Inquiry.builder().productId(UUID.randomUUID()).authorId(user.id())
+        Inquiry mine = Inquiry.builder().productId(UUID.randomUUID()).type(InquiryType.PRODUCT).authorId(user.id())
                 .author("nick").title("t").content("c").secret(false).imageGroupId(oldGroup).build();
         when(inquiryRepository.findById(any())).thenReturn(Optional.of(mine));
         List<UUID> imageIds = List.of(UUID.randomUUID());
@@ -141,7 +142,7 @@ class InquiryCommandServiceTest {
     @DisplayName("삭제: 관리자는 남의 문의도 삭제 가능 + 첨부 그룹도 정리")
     void delete_admin() {
         UUID group = UUID.randomUUID();
-        Inquiry other = Inquiry.builder().productId(UUID.randomUUID()).authorId(UUID.randomUUID())
+        Inquiry other = Inquiry.builder().productId(UUID.randomUUID()).type(InquiryType.PRODUCT).authorId(UUID.randomUUID())
                 .author("nick").title("t").content("c").secret(false).imageGroupId(group).build();
         when(inquiryRepository.findById(any())).thenReturn(Optional.of(other));
         service.delete(UUID.randomUUID(), admin);

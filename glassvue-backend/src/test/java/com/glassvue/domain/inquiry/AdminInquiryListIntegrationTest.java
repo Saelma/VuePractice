@@ -12,6 +12,7 @@ import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
 import com.glassvue.domain.inquiry.entity.Inquiry;
+import com.glassvue.domain.inquiry.entity.InquiryType;
 import com.glassvue.domain.inquiry.entity.InquiryStatus;
 import com.glassvue.domain.inquiry.repository.InquiryRepository;
 import com.glassvue.domain.member.entity.Member;
@@ -116,7 +117,7 @@ class AdminInquiryListIntegrationTest {
 
     private UUID inquiry(UUID productId, String title, boolean secret) {
         return inquiryRepository.save(Inquiry.builder()
-                .productId(productId).authorId(authorId).author("ZZ문의자")
+                .productId(productId).type(InquiryType.PRODUCT).authorId(authorId).author("ZZ문의자")
                 .title(title).content("본문-" + title).secret(secret).imageGroupId(null).build()).getId();
     }
 

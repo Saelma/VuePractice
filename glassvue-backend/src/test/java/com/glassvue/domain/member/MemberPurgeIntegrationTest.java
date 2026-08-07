@@ -15,6 +15,7 @@ import com.glassvue.domain.coupon.entity.MemberCoupon;
 import com.glassvue.domain.coupon.repository.CouponRepository;
 import com.glassvue.domain.coupon.repository.MemberCouponRepository;
 import com.glassvue.domain.inquiry.entity.Inquiry;
+import com.glassvue.domain.inquiry.entity.InquiryType;
 import com.glassvue.domain.inquiry.repository.InquiryRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.MemberAddress;
@@ -142,7 +143,7 @@ class MemberPurgeIntegrationTest {
         notificationPrefRepository.save(NotificationPref.of(targetId, NotificationType.ORDER, false));
         restockRepository.save(RestockSubscription.of(targetId, productId));
         inquiryRepository.save(Inquiry.builder()
-                .productId(productId).authorId(targetId).author("ZZ정리대상")
+                .productId(productId).type(InquiryType.PRODUCT).authorId(targetId).author("ZZ정리대상")
                 .title("ZZ문의").content("내용").secret(false).build());
         // ---- 남아야 하는 것들 ----
         reviewId = reviewRepository.save(Review.builder()

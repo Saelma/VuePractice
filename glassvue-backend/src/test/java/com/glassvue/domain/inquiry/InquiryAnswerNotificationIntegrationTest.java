@@ -10,6 +10,7 @@ import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
 import com.glassvue.domain.inquiry.entity.Inquiry;
+import com.glassvue.domain.inquiry.entity.InquiryType;
 import com.glassvue.domain.inquiry.event.InquiryAnsweredEvent;
 import com.glassvue.domain.inquiry.repository.InquiryRepository;
 import com.glassvue.domain.member.entity.Member;
@@ -96,7 +97,7 @@ class InquiryAnswerNotificationIntegrationTest {
                 .name("ZZP-문의상품" + suffix).description("문의 알림 테스트").price(10_000L)
                 .status(ProductStatus.SELLING).category(category).build()).getId();
         inquiryId = inquiryRepository.save(Inquiry.builder()
-                .productId(productId).authorId(authorId).author("ZZ문의작성자" + suffix)
+                .productId(productId).type(InquiryType.PRODUCT).authorId(authorId).author("ZZ문의작성자" + suffix)
                 .title("배송 언제 오나요").content("궁금합니다").secret(false).build()).getId();
     }
 

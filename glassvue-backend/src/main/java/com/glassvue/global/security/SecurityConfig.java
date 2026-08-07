@@ -89,9 +89,25 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/products/*/reviews").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/reviews/*").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/reviews/*").authenticated()
-                        // 문의: 목록은 공개(비밀글은 마스킹), 작성/수정/삭제는 로그인, 답변은 관리자만
+                        // 문의: 상품 문의 목록은 공개(비밀글은 마스킹), 작성/수정/삭제는 로그인, 답변은 관리자만
                         .requestMatchers(HttpMethod.POST, "/api/inquiries/*/answer").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/products/*/inquiries").authenticated()
+                        // 일반 고객센터 문의·내 문의 (2026-08-07, G-3 2·3단계).
+                        //
+                        // ⚠ **위 「매처가 없으면 남의 것이 열린다」(쿠폰·찜·적립금)와 성격이 다르다.**
+                        //   저 경로들은 컨트롤러가 소유자를 **경로/쿼리에서** 받거나 서비스가 알아서 찾아,
+                        //   매처가 빠지면 실제로 남의 데이터가 나간다.
+                        //   여기 둘은 컨트롤러가 `@LoginUser AuthUser`(required=true)로 받으므로
+                        //   규칙을 지워도 LoginUserArgumentResolver 가 **같은 UNAUTHENTICATED 401** 을 낸다
+                        //   (2026-08-07 변형 M7 로 실측 — 규칙을 통째로 지워도 테스트가 전부 통과했다).
+                        //
+                        //   🔴 **그래도 남겨 둔다.** 이유는 «없으면 뚫린다» 가 아니라 둘이다:
+                        //   ① 인가는 **컨트롤러 앞**에서 끝나야 한다 — 리졸버 방어는 요청이 핸들러까지
+                        //      들어온 뒤에 걸리므로, 앞에 무언가(필터·인터셉터)가 붙는 순간 전제가 깨진다.
+                        //   ② `@LoginUser` 를 빼거나 required=false 로 바꾸는 **한 줄 수정**이
+                        //      이 경로를 조용히 공개로 만든다. 그때 마지막으로 잡는 것이 이 줄이다.
+                        .requestMatchers(HttpMethod.POST, "/api/inquiries").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/inquiries/me").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/inquiries/*").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/inquiries/*").authenticated()
                         .anyRequest().permitAll())

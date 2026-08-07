@@ -121,6 +121,10 @@ public enum ErrorCode {
     INQUIRY_NOT_OWNER("INQUIRY-403", HttpStatus.FORBIDDEN, "본인 문의만 수정·삭제할 수 있습니다."),
     INQUIRY_ALREADY_ANSWERED("INQUIRY-400A", HttpStatus.BAD_REQUEST, "답변이 완료된 문의는 수정할 수 없습니다."),
     INQUIRY_SELF_ANSWER("INQUIRY-403S", HttpStatus.FORBIDDEN, "본인이 등록한 문의에는 답변할 수 없습니다."),
+    // 일반 문의(G-3 2단계)에 PRODUCT 유형을 보낸 경우. 상품 문의는 상품 경로로만 만든다 —
+    // 여기서 막지 않으면 productId 없는 PRODUCT 행이 생겨 관리자 목록의 상품명이 영원히 «—» 가 된다.
+    INQUIRY_TYPE_NOT_GENERAL("INQUIRY-400T", HttpStatus.BAD_REQUEST,
+            "상품 문의는 상품 페이지에서 등록해 주세요."),
 
     COUPON_NOT_FOUND("COUPON-404", HttpStatus.NOT_FOUND, "쿠폰을 찾을 수 없습니다."),
     COUPON_ALREADY_USED("COUPON-409", HttpStatus.CONFLICT, "이미 사용한 쿠폰입니다."),

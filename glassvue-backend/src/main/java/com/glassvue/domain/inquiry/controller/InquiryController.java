@@ -1,9 +1,11 @@
 package com.glassvue.domain.inquiry.controller;
 
+import com.glassvue.domain.inquiry.dto.GeneralInquiryCreateRequest;
 import com.glassvue.domain.inquiry.dto.InquiryAnswerRequest;
 import com.glassvue.domain.inquiry.dto.InquiryCreateRequest;
 import com.glassvue.domain.inquiry.dto.InquiryResponse;
 import com.glassvue.domain.inquiry.dto.InquiryUpdateRequest;
+import com.glassvue.domain.inquiry.dto.MyInquiryResponse;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
@@ -14,12 +16,20 @@ import java.util.UUID;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 
-@Tag(name = "Inquiry", description = "상품 문의 API (답변은 관리자만, 비밀글 지원)")
+@Tag(name = "Inquiry", description = "문의 API — 상품 문의 + 일반 고객센터 문의 (답변은 관리자만, 비밀글 지원)")
 public interface InquiryController {
 
-    @Operation(summary = "문의 작성 (로그인)")
+    @Operation(summary = "상품 문의 작성 (로그인). 유형은 경로가 PRODUCT 로 정한다")
     ResponseEntity<ApiResponse<UUID>> create(
             @Parameter(hidden = true) AuthUser user, UUID productId, InquiryCreateRequest request);
+
+    @Operation(summary = "일반 고객센터 문의 작성 (로그인). 상품이 없다 — type 에 PRODUCT 는 받지 않는다")
+    ResponseEntity<ApiResponse<UUID>> createGeneral(
+            @Parameter(hidden = true) AuthUser user, GeneralInquiryCreateRequest request);
+
+    @Operation(summary = "내 문의 목록 (로그인). 상품 문의·일반 문의를 함께 준다")
+    ResponseEntity<ApiResponse<PageResponse<MyInquiryResponse>>> myInquiries(
+            @Parameter(hidden = true) AuthUser user, Pageable pageable);
 
     @Operation(summary = "상품 문의 목록 (비밀글은 작성자·관리자 외 마스킹)")
     ResponseEntity<ApiResponse<PageResponse<InquiryResponse>>> list(

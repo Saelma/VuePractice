@@ -45,4 +45,33 @@ class InquiryNotificationHandlerTest {
                 // 앵커가 빠지면 상품 맨 위로 떨어져 사용자가 문의를 다시 찾아 내려가야 한다.
                 eq("/products/" + productId + "#inquiries"));
     }
+
+    @Test
+    @DisplayName("🔴 **일반 문의는 「내 문의」로 보낸다** — 상품이 없어 상품 URL 을 만들 수가 없다")
+    void generalInquiry_linksToSupport() {
+        // ⚠ 2026-08-07(G-3 2단계)에 열린 갈래다. 그전엔 모든 문의에 상품이 있어 갈래가 없었다.
+        //   productId 가 null 인데 옛 코드 그대로면 링크가 "/products/null#inquiries" 가 된다 —
+        //   그리고 그건 **서버 로그에 아무것도 안 남는다**(잘못된 건 코드 경로가 아니라 문자열이다).
+        //   답변도 알림도 멀쩡한데 **누르면 깨진 페이지로 간다.**
+        handler.handle(new InquiryAnsweredEvent(inquiryId, null, authorId, "환불 계좌를 바꾸고 싶어요"));
+
+        verify(notificationService).create(
+                eq(authorId),
+                eq(NotificationType.INQUIRY),
+                eq("문의 답변"),
+                contains("환불 계좌를 바꾸고 싶어요"),
+                eq("/support#inquiry-" + inquiryId));
+    }
+
+    @Test
+    @DisplayName("⚠ 링크에 «null» 이라는 글자가 들어가지 않는다(문자열 조립이 조용히 틀리는 자리)")
+    void generalInquiry_linkNeverContainsNull() {
+        handler.handle(new InquiryAnsweredEvent(inquiryId, null, authorId, "제목"));
+
+        // ⚠ 위 테스트는 «/support#inquiry-…» 라는 **정답**을 못 박고, 이건 «/products/null…» 이라는
+        //   **오답의 모양**을 못 박는다. 링크 규칙이 나중에 또 바뀌어도 이 조건은 계속 참이어야 한다.
+        verify(notificationService).create(
+                eq(authorId), eq(NotificationType.INQUIRY), eq("문의 답변"), contains("제목"),
+                org.mockito.ArgumentMatchers.argThat(link -> link != null && !link.contains("null")));
+    }
 }

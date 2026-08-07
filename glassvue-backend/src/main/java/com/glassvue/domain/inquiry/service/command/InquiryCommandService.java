@@ -2,10 +2,12 @@ package com.glassvue.domain.inquiry.service.command;
 
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
 import com.glassvue.domain.image.service.ImageService;
+import com.glassvue.domain.inquiry.dto.GeneralInquiryCreateRequest;
 import com.glassvue.domain.inquiry.dto.InquiryAnswerRequest;
 import com.glassvue.domain.inquiry.dto.InquiryCreateRequest;
 import com.glassvue.domain.inquiry.dto.InquiryUpdateRequest;
 import com.glassvue.domain.inquiry.entity.Inquiry;
+import com.glassvue.domain.inquiry.entity.InquiryType;
 import com.glassvue.domain.inquiry.event.InquiryAnsweredEvent;
 import com.glassvue.domain.inquiry.repository.InquiryRepository;
 import com.glassvue.domain.member.entity.Role;
@@ -35,10 +37,12 @@ public class InquiryCommandService {
     private final ImageService imageService;
     private final ApplicationEventPublisher eventPublisher;
 
+    /** 상품 문의 — 유형은 <b>경로가 정한다</b>(요청 본문에 type 이 없는 이유). */
     public UUID create(UUID productId, InquiryCreateRequest req, AuthUser user) {
         productQueryService.ensureExists(productId);
         Inquiry inquiry = Inquiry.builder()
                 .productId(productId)
+                .type(InquiryType.PRODUCT)
                 .authorId(user.id())
                 .author(user.nickname())
                 .title(req.title())
@@ -48,6 +52,36 @@ public class InquiryCommandService {
                 .build();
         Inquiry saved = inquiryRepository.save(inquiry);
         log.info("Inquiry created: id={} product={} by={}", saved.getId(), productId, user.id());
+        return saved.getId();
+    }
+
+    /**
+     * 일반 고객센터 문의 (2026-08-07, G-3 2단계) — 상품이 없다.
+     *
+     * <p>이 메서드가 생기기 전까지 문의 작성 경로는 {@code POST /products/{id}/inquiries} <b>하나</b>였다.
+     * 즉 *"배송이 안 와요"* 를 물으려면 <b>아무 상품이나 골라야</b> 했고, 그러면 그 문의는 그 상품의
+     * 문의 목록에 남의 일처럼 걸린다.
+     *
+     * <p>⚠ <b>PRODUCT 는 거부한다.</b> 조용히 다른 값으로 바꾸지 않는다 — 그러면 사용자가 고른 유형이
+     * 사라진 채 200 이 나가고, 관리자 목록에는 <b>상품명이 없는 상품 문의</b> 라는 앞뒤 안 맞는 줄이 뜬다.
+     * ({@code Inquiry} 생성자와 DB 제약도 같은 규칙을 걸지만, 여기서 잡아야 사용자에게 <b>왜</b> 를 말해 준다.)
+     */
+    public UUID createGeneral(GeneralInquiryCreateRequest req, AuthUser user) {
+        if (req.type().requiresProduct()) {
+            throw new BusinessException(ErrorCode.INQUIRY_TYPE_NOT_GENERAL);
+        }
+        Inquiry inquiry = Inquiry.builder()
+                .productId(null) // 일반 문의라 상품이 없다 — 명시해 둔다(빠뜨린 게 아니다)
+                .type(req.type())
+                .authorId(user.id())
+                .author(user.nickname())
+                .title(req.title())
+                .content(req.content())
+                .secret(req.secret())
+                .imageGroupId(imageService.createGroup(req.imageIds())) // 비면 null
+                .build();
+        Inquiry saved = inquiryRepository.save(inquiry);
+        log.info("General inquiry created: id={} type={} by={}", saved.getId(), req.type(), user.id());
         return saved.getId();
     }
 

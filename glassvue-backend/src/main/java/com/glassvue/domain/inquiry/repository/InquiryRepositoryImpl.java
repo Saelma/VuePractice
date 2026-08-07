@@ -72,4 +72,30 @@ public class InquiryRepositoryImpl implements InquiryRepositoryCustom {
 
         return QueryDslSupport.page(content, count, pageable);
     }
+
+    /**
+     * 내 문의 목록 (2026-08-07, G-3 3단계) — 상품 문의·일반 문의를 <b>가르지 않는다</b>.
+     *
+     * <p>조건이 authorId 하나라 {@code findByProduct} 와 같은 모양이다. 유형·상태 필터를 두지 않은 이유:
+     * 한 사람이 쓰는 문의는 많아야 수십 건이라 <b>거를 것이 없다</b> — 관리자 목록(수백 건을 가로지른다)과
+     * 성격이 다르다. 필요해지면 그때 붙인다.
+     */
+    @Override
+    public Page<Inquiry> findByAuthor(UUID authorId, Pageable pageable) {
+        OrderSpecifier<?>[] orders = pageable.getSort().isSorted()
+                ? SortSupport.toOrders(pageable.getSort(), inquiry, SORTABLE)
+                : new OrderSpecifier<?>[]{inquiry.createdAt.desc()};
+
+        JPAQuery<Inquiry> content = queryFactory
+                .selectFrom(inquiry)
+                .where(inquiry.authorId.eq(authorId))
+                .orderBy(orders);
+
+        JPAQuery<Long> count = queryFactory
+                .select(inquiry.count())
+                .from(inquiry)
+                .where(inquiry.authorId.eq(authorId));
+
+        return QueryDslSupport.page(content, count, pageable);
+    }
 }

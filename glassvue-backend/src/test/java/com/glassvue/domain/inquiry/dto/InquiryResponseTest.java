@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.glassvue.domain.image.dto.ImageResponse;
 import com.glassvue.domain.inquiry.entity.Inquiry;
+import com.glassvue.domain.inquiry.entity.InquiryType;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.global.security.AuthUser;
 import java.util.List;
@@ -21,11 +22,11 @@ class InquiryResponseTest {
     private final UUID ownerId = UUID.randomUUID();
 
     private Inquiry secretInquiry() {
-        return Inquiry.builder().productId(UUID.randomUUID()).authorId(ownerId)
+        return Inquiry.builder().productId(UUID.randomUUID()).type(InquiryType.PRODUCT).authorId(ownerId)
                 .author("nick").title("비밀 배송문의").content(BODY).secret(true).build();
     }
     private Inquiry publicInquiry() {
-        return Inquiry.builder().productId(UUID.randomUUID()).authorId(ownerId)
+        return Inquiry.builder().productId(UUID.randomUUID()).type(InquiryType.PRODUCT).authorId(ownerId)
                 .author("nick").title("공개문의").content(BODY).secret(false).build();
     }
 

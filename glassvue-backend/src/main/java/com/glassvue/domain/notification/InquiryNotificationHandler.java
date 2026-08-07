@@ -32,11 +32,34 @@ public class InquiryNotificationHandler {
     @Transactional
     public void handle(InquiryAnsweredEvent event) {
         String message = "문의하신 '" + event.inquiryTitle() + "' 에 답변이 등록되었습니다.";
-        // 문의는 상품 상세 안에 붙어 있어 자기 URL 이 없다 → 상품 페이지의 문의 섹션 앵커로 보낸다.
-        String link = "/products/" + event.productId() + "#inquiries";
+        String link = linkFor(event);
 
         notificationService.create(event.authorId(), NotificationType.INQUIRY,
                 "문의 답변", message, link);
-        log.info("[문의답변] inquiry={} author={} 알림 생성", event.inquiryId(), event.authorId());
+        log.info("[문의답변] inquiry={} author={} link={} 알림 생성",
+                event.inquiryId(), event.authorId(), link);
+    }
+
+    /**
+     * 🔴 <b>답변이 어디에 있는지가 문의마다 다르다</b> (2026-08-07, G-3 2단계).
+     *
+     * <p>원래는 갈래가 없었다 — 문의는 <b>자기 URL 이 없어서</b> 상품 페이지의 문의 섹션 앵커로만
+     * 보냈다(B-15). 그 판단은 그때 옳았다. <b>모든 문의에 상품이 있었기 때문이다.</b>
+     *
+     * <p>2단계가 그 전제를 깼다. 일반 고객센터 문의는 {@code productId} 가 null 이라 옛 코드 그대로면
+     * 링크가 <b>{@code /products/null#inquiries}</b> 가 된다. ⚠ 그리고 이건 <b>서버 로그에 아무것도
+     * 안 남는다</b> — 잘못된 건 코드 경로가 아니라 <b>문자열</b>이라 예외도 에러도 없다. 답변은 멀쩡히
+     * 달리고 알림도 도착하는데 <b>누르면 깨진 페이지로 간다.</b>
+     *
+     * <p>⚠ <b>{@code type} 이 아니라 {@code productId} 로 가른다.</b> 둘은 짝이라 결과가 같지만
+     * ({@code ck_inquiry_product_pair}), 여기서 필요한 것은 «무슨 유형인가» 가 아니라 <b>«상품 URL 을
+     * 만들 수 있는가»</b> 다. productId 가 없으면 만들 재료가 없다 — 그 사실을 그대로 묻는다.
+     */
+    private String linkFor(InquiryAnsweredEvent event) {
+        if (event.productId() == null) {
+            // 일반 문의의 주소는 「내 문의」다 — 목록 안에서 그 줄로 스크롤한다(G-3 3단계).
+            return "/support#inquiry-" + event.inquiryId();
+        }
+        return "/products/" + event.productId() + "#inquiries";
     }
 }

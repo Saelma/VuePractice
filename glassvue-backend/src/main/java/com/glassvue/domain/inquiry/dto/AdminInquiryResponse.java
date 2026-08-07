@@ -2,6 +2,7 @@ package com.glassvue.domain.inquiry.dto;
 
 import com.glassvue.domain.inquiry.entity.Inquiry;
 import com.glassvue.domain.inquiry.entity.InquiryStatus;
+import com.glassvue.domain.inquiry.entity.InquiryType;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -30,6 +31,7 @@ import java.util.UUID;
  */
 public record AdminInquiryResponse(
         UUID id,
+        InquiryType type,
         UUID productId,
         String productName,
         UUID authorId,
@@ -46,6 +48,7 @@ public record AdminInquiryResponse(
     public static AdminInquiryResponse from(Inquiry i, String productName) {
         return new AdminInquiryResponse(
                 i.getId(),
+                i.getType(),
                 i.getProductId(),
                 productName,
                 i.getAuthorId(),

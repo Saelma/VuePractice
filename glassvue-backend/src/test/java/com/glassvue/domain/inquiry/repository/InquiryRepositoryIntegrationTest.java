@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.glassvue.domain.inquiry.entity.Inquiry;
+import com.glassvue.domain.inquiry.entity.InquiryType;
 import com.glassvue.global.config.JpaAuditingConfig;
 import com.glassvue.global.config.QuerydslConfig;
 import com.glassvue.global.exception.BusinessException;
@@ -46,7 +47,7 @@ class InquiryRepositoryIntegrationTest {
 
     private Inquiry save(UUID pid, String title, boolean secret) {
         return inquiryRepository.save(Inquiry.builder()
-                .productId(pid).authorId(UUID.randomUUID()).author("nick")
+                .productId(pid).type(InquiryType.PRODUCT).authorId(UUID.randomUUID()).author("nick")
                 .title(title).content("c").secret(secret).build());
     }
 
