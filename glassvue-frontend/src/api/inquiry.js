@@ -63,3 +63,55 @@ export const INQUIRY_STATUS_OPTIONS = [
   { value: 'ANSWERED', text: '답변완료' },
   { value: null, text: '전체' },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 일반 고객센터 문의 · 내 문의 (2026-08-07, 백로그 G-3 2·3단계)
+//
+// 1단계가 관리자 **목록**을 열어 *"답할 경로가 없다"* 를 풀었지만, 작성 경로는 여전히
+// `POST /products/{id}/inquiries` **하나**뿐이었다 — 즉 *"배송이 안 와요"* 를 물으려면
+// **아무 상품이나 골라야** 했다. 여기가 그 반대쪽을 연다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 일반 고객센터 문의 작성. **상품이 없다.**
+ *
+ * ⚠ `type` 에 `'PRODUCT'` 를 보내면 **400**(`INQUIRY-400T`)이다. 서버가 조용히 다른 값으로
+ *    바꾸지 않는다 — 그러면 사용자가 고른 유형이 사라진 채 성공 응답이 나간다.
+ *    상품 문의는 `createInquiry`(상품 경로)로 만들고, 그때 유형은 **경로가 정한다.**
+ */
+export function createGeneralInquiry(payload) {
+  return apiPost('/api/inquiries', payload); // { type, title, content, secret, imageIds }
+}
+
+/** 내 문의 목록. 상품 문의·일반 문의가 **한 목록에 섞여** 온다(줄마다 `type` 이 실린다). */
+export function fetchMyInquiries({ page = 0, size = 10 } = {}) {
+  return apiGet('/api/inquiries/me', { page, size });
+}
+
+/**
+ * 유형 표시 문구. 서버 enum 은 6종인데 **화면에서 고르는 것은 4종**이다:
+ * - `PRODUCT` 는 고르는 값이 아니라 **경로가 정하는** 값이라 선택지에 없다.
+ * - `PAYMENT`·`ACCOUNT` 는 V42 에서 값만 미리 열어 뒀다(Oracle 은 나중에 enum 을 늘리면
+ *   CHECK 제약을 못 고쳐 수동 ALTER 가 필요하다). 필요해지면 아래 선택지에만 더하면 된다.
+ *
+ * ⚠ 그래서 **표시 문구는 6종 전부** 가지고 있어야 한다 — 목록에는 PRODUCT 줄이 섞여 오고,
+ *    나중에 PAYMENT 로 들어온 문의가 «PAYMENT» 라는 날문자로 보이면 안 된다.
+ */
+export const INQUIRY_TYPE_TEXT = {
+  PRODUCT: '상품 문의',
+  DELIVERY: '배송',
+  REFUND: '환불·취소',
+  PAYMENT: '결제',
+  ACCOUNT: '회원·계정',
+  ETC: '기타',
+};
+export function inquiryTypeText(type) {
+  return INQUIRY_TYPE_TEXT[type] || type;
+}
+
+/** 고객센터 문의 폼의 유형 선택지 — 위 주석대로 PRODUCT 는 없다. */
+export const GENERAL_INQUIRY_TYPE_OPTIONS = [
+  { value: 'DELIVERY', text: INQUIRY_TYPE_TEXT.DELIVERY },
+  { value: 'REFUND', text: INQUIRY_TYPE_TEXT.REFUND },
+  { value: 'ETC', text: INQUIRY_TYPE_TEXT.ETC },
+];

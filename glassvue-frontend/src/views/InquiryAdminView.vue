@@ -23,7 +23,7 @@ import { DxSelectBox } from 'devextreme-vue/select-box';
 //    되어 입력칸이 통째로 안 그려지고, 빌드도 테스트도 통과한다(2026-08-03 에 실제로 겪었다).
 import { DxTextArea } from 'devextreme-vue/text-area';
 import {
-  fetchAdminInquiries, answerInquiry, INQUIRY_STATUS_OPTIONS,
+  fetchAdminInquiries, answerInquiry, INQUIRY_STATUS_OPTIONS, inquiryTypeText,
 } from '../api/inquiry';
 
 // 기본 「답변대기」 — 목록을 여는 이유가 그것이다(위 주석).
@@ -94,11 +94,16 @@ function fmt(v) {
 }
 
 /**
- * 상품명이 없는 줄 — 상품이 지워졌거나(문의는 느슨한 참조라 함께 안 지워진다), 2단계에서 들어올
- * **일반 문의**다. 둘 다 «답은 해야 하는» 줄이라 목록에서 빼지 않고 이렇게 표시한다.
+ * 상품명이 없는 줄 — 이제 **두 가지 뜻**이다(2026-08-07, 2단계가 들어온 뒤):
+ * ① 유형이 PRODUCT 인데 이름이 없다 → 상품이 **지워진** 것이다(문의는 느슨한 참조라 함께 안 지워진다).
+ * ② 유형이 PRODUCT 가 아니다 → 애초에 상품이 없는 **일반 문의**다.
+ *
+ * ⚠ 화면에서 둘이 구분되어야 한다 — 둘 다 «—» 로 그리면 관리자가 *"상품이 지워졌나?"* 를 매번
+ *   의심하게 된다. 그래서 ②는 상품 칸을 비우고 **유형 열**이 답하게 한다.
  */
 function productText(row) {
-  return row.productName || '—';
+  if (row.type && row.type !== 'PRODUCT') return '—';
+  return row.productName || '(지워진 상품)';
 }
 </script>
 
@@ -141,6 +146,10 @@ function productText(row) {
       no-data-text="조건에 맞는 문의가 없습니다."
     >
       <DxColumn data-field="createdAt" caption="등록" :width="150" :calculate-display-value="(r) => fmt(r.createdAt)" />
+      <!-- 유형(2026-08-07, 2단계) — 상품 칸이 비는 줄의 성격을 여기서 가린다.
+           이게 없으면 관리자는 «상품 없는 문의» 가 배송 문제인지 환불 문제인지 열어 봐야 안다. -->
+      <DxColumn data-field="type" caption="유형" :width="100" alignment="center"
+                :calculate-display-value="(r) => inquiryTypeText(r.type)" />
       <DxColumn data-field="productName" caption="상품" :width="170" :calculate-display-value="productText" />
       <DxColumn data-field="author" caption="작성자" :width="110" />
       <DxColumn data-field="title" caption="제목" :width="200" cell-template="titleCell" />

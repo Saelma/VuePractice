@@ -19,6 +19,7 @@ import RestockButton from '../components/RestockButton.vue';
 import ProductReviews from '../components/ProductReviews.vue';
 import ProductInquiries from '../components/ProductInquiries.vue';
 import RelatedProducts from '../components/RelatedProducts.vue';
+import { useAnchorScroll } from '../composables/useAnchorScroll';
 
 const props = defineProps({ id: { type: String, required: true } });
 const route = useRoute();
@@ -65,35 +66,22 @@ const inquirySec = ref(null);
 const activeSection = ref('detail');
 let observer = null;
 
+// 탭 클릭용 — 사용자가 방금 누른 자리라 «위쪽이 자라서 밀리는» 문제가 없다(앵커와 다르다).
 function scrollTo(el) {
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// 앵커 정렬을 포기하는 신호 — 사용자가 직접 움직였으면 그 순간 손을 뗀다(스크롤 하이재킹 방지).
-const ANCHOR_CANCEL = ['wheel', 'touchstart', 'keydown'];
-let stopAnchor = null;
-
 /**
  * 알림에서 `#inquiries` 로 들어왔을 때 그 섹션까지 데려간다.
  *
- * ⚠ **한 번 부르는 것으로는 안 된다.** 위쪽 {@code ProductReviews} 가 자기 데이터를 나중에 받아
- * 렌더되면서 문의 섹션을 아래로 밀어낸다 — 스크롤은 시작할 때 계산한 위치에서 멈추므로
- * **리뷰 중간에 선다.** 그래서 레이아웃이 잠잠해질 때까지(최대 2초) 다시 맞춘다.
+ * ⚠ **한 번 부르는 것으로는 안 된다** — 위쪽 {@code ProductReviews} 가 자기 데이터를 나중에 받아
+ * 렌더되면서 문의 섹션을 아래로 밀어내, 스크롤이 **리뷰 중간에 선다.**
+ * → 그 규칙은 {@code useAnchorScroll} 에 있다(WA §2-9).
+ *
+ * ⚠ 2026-08-07 에 **여기서 뽑아 공용으로 옮겼다.** 고객센터(`/support#inquiry-{id}`)가 같은 규칙을
+ *    필요로 하는데, 복사본을 만들면 미묘한 쪽(ResizeObserver·시한·취소 신호)이 한쪽만 고쳐진다.
  */
-function scrollToAnchor(el) {
-  if (!el) return;
-  scrollTo(el);
-  const ro = new ResizeObserver(() => scrollTo(el)); // 본문 높이가 변할 때마다 다시 맞춘다
-  ro.observe(document.body);
-  stopAnchor = () => {
-    ro.disconnect();
-    clearTimeout(timer);
-    ANCHOR_CANCEL.forEach((t) => window.removeEventListener(t, stopAnchor));
-    stopAnchor = null;
-  };
-  const timer = setTimeout(() => stopAnchor?.(), 2000);
-  ANCHOR_CANCEL.forEach((t) => window.addEventListener(t, () => stopAnchor?.(), { once: true, passive: true }));
-}
+const { scrollToAnchor, cancel: cancelAnchor } = useAnchorScroll();
 function tabClass(key) {
   return activeSection.value === key
     ? 'border-brand-600 font-semibold text-ink-900'
@@ -118,7 +106,7 @@ function setupSpy() {
 }
 onBeforeUnmount(() => {
   observer?.disconnect();
-  stopAnchor?.(); // 2초 안에 다른 화면으로 가면 관측·타이머가 남지 않게
+  cancelAnchor(); // 2초 안에 다른 화면으로 가면 관측·타이머가 남지 않게
 });
 
 async function onAddToCart() {

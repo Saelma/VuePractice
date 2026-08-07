@@ -128,6 +128,9 @@ const year = new Date().getFullYear();
             <RouterLink to="/orders" class="text-ink-500 transition-colors hover:text-ink-900">주문내역</RouterLink>
             <RouterLink to="/benefits" class="text-ink-500 transition-colors hover:text-ink-900">혜택</RouterLink>
             <RouterLink to="/settings" class="text-ink-500 transition-colors hover:text-ink-900">내 정보</RouterLink>
+            <!-- 고객센터(G-3, 2026-08-07) — 커머스 푸터에 있어야 할 것이 여기만 비어 있었다.
+                 «상품과 무관한 문의를 할 데» 를 찾는 사람이 처음 보는 자리다. -->
+            <RouterLink to="/support" class="text-ink-500 transition-colors hover:text-ink-900">고객센터</RouterLink>
           </nav>
         </div>
         <p class="muted mt-8 border-t border-line pt-6">© {{ year }} Glassvue — 데모 프로젝트</p>

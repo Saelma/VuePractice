@@ -34,6 +34,7 @@ import OrderListView from '../views/OrderListView.vue';
 import OrderDetailView from '../views/OrderDetailView.vue';
 import NotificationsView from '../views/NotificationsView.vue';
 import MockTrackingView from '../views/MockTrackingView.vue';
+import SupportView from '../views/SupportView.vue';
 
 // 정적 경로(/notices/new)가 동적(/notices/:id)보다 우선 매칭된다(vue-router는 구체성 순).
 const routes = [
@@ -51,6 +52,11 @@ const routes = [
   { path: '/privacy', name: 'privacy', component: PolicyDocView },
   { path: '/settings', name: 'settings', component: MyPageView, meta: { requiresAuth: true } },
   { path: '/benefits', name: 'benefits', component: BenefitsView, meta: { requiresAuth: true } },
+  // 고객센터(G-3 2·3단계) — 일반 문의 작성 + 내 문의.
+  // ⚠ requiresAuth 다: 작성도 조회도 «내 것» 이라 로그인이 전제다. 비로그인으로 오면
+  //    로그인 후 여기로 되돌아온다(아래 가드가 redirect 를 붙인다) — 알림을 눌러 왔는데
+  //    로그인이 풀려 있으면 그냥 홈으로 떨어뜨릴 수 없다.
+  { path: '/support', name: 'support', component: SupportView, meta: { requiresAuth: true } },
   { path: '/notices', name: 'notice-list', component: NoticeListView },
   { path: '/notices/new', name: 'notice-create', component: NoticeFormView, meta: { requiresAuth: true } },
   { path: '/notices/:id', name: 'notice-detail', component: NoticeDetailView, props: true },
