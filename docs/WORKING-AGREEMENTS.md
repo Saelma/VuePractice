@@ -473,8 +473,13 @@ Flyway 가 공유 espdb 에 적용하므로(§5), *배포하기 전에* 운영�
       → 하루를 닫을 때 **날짜 조건 없이** 전수로 본다(늘 같은 쿼리라 습관이 된다):
       ```sql
       select login_id, role, created_at from member where lower(login_id) like 'zz%';
-      select count(*) from orders where buyer_nickname like 'ZZ%' or ship_recipient like 'ZZ%';
+      select count(*) from orders where lower(buyer_nickname) like 'zz%' or lower(ship_recipient) like 'zz%';
+      select count(*) from inquiry where lower(title) like 'zz%';
       ```
+      → ⚠ **대소문자를 가리지 않는 쪽으로 쓴다.** 위 계정 쿼리만 `lower()` 였고 주문 쿼리는 아니었다.
+      > **실측 (2026-08-07)**: 사용자가 G-3 을 검증하며 문의 제목을 **`zz-제목`·`zz-답답하다`** 로 남겼다.
+      > 규약을 지킨 것인데 `like 'ZZ%'` 로는 **0건**이다 — 규약을 지켜도 세는 쪽이 놓친다.
+      > 접두사를 대문자로 쓰라고 사람에게 요구하는 것보다 **쿼리를 관대하게** 두는 편이 안전하다.
       → ⚠ **정상 경로로 못 치우는 것이 있으면 그 자체를 항목으로 남긴다** — 위 계정은 비밀번호를 모르면
       지울 방법이 아예 없었다(관리자 삭제 API 부재 → BACKLOG **B-24**). 잔재 점검이 **기능 갭을 드러내는** 자리다.
 
