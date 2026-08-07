@@ -242,6 +242,68 @@ class PointFlowIntegrationTest {
     }
 
     @Test
+    @DisplayName("🔴 주문을 취소하면 쓴 적립금이 돌아온다 — 안 돌려주면 고객 돈이 사라진다")
+    void refundUsedPointOnCancel() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        deliverFully(buyer, admin, order(buyer, 1, null));   // 500 적립
+
+        String orderId = order(buyer, 1, 500L);              // 500 을 써서 잔액 0
+        mockMvc.perform(get("/api/points/me").header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.balance").value(0));
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/cancel").header("Authorization", buyer)
+                        .contentType(JSON).content("{\"reason\":\"ZZ변심\"}"))
+                .andExpect(status().isOk());
+
+        // 취소는 ORDERED·PAID 에서만 되고, 적립금 차감은 **주문 시점**에 이미 끝나 있다.
+        // 그러니 취소가 되돌리지 않으면 그 500 은 어디로도 안 간다 — 화면은 «취소됨» 으로 멀쩡하고
+        // 알림도 정상이라, 고객이 잔액을 들여다보기 전까지 아무도 모른다.
+        mockMvc.perform(get("/api/points/me").header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.balance").value(500));
+        assertLedgerConsistent();
+    }
+
+    @Test
+    @DisplayName("⚠ 적립금을 안 쓴 주문을 취소하면 이력이 **안 생긴다** — 0원 줄로 원장을 채우지 않는다")
+    void noHistoryWhenCancellingOrderWithoutPoint() throws Exception {
+        String buyer = login(buyerLoginId);
+        String orderId = order(buyer, 1, null);              // 적립금 안 씀
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/cancel").header("Authorization", buyer)
+                        .contentType(JSON).content("{\"reason\":\"ZZ변심\"}"))
+                .andExpect(status().isOk());
+
+        // ⚠ 잔액 합계로는 이걸 못 잡는다 — 0원 이력은 합을 안 바꾼다(assertLedgerConsistent 가 통과한다).
+        //    원장에 줄이 생겼는지는 **줄을 세어야** 알 수 있다.
+        assertThat(historyRepository.findByOrderId(UUID.fromString(orderId)))
+                .as("적립금이 안 움직였으면 원장에 줄이 없어야 한다")
+                .isEmpty();
+        assertLedgerConsistent();
+    }
+
+    @Test
+    @DisplayName("🔴 취소는 **등급·누적 구매액을 안 건드린다** — 안 더한 것을 빼면 강등된다")
+    void cancelDoesNotTouchGrade() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        deliverFully(buyer, admin, order(buyer, 1, null));   // 누적 50,000 · 500 적립
+
+        String orderId = order(buyer, 1, 500L);
+        mockMvc.perform(post("/api/orders/" + orderId + "/cancel").header("Authorization", buyer)
+                        .contentType(JSON).content("{\"reason\":\"ZZ변심\"}"))
+                .andExpect(status().isOk());
+
+        // 누적 구매확정액은 **배송완료에만** 오른다. 취소가 subtractPurchase 를 부르면
+        // 이 주문이 더한 적 없는 49,500 을 빼서 누적이 500 으로 주저앉는다 — 등급도 함께 틀어진다.
+        // ⚠ 그런데도 **잔액은 맞고 이력 합도 맞는다.** 그래서 여기서만 잡힌다.
+        mockMvc.perform(get("/api/points/me").header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.totalPurchase").value(50_000))
+                .andExpect(jsonPath("$.data.balance").value(500));
+        assertLedgerConsistent();
+    }
+
+    @Test
     @DisplayName("잔액보다 많이 쓰려 하면 거절 — POINT-400N")
     void cannotUseMoreThanBalance() throws Exception {
         String buyer = login(buyerLoginId);

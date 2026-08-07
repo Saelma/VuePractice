@@ -381,6 +381,18 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
       <div v-if="cancelForm" class="card mt-4 p-5">
         <h2 class="section-title">주문 취소</h2>
         <p class="muted mt-1">취소하면 <strong>재고가 복원</strong>됩니다. 되돌릴 수 없습니다.</p>
+        <!--
+          쓴 적립금이 있을 때만 한 줄 더 붙인다(2026-08-07).
+
+          ⚠ 반품 폼은 처음부터 «적립금으로 환불된다» 를 말해 왔는데 취소 폼은 아무 말이 없었다.
+          말이 없던 게 맞았던 게 아니라 **실제로 안 돌려주고 있었다** — 그걸 고치면서 안내도 맞춘다.
+
+          ⚠ 금액을 조건 없이 늘 띄우지 않는다. 적립금을 안 쓴 주문이 대부분이라, 늘 띄우면
+          «0P 환불» 같은 줄이 서고 사용자는 그게 무슨 말인지 되묻게 된다.
+        -->
+        <p v-if="order.usedPoint > 0" class="muted mt-1">
+          사용한 적립금 <strong>{{ priceText(order.usedPoint) }}</strong>은 취소와 함께 <strong>돌려드립니다</strong>.
+        </p>
         <label class="field mt-3">
           <span class="field-label">사유 <span class="muted">(선택)</span></span>
           <input

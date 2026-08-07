@@ -287,6 +287,16 @@ public class OrderService {
      * 반품엔 사유가 있는데 취소엔 없어 관리자가 "왜 취소됐는지" 를 알 수 없던 비대칭을 없앤다.
      * 재고 이력의 {@code CANCEL} 줄은 {@code order_id} 를 갖고 있으므로 여기 사유가 있으면
      * 되짚어진다 — <b>이력에 사유를 복사하지 않는다</b>(같은 정보를 두 번 적지 않는다, V39 와 같은 규칙).
+     *
+     * <p>🔴 2026-08-07: <b>쓴 적립금을 돌려준다.</b> 그전까지는 재고만 복원하고 적립금은 그대로 뒀는데,
+     * 차감은 <b>주문 시점</b>에 이미 끝나 있다({@code checkout} 의 {@code pointService.use}).
+     * 즉 적립금을 쓰고 취소하면 <b>그 돈이 사라졌다</b> — 화면은 «취소됨» 으로 멀쩡하고 알림도 정상이라
+     * 고객이 잔액을 들여다보기 전까지 아무도 모른다. 반품 승인은 처음부터 환불했으므로 <b>비대칭</b>이었다
+     * (B-17 이 «반품엔 사유가 있는데 취소엔 없다» 를 고친 것과 같은 모양의 구멍이다).
+     *
+     * <p>⚠ <b>이벤트로 빼지 않는다.</b> {@code @Async} 는 best-effort 라 유실되면 고객 돈이 사라진다 —
+     * 재고 복원을 이벤트로 빼지 않은 것, 배송완료 적립을 동기로 둔 것과 같은 판단이다.
+     * 순서도 반품 승인과 맞춘다: <b>재고 → 환불 → 이벤트(알림)</b>.
      */
     @Transactional
     public void cancel(UUID id, UUID memberId, String reason) {
@@ -298,8 +308,9 @@ public class OrderService {
         order.cancel(reason);
         order.getItems().forEach(it -> productCommandService.increaseStock(
                 it.getVariantId(), it.getQuantity(), StockChangeReason.CANCEL, id));
+        pointService.refundCancelledOrder(order.getMemberId(), order.getUsedPoint(), id);
         eventPublisher.publishEvent(OrderCancelledEvent.from(order));
-        log.info("Order cancelled: {}", id);
+        log.info("Order cancelled: {} refundedPoint={}", id, order.getUsedPoint());
     }
 
     /**

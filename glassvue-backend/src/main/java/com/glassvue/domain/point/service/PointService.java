@@ -176,6 +176,40 @@ public class PointService {
     }
 
     /**
+     * 주문 취소 환불 (2026-08-07) — <b>주문에 쓴 적립금만</b> 돌려준다.
+     *
+     * <p>⚠ <b>반품 환불과 모양이 다르다.</b> 반품은 «결제금액을 적립금으로» 돌려주는 것이라 순변동을
+     * 계산해야 하지만, 취소는 <b>아직 아무것도 확정되지 않은 상태</b>라 되돌릴 것이 하나뿐이다:
+     * <ul>
+     *   <li><b>적립 회수 없음</b> — 적립은 배송완료에만 붙는데({@link #earnOnDelivery}) 취소는
+     *       {@code ORDERED}·{@code PAID} 에서만 된다. 줄 일이 없었으니 뺄 것도 없다.</li>
+     *   <li><b>등급 되돌림 없음</b> — 누적 구매확정액도 배송완료에만 오른다(같은 메서드의
+     *       {@code addPurchase}). 여기서 {@code subtractPurchase} 를 부르면 <b>안 더한 것을 뺀다.</b></li>
+     * </ul>
+     * 그래서 반품 쪽 메서드를 재사용하지 않았다 — 인자 셋 중 둘이 항상 0 인 호출은 읽는 사람에게
+     * "취소도 적립을 회수하는구나" 라는 <b>틀린 인상</b>을 준다.
+     *
+     * <p>⚠ 유형은 {@code REFUND} 를 그대로 쓴다. {@code CANCEL} 값을 새로 만들면 CHECK 제약
+     * 마이그레이션이 따라오는데, <b>취소인지 반품인지는 이미 {@code order_id} 로 되짚어진다</b>
+     * (주문 상태가 답을 갖고 있다). 같은 정보를 두 번 적지 않는다 — 재고 이력에 취소 사유를
+     * 복사하지 않은 것과 같은 판단이다.
+     *
+     * @param usedPoint 이 주문에 쓴 적립금 = {@code order.getUsedPoint()}. 0 이면 아무것도 안 한다.
+     */
+    public void refundCancelledOrder(UUID memberId, long usedPoint, UUID orderId) {
+        // 적립금을 안 쓴 주문이 대부분이다. 0원 이력을 남기면 원장이 «아무 일도 없었다» 는 줄로 채워진다.
+        if (usedPoint <= 0) {
+            return;
+        }
+        PointAccount account = accountOrOpen(memberId);
+        account.refund(usedPoint);
+        historyRepository.save(PointHistory.refunded(memberId, usedPoint, account.getBalance(), orderId,
+                "주문 취소 환불 " + usedPoint));
+        log.info("Point refunded (cancel): member={} amount={} order={} balance={}",
+                memberId, usedPoint, orderId, account.getBalance());
+    }
+
+    /**
      * 계정을 꺼내고, <b>없으면 그 자리에서 연다</b>. <b>쓰기 트랜잭션에서만</b> 쓴다.
      *
      * <p>계정은 원래 가입 시({@link #openAccount}) 만들고 기존 회원은 V21 이 백필했다.
