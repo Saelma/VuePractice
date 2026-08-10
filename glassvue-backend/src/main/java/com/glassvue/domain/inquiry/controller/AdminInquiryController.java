@@ -4,11 +4,14 @@ import com.glassvue.domain.inquiry.dto.AdminInquiryResponse;
 import com.glassvue.domain.inquiry.entity.InquiryStatus;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import java.util.UUID;
 
 /**
  * 문의 관리 (관리자) — 2026-08-06, 백로그 G-3.
@@ -42,5 +45,22 @@ public interface AdminInquiryController {
                     답할 대상이 있다는 사실 자체를 모른다. 첨부 이미지는 싣지 않는다.
                     """)
     ResponseEntity<ApiResponse<PageResponse<AdminInquiryResponse>>> list(
-            InquiryStatus status, @ParameterObject Pageable pageable);
+            InquiryStatus status, Boolean hidden, @ParameterObject Pageable pageable);
+
+    @Operation(summary = "문의 숨김 (관리자)", description = """
+            부적절한 문의(욕설·광고 등)를 **숨긴다**. 삭제가 아니라 되돌릴 수 있다 (B-18, 2026-08-10).
+
+            숨기면 **상품 문의 목록**과 **내 문의**에서 빠진다 — ⚠ **작성자 본인에게도** 안 보인다
+            (리뷰 숨김과 같은 규칙). 관리자 목록에는 그대로 남는다. 안 남으면 되돌릴 방법이 없다.
+
+            ⚠ **이미 숨겨진 문의에 다시 호출해도 200 이다** — 다만 아무 일도 안 하고 **감사도 안 남긴다**
+            (일어나지 않은 조작을 원장에 적지 않는다).
+
+            누가 숨겼는지는 감사 로그에 `INQUIRY_HIDE` 로 남는다 — ⚠ 그 조회는 **`SUPER_ADMIN` 전용**이다.
+            """)
+    ResponseEntity<ApiResponse<Void>> hide(@Parameter(hidden = true) AuthUser admin, UUID id);
+
+    @Operation(summary = "문의 숨김 해제 (관리자)",
+            description = "숨김을 푼다. 다시 상품 문의 목록·내 문의에 나타난다. 감사에 `INQUIRY_UNHIDE` 로 남는다.")
+    ResponseEntity<ApiResponse<Void>> unhide(@Parameter(hidden = true) AuthUser admin, UUID id);
 }

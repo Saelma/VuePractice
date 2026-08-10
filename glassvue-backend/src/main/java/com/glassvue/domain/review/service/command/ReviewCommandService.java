@@ -1,8 +1,11 @@
 package com.glassvue.domain.review.service.command;
 
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
 import com.glassvue.domain.image.service.ImageService;
 import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.domain.review.dto.ReviewCreateRequest;
 import com.glassvue.domain.review.dto.ReviewStats;
@@ -36,6 +39,8 @@ public class ReviewCommandService {
     private final OrderService orderService;
     private final ImageService imageService;
     private final ApplicationEventPublisher eventPublisher;
+    // 감사의 target_login 스냅샷용 — member 공개 API (B-25 와 같은 창구)
+    private final MemberService memberService;
 
     public UUID create(UUID productId, ReviewCreateRequest req, AuthUser user) {
         productQueryService.ensureExists(productId);
@@ -89,12 +94,23 @@ public class ReviewCommandService {
      * 이벤트를 발행하면 상품 목록 캐시가 헛되이 비워진다(같은 값을 다시 써 넣으면서).
      */
     @Transactional
-    public void setHidden(UUID id, boolean hidden) {
+    public void setHidden(UUID id, boolean hidden, AuthUser admin) {
         Review review = reviewRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REVIEW_NOT_FOUND));
         if (review.setHidden(hidden)) {
             // 숨긴 리뷰는 별점 집계에서 빠지므로(statsByProduct) 상품의 평균·개수가 달라진다.
             publishRatingChanged(review.getProductId());
+            // 🔴 감사 (2026-08-10, B-18 잔여). **B-18 은 이걸 «못 붙인다» 며 접었었다** —
+            //    "감사는 회원 대상 설계라 리뷰에 안 맞는다" 였는데 리뷰에는 authorId 가 있다.
+            //    같은 날 주문 취소를 «대상=주문자» 로 붙이면서 그 전제가 틀렸음이 드러났다.
+            //    ⚠ 집계 갱신과 **같은 조건 안**에 둔다 — 안 바뀐 요청에 감사를 남기면
+            //    원장이 일어나지 않은 조작으로 채워진다.
+            eventPublisher.publishEvent(new AdminActionEvent(
+                    hidden ? AuditAction.REVIEW_HIDE : AuditAction.REVIEW_UNHIDE,
+                    admin.id(), admin.nickname(),
+                    review.getAuthorId(), memberService.loginIdOf(review.getAuthorId()),
+                    review.getAuthor() + " 의 리뷰"));
+            log.info("Review hidden={}: id={} by={}", hidden, id, admin.id());
         }
     }
 

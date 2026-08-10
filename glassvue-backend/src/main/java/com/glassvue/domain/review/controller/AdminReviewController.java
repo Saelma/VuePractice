@@ -6,6 +6,8 @@ import com.glassvue.global.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
+import com.glassvue.global.security.AuthUser;
+import io.swagger.v3.oas.annotations.Parameter;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
@@ -47,9 +49,9 @@ public interface AdminReviewController {
 
                     이미 숨겨진 리뷰에 다시 보내면 **아무 일도 하지 않는다**(집계도 다시 내지 않는다).
                     """)
-    ResponseEntity<ApiResponse<Void>> hide(UUID id);
+    ResponseEntity<ApiResponse<Void>> hide(@Parameter(hidden = true) AuthUser admin, UUID id);
 
     @Operation(summary = "리뷰 숨김 해제 (관리자)",
             description = "숨김을 되돌린다. 목록·별점 집계에 다시 들어간다(관리자가 잘못 판단했을 때의 경로다).")
-    ResponseEntity<ApiResponse<Void>> unhide(UUID id);
+    ResponseEntity<ApiResponse<Void>> unhide(@Parameter(hidden = true) AuthUser admin, UUID id);
 }

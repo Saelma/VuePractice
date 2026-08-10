@@ -33,5 +33,25 @@ public enum AuditAction {
      * <p>⚠ {@code V43} 으로 CHECK 제약을 함께 넓혔다 — {@code ddl-auto=validate} 라 절대 자동으로
      * 안 따라온다(Oracle enum CHECK 트랩). 넓히는 방향이라 구 jar 는 영향받지 않는다.
      */
-    ORDER_CANCEL
+    ORDER_CANCEL,
+    /**
+     * 리뷰 숨김 / 해제 · 문의 숨김 / 해제 (B-18 잔여, 2026-08-10) — <b>콘텐츠 조치</b>.
+     *
+     * <p>⚠ <b>B-18 은 2026-08-04 에 «감사를 못 붙인다» 며 접었다.</b> 이유는 *"{@code AdminActionEvent}
+     * 가 회원 대상 설계라({@code targetId}=대상 회원) 리뷰에 안 맞는다"* 였는데, <b>그 전제가 틀렸다</b> —
+     * 리뷰에는 {@code authorId}, 문의에는 {@code authorId} 가 있다. 같은 날 {@link #ORDER_CANCEL} 을
+     * «대상=주문자» 로 붙이면서 드러났다: 갈리는 기준은 <b>도메인이 아니라 «대상에 회원이 있느냐»</b> 다.
+     *
+     * <p>대상은 <b>작성자</b>, 무엇을 숨겼는지는 {@code detail}(제목·상품명 등)에 넣는다.
+     *
+     * <p>🔴 <b>리뷰 숨김은 이미 배포된 기능이라 과거 조치는 감사에 없다</b> — 백필할 출처가 없다
+     * ({@code review.hidden} 은 현재 상태만 갖고 «누가 언제» 를 모른다). 원장이 오늘부터 시작한다는
+     * 뜻이고, 이건 «모르는 값» 이라 <b>지어내지 않는다</b>(V37 동의 시각과 같은 판단).
+     *
+     * <p>⚠ {@code V44} 로 CHECK 제약을 함께 넓혔다.
+     */
+    REVIEW_HIDE,
+    REVIEW_UNHIDE,
+    INQUIRY_HIDE,
+    INQUIRY_UNHIDE
 }

@@ -65,8 +65,9 @@ public class InquiryQueryService {
      * ⚠ 이름을 못 찾은 문의는 <b>목록에서 빼지 않고</b> 이름만 빈다. 상품이 지워졌거나(문의는 느슨한
      * UUID 참조라 함께 안 지워진다) 애초에 상품 문의가 아니어도(2단계의 일반 문의) <b>답은 해야 한다.</b>
      */
-    public PageResponse<AdminInquiryResponse> findForAdmin(InquiryStatus status, Pageable pageable) {
-        Page<Inquiry> page = inquiryRepository.findForAdmin(status, pageable);
+    public PageResponse<AdminInquiryResponse> findForAdmin(InquiryStatus status, Boolean hidden,
+                                                           Pageable pageable) {
+        Page<Inquiry> page = inquiryRepository.findForAdmin(status, hidden, pageable);
 
         List<UUID> productIds = page.getContent().stream()
                 .map(Inquiry::getProductId).filter(Objects::nonNull).distinct().toList();

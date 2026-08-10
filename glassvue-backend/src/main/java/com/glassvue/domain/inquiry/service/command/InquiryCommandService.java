@@ -3,6 +3,8 @@ package com.glassvue.domain.inquiry.service.command;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
 import com.glassvue.domain.image.service.ImageService;
 import com.glassvue.domain.inquiry.dto.GeneralInquiryCreateRequest;
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.inquiry.dto.InquiryAnswerRequest;
 import com.glassvue.domain.inquiry.dto.InquiryCreateRequest;
 import com.glassvue.domain.inquiry.dto.InquiryUpdateRequest;
@@ -36,6 +38,8 @@ public class InquiryCommandService {
     private final ProductQueryService productQueryService;
     private final ImageService imageService;
     private final ApplicationEventPublisher eventPublisher;
+    // 감사의 target_login 스냅샷용 — member 공개 API(도메인 간 직접 참조 금지, B-25 와 같은 창구)
+    private final com.glassvue.domain.member.service.MemberService memberService;
 
     /** 상품 문의 — 유형은 <b>경로가 정한다</b>(요청 본문에 type 이 없는 이유). */
     public UUID create(UUID productId, InquiryCreateRequest req, AuthUser user) {
@@ -132,6 +136,31 @@ public class InquiryCommandService {
             eventPublisher.publishEvent(new InquiryAnsweredEvent(
                     inquiry.getId(), inquiry.getProductId(), inquiry.getAuthorId(), inquiry.getTitle()));
         }
+    }
+
+    /**
+     * 관리자 숨김·해제 (2026-08-10, B-18 잔여). 권한은 경로가 건다({@code /api/admin/**}).
+     *
+     * <p>⚠ <b>실제로 바뀔 때만 감사를 남긴다.</b> 이미 숨겨진 것을 또 숨기는 요청에 감사를 발행하면
+     * 원장이 <b>일어나지 않은 조작</b>으로 채워지고, 나중에 «몇 번 숨겼나» 를 세는 사람이 틀린 답을 얻는다.
+     * (리뷰 쪽은 같은 반환값을 «집계를 다시 낼지» 에 쓴다 — 쓰임은 다르고 이유는 같다.)
+     *
+     * <p>⚠ 감사의 <b>대상은 문의가 아니라 작성자</b>다 — 감사 테이블의 target 은 회원이라 모양이 맞는다.
+     * 무엇을 숨겼는지는 {@code detail} 에 제목으로 남긴다(주문 취소가 주문번호를 넣는 것과 같다).
+     * ⚠ 제목은 <b>지금 값</b>이라 나중에 수정되면 감사와 어긋날 수 있는데, 그래도 id 보다 낫다 —
+     * 원장을 읽는 사람이 «무엇이었는지» 를 알아야 판단한다(감사가 닉네임을 스냅샷하는 것과 같은 판단).
+     */
+    public void setHidden(UUID id, boolean hidden, AuthUser admin) {
+        Inquiry inquiry = findById(id);
+        if (!inquiry.setHidden(hidden)) {
+            return;
+        }
+        eventPublisher.publishEvent(new AdminActionEvent(
+                hidden ? AuditAction.INQUIRY_HIDE : AuditAction.INQUIRY_UNHIDE,
+                admin.id(), admin.nickname(),
+                inquiry.getAuthorId(), memberService.loginIdOf(inquiry.getAuthorId()),
+                inquiry.getTitle()));
+        log.info("Inquiry hidden={}: id={} by={}", hidden, id, admin.id());
     }
 
     private Inquiry findById(UUID id) {

@@ -255,4 +255,36 @@ class AdminOrderCancelIntegrationTest {
     void unknown_order() throws Exception {
         cancel(UUID.randomUUID(), login(adminLoginId), BODY).andExpect(status().isNotFound());
     }
+
+    /**
+     * 🔴 <b>탈퇴 회원의 주문도 취소할 수 있어야 한다</b> (2026-08-10 발견, V45).
+     *
+     * <p>F-1 은 탈퇴 시 <b>주문을 남긴다</b>(매출). 그래서 {@code memberId} 가 <b>이미 없는 회원</b>을
+     * 가리키는 주문이 운영에 존재한다. 감사가 대상 loginId 를 조회하는데 {@code MEMBER_NOT_FOUND} 를
+     * 던지면 <b>조작 자체가 404</b> 로 막혔다 — <b>정확히 그 조작이 필요한 상황</b>인데.
+     *
+     * <p>⚠ 이 결함은 <b>B-25 를 배포한 뒤에</b> 리뷰 숨김 쪽에서 드러났다. 여기(주문)에는 그때
+     * 테스트가 없어서 <b>같은 구멍이 조용히 나가 있었다</b> — 그래서 되찾아 와 고정한다.
+     * ⚠ 감사 원장에는 {@code targetLogin} 이 <b>null</b> 로 남는다. 지어내지 않는 것이 규칙이다.
+     */
+    @Test
+    @DisplayName("🔴 탈퇴 회원의 주문도 관리자가 취소할 수 있다 — 감사 targetLogin 은 null")
+    void cancels_order_of_withdrawn_member() throws Exception {
+        // 주문만 남기고 회원은 없는 상태 = 탈퇴 후의 주문(F-1)
+        UUID goneMemberId = UUID.randomUUID();
+        Order order = orderRepository.save(Order.create(goneMemberId, MARK + "-탈퇴자",
+                List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, MARK + "-상품", null, 10_000, null, 1)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000,
+                uniqueOrderNo(), null, 0L, 0L));
+
+        cancel(order.getId(), login(adminLoginId), BODY).andExpect(status().isOk());
+
+        assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(OrderStatus.CANCELLED);
+        var log = auditLogRepository.findAll().stream()
+                .filter(l -> l.getAction() == AuditAction.ORDER_CANCEL && goneMemberId.equals(l.getTargetId()))
+                .findFirst().orElseThrow();
+        assertThat(log.getTargetLogin()).isNull();   // ⚠ 「없다」를 지어내지 않는다
+        assertThat(log.getDetail()).contains(order.getOrderNo());
+    }
 }

@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface InquiryRepositoryCustom {
+    /** 상품 문의 목록(공개). ⚠ <b>숨긴 문의는 빠진다</b>(V44, B-18). */
     Page<Inquiry> findByProduct(UUID productId, Pageable pageable);
 
     /**
@@ -15,8 +16,11 @@ public interface InquiryRepositoryCustom {
      * <p>{@code status} 가 null 이면 전체다(관리자 리뷰의 {@code hidden} 과 같은 «세 번째 상태» 규약).
      * 기본값을 여기서 정하지 않는 이유: 기본을 «미답변» 으로 보이게 하는 것은 <b>화면의 판단</b>이고,
      * API 가 그걸 박아 두면 «전체» 를 볼 방법이 사라진다.
+     *
+     * <p>🔴 {@code hidden} 도 같은 «세 번째 상태» 규약이다(null = 전부). ⚠ <b>여기만 숨김을
+     * 보여 준다</b> — 다른 두 목록은 빼지만, 관리자가 못 보면 <b>숨긴 것을 되돌릴 방법이 없다</b>.
      */
-    Page<Inquiry> findForAdmin(InquiryStatus status, Pageable pageable);
+    Page<Inquiry> findForAdmin(InquiryStatus status, Boolean hidden, Pageable pageable);
 
     /**
      * 내 문의 목록 — 상품 문의와 일반 문의를 <b>함께</b> 본다 (2026-08-07, G-3 3단계).

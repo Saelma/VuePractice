@@ -4,6 +4,8 @@ import com.glassvue.domain.review.dto.AdminReviewResponse;
 import com.glassvue.domain.review.service.command.ReviewCommandService;
 import com.glassvue.domain.review.service.query.ReviewQueryService;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.global.security.AuthUser;
+import com.glassvue.global.security.LoginUser;
 import com.glassvue.global.response.PageResponse;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -35,15 +37,15 @@ public class AdminReviewControllerImpl implements AdminReviewController {
 
     @Override
     @PostMapping("/{id}/hide")
-    public ResponseEntity<ApiResponse<Void>> hide(@PathVariable UUID id) {
-        reviewCommandService.setHidden(id, true);
+    public ResponseEntity<ApiResponse<Void>> hide(@LoginUser AuthUser admin, @PathVariable UUID id) {
+        reviewCommandService.setHidden(id, true, admin);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
     @Override
     @PostMapping("/{id}/unhide")
-    public ResponseEntity<ApiResponse<Void>> unhide(@PathVariable UUID id) {
-        reviewCommandService.setHidden(id, false);
+    public ResponseEntity<ApiResponse<Void>> unhide(@LoginUser AuthUser admin, @PathVariable UUID id) {
+        reviewCommandService.setHidden(id, false, admin);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 }

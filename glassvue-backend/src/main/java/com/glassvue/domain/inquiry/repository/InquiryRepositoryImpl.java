@@ -34,15 +34,14 @@ public class InquiryRepositoryImpl implements InquiryRepositoryCustom {
                 ? SortSupport.toOrders(pageable.getSort(), inquiry, SORTABLE)
                 : new OrderSpecifier<?>[]{inquiry.createdAt.desc()};
 
-        JPAQuery<Inquiry> content = queryFactory
-                .selectFrom(inquiry)
-                .where(inquiry.productId.eq(productId))
-                .orderBy(orders);
+        // 숨긴 문의는 빠진다(V44, B-18). ⚠ 목록·카운트가 **같은 조건**을 써야 한다 —
+        // 갈리면 "3건" 이라 써 놓고 목록엔 5줄이 뜬다(findForAdmin 에 적힌 그 규칙).
+        BooleanBuilder where = new BooleanBuilder()
+                .and(inquiry.productId.eq(productId))
+                .and(inquiry.hidden.isFalse());
 
-        JPAQuery<Long> count = queryFactory
-                .select(inquiry.count())
-                .from(inquiry)
-                .where(inquiry.productId.eq(productId));
+        JPAQuery<Inquiry> content = queryFactory.selectFrom(inquiry).where(where).orderBy(orders);
+        JPAQuery<Long> count = queryFactory.select(inquiry.count()).from(inquiry).where(where);
 
         return QueryDslSupport.page(content, count, pageable);
     }
@@ -56,7 +55,7 @@ public class InquiryRepositoryImpl implements InquiryRepositoryCustom {
      * <b>구조적으로 섞이지 않는다.</b> 「전체 문의」를 새로 조회하는 여기서만 신경 쓰면 된다.
      */
     @Override
-    public Page<Inquiry> findForAdmin(InquiryStatus status, Pageable pageable) {
+    public Page<Inquiry> findForAdmin(InquiryStatus status, Boolean hidden, Pageable pageable) {
         OrderSpecifier<?>[] orders = pageable.getSort().isSorted()
                 ? SortSupport.toOrders(pageable.getSort(), inquiry, SORTABLE)
                 : new OrderSpecifier<?>[]{inquiry.createdAt.desc()};
@@ -65,6 +64,11 @@ public class InquiryRepositoryImpl implements InquiryRepositoryCustom {
         BooleanBuilder where = new BooleanBuilder();
         if (status != null) {
             where.and(inquiry.status.eq(status));
+        }
+        // 🔴 **여기만 기본이 «전부»** 다(V44, B-18). 다른 두 목록은 숨김을 빼지만 관리자는 봐야 한다 —
+        //    안 보이면 숨긴 것을 **되돌릴 방법이 없다**. hidden 이 null 이면 숨김·노출을 함께 준다.
+        if (hidden != null) {
+            where.and(inquiry.hidden.eq(hidden));
         }
 
         JPAQuery<Inquiry> content = queryFactory.selectFrom(inquiry).where(where).orderBy(orders);
@@ -86,15 +90,15 @@ public class InquiryRepositoryImpl implements InquiryRepositoryCustom {
                 ? SortSupport.toOrders(pageable.getSort(), inquiry, SORTABLE)
                 : new OrderSpecifier<?>[]{inquiry.createdAt.desc()};
 
-        JPAQuery<Inquiry> content = queryFactory
-                .selectFrom(inquiry)
-                .where(inquiry.authorId.eq(authorId))
-                .orderBy(orders);
+        // 🔴 숨긴 문의는 **작성자 본인에게도** 빠진다(2026-08-10 결정, V44).
+        // 리뷰가 같은 결정을 했으므로 둘이 같은 규칙을 갖는다 — 여기만 보이게 하면
+        // «어느 목록에서 빠지나» 를 매번 되짚어야 하고, 조회 경로가 둘이라 한쪽만 고치는 사고가 난다.
+        BooleanBuilder where = new BooleanBuilder()
+                .and(inquiry.authorId.eq(authorId))
+                .and(inquiry.hidden.isFalse());
 
-        JPAQuery<Long> count = queryFactory
-                .select(inquiry.count())
-                .from(inquiry)
-                .where(inquiry.authorId.eq(authorId));
+        JPAQuery<Inquiry> content = queryFactory.selectFrom(inquiry).where(where).orderBy(orders);
+        JPAQuery<Long> count = queryFactory.select(inquiry.count()).from(inquiry).where(where);
 
         return QueryDslSupport.page(content, count, pageable);
     }

@@ -120,8 +120,47 @@ public class Inquiry extends BaseTimeEntity {
         this.status = InquiryStatus.WAITING;
     }
 
+    /**
+     * 관리자 숨김 (2026-08-10, V44, 백로그 B-18 잔여) — <b>삭제가 아니라 숨김</b>이다.
+     * 관리자가 잘못 판단할 수 있고, 그때 <b>원문이 남아 있어야</b> 되돌린다.
+     *
+     * <p>이 값이 닿는 자리는 <b>셋</b>이고 리뷰(V41)와 대응은 이렇다:
+     * <ul>
+     *   <li><b>상품 문의 목록</b>({@code findByProduct}) — <b>빠진다</b>. 리뷰 목록과 같다.</li>
+     *   <li><b>내 문의</b>({@code findByAuthor}) — <b>빠진다. 작성자 본인에게도</b>(2026-08-10 결정).
+     *       리뷰가 같은 결정을 했으므로 둘이 같은 규칙을 갖는다 — 갈라 두면 «어느 목록에서 빠지나» 를
+     *       매번 되짚어야 한다. 대가: 작성자는 자기 글이 소리 없이 사라졌다고 느낀다.</li>
+     *   <li><b>관리자 목록</b>({@code findForAdmin}) — <b>보인다</b>(필터로 가른다).
+     *       🔴 여기만 반대다. 안 보이면 <b>숨긴 것을 되돌릴 방법이 없다</b>.</li>
+     * </ul>
+     *
+     * <p>⚠ <b>리뷰에 있던 「상품당 1회 제한」 같은 자리가 여기엔 없다.</b> 리뷰는 숨겨도 그 제한에는
+     * 그대로 세야 했지만(안 그러면 숨기자마자 새로 써서 숨김이 무의미해진다), 문의는 <b>개수 제한도
+     * 집계도 없다</b> — 그래서 셋 중 «반대로 다뤄야 하는 자리» 가 관리자 목록 하나뿐이다.
+     */
+    @Column(nullable = false)
+    private boolean hidden;
+
     public boolean isOwnedBy(UUID memberId) {
         return authorId.equals(memberId);
+    }
+
+    /**
+     * 관리자 숨김·해제. {@code hidden} 만 바꾼다 — 본문·답변은 그대로 둔다(되돌릴 수 있어야 한다).
+     *
+     * <p>이미 그 상태면 <b>아무 일도 하지 않는다</b>. 반환값으로 호출부가 «감사를 남길지» 를 판단한다 —
+     * 안 바뀐 요청에 감사를 남기면 원장이 <b>일어나지 않은 조작</b>으로 채워진다.
+     * ⚠ 리뷰({@code Review#setHidden})는 같은 반환값을 «집계를 다시 낼지» 에 썼다. <b>쓰임은 다르고
+     * 이유는 같다</b>: 바뀌지 않은 것을 바뀐 것처럼 다루면 뒤따르는 것이 전부 헛돈다.
+     *
+     * @return 실제로 바뀌었으면 {@code true}
+     */
+    public boolean setHidden(boolean hidden) {
+        if (this.hidden == hidden) {
+            return false;
+        }
+        this.hidden = hidden;
+        return true;
     }
 
     public boolean isAnswered() {

@@ -43,7 +43,13 @@ public record AdminInquiryResponse(
         String answer,
         Instant answeredAt,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        /**
+         * 숨김 여부 (V44, B-18). ⚠ <b>관리자 목록에만</b> 실린다 — 다른 두 목록은 숨긴 문의를
+         * 아예 안 주므로 이 값을 실을 이유가 없다(«숨겨졌다» 를 알려 주는 것 자체가 노출이다).
+         * 화면은 이 값으로 「숨김」 배지와 숨김/해제 버튼을 가른다.
+         */
+        boolean hidden
 ) {
     public static AdminInquiryResponse from(Inquiry i, String productName) {
         return new AdminInquiryResponse(
@@ -60,6 +66,7 @@ public record AdminInquiryResponse(
                 i.getAnswer(),
                 i.getAnsweredAt(),
                 i.getCreatedAt(),
-                i.getUpdatedAt());
+                i.getUpdatedAt(),
+                i.isHidden());
     }
 }

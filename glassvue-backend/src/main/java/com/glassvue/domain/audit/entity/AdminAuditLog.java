@@ -43,8 +43,20 @@ public class AdminAuditLog extends BaseTimeEntity {
     @Column(name = "target_id", columnDefinition = "RAW(16)", nullable = false, updatable = false)
     private UUID targetId;
 
-    /** 조작 시점 대상 loginId 스냅샷. member.login_id 와 같은 50자. */
-    @Column(name = "target_login", nullable = false, updatable = false, length = 50)
+    /**
+     * 조작 시점 대상 loginId 스냅샷. member.login_id 와 같은 50자.
+     *
+     * <p>🔴 <b>2026-08-10 부터 nullable 이다</b>(V44). 처음엔 NOT NULL 이었고 그게 맞았다 —
+     * 대상이 <b>회원 그 자체</b>인 조작(정지·역할변경·삭제)뿐이었고, 그때는 대상이 반드시 존재했다.
+     *
+     * <p>콘텐츠 조치(리뷰 숨김·주문 취소)가 생기면서 전제가 깨졌다: <b>콘텐츠는 작성자보다 오래 산다.</b>
+     * F-1 이 탈퇴 시 주문·리뷰를 남기므로, 그 행이 가리키는 회원은 <b>이미 없을 수 있다.</b>
+     * NOT NULL 을 유지하면 «탈퇴 회원의 리뷰를 숨김» 같은 조작이 <b>통째로 실패</b>한다.
+     *
+     * <p>⚠ {@code null} 은 «조작 시점에 대상 회원이 이미 없었다» 는 <b>사실</b>이다.
+     * 닉네임이나 {@code "(탈퇴)"} 로 메우지 않는다 — 이 열로 조회하는 사람이 없는 계정을 찾게 된다.
+     */
+    @Column(name = "target_login", updatable = false, length = 50)
     private String targetLogin;
 
     /** 부가 설명. 역할변경이면 {@code "USER → ADMIN"} 같은 전/후. 정지·해제는 비어 있다. */

@@ -84,10 +84,27 @@ public class MemberService {
      * <p>⚠ 주문에는 {@code buyer_nickname} 스냅샷이 있지만 <b>그걸 쓰면 안 된다</b> — 감사 테이블의
      * 열 이름은 {@code target_login} 이고, 거기에 닉네임을 넣으면 <b>타입은 맞고 뜻이 틀린 값</b>이
      * 원장에 남는다. 나중에 loginId 로 조회하는 사람이 못 찾는다.
+     *
+     * <p>🔴 <b>회원이 없으면 예외가 아니라 {@code null} 이다</b> (2026-08-10 정정).
+     * 처음엔 {@code find()} 를 그대로 써서 {@code MEMBER_NOT_FOUND} 를 던졌는데, 그러면
+     * <b>탈퇴 회원을 대상으로 하는 관리자 조작이 통째로 404 로 막힌다</b>:
+     * <ul>
+     *   <li>F-1 은 탈퇴해도 <b>주문과 리뷰를 남긴다</b>(매출·별점 집계). 그 행의 {@code authorId}·
+     *       {@code memberId} 는 <b>이미 없는 회원</b>을 가리킨다.</li>
+     *   <li>즉 «탈퇴 회원의 주문을 관리자가 취소»·«탈퇴 회원의 리뷰를 숨김» 이 안 됐다 —
+     *       <b>정확히 그 조작이 필요한 상황</b>인데.</li>
+     * </ul>
+     * ⚠ <b>B-25 를 배포한 뒤에 드러났다</b>(같은 날). 기존 리뷰 숨김 테스트가 작성자를 실재하지 않는
+     * UUID 로 만들고 있었고, 감사를 붙이자 그게 404 로 터졌다 — <b>인위적으로 보이던 스텁이
+     * 운영의 실제 상태였다.</b>
+     *
+     * <p>⚠ 대신 «없다» 를 <b>거짓말로 메우지 않는다</b> — 닉네임을 넣거나 {@code "(탈퇴)"} 같은 값을
+     * 지어내면 {@code target_login} 으로 조회하는 사람이 있지도 않은 계정을 찾게 된다.
+     * {@code null} 이 «조작 시점에 이미 없었다» 는 사실이다(V37 이 동의 시각을 백필하지 않은 판단).
      */
     @Transactional(readOnly = true)
     public String loginIdOf(UUID memberId) {
-        return find(memberId).getLoginId();
+        return memberRepository.findById(memberId).map(Member::getLoginId).orElse(null);
     }
 
     public MemberResponse changeNickname(UUID memberId, String nickname) {
