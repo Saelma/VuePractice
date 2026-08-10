@@ -12,7 +12,7 @@ import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxSelectBox } from 'devextreme-vue/select-box';
-import { fetchAuditLogs, auditActionText, AUDIT_ACTION_LABEL } from '../api/audit';
+import { fetchAuditLogs, auditActionText, auditActionBadge, AUDIT_ACTION_LABEL } from '../api/audit';
 
 const form = ref({ action: null, targetLogin: '' });
 const applied = ref({ ...form.value });
@@ -46,12 +46,10 @@ function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
 }
 
-// 조작 종류별 뱃지 색: 정지=위험, 해제=성공, 역할변경=중립.
-function actionBadge(action) {
-  if (action === 'MEMBER_SUSPEND') return 'badge-danger';
-  if (action === 'MEMBER_UNSUSPEND') return 'badge-success';
-  return 'badge-neutral';
-}
+// 조작 종류별 뱃지 색 — 규칙과 목록은 api/audit.js 에 있다(라벨과 같은 자리).
+// ⚠ 여기 if 사슬로 두면 enum 이 늘 때마다 **조용히 회색으로 떨어진다** — 2026-08-10 에
+//    라벨이 9개 중 3개만 있던 것과 같은 드리프트다. 테스트가 대조할 수 있게 맵으로 뺐다.
+const actionBadge = auditActionBadge;
 </script>
 
 <template>
