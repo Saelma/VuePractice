@@ -87,6 +87,21 @@ export function cancelOrder(id, reason) {
   return apiPost(`/api/orders/${id}/cancel`, { reason: reason || null });
 }
 
+/**
+ * 주문 취소 — **관리자 대행**(ORDERED·PAID만). 사유 **필수** (2026-08-10, 백로그 B-25).
+ *
+ * ⚠ 경로가 본인 취소(`/cancel`)와 **다르다**. 같은 경로에 역할로 분기하지 않은 이유는
+ * 취소자 기록 때문이다 — 관리자가 `/cancel` 을 타면 `cancelledBy` 가 비고, 그 주문은
+ * 「본인이 취소했다」로 **거짓말을 한다**(NULL 이 본인이라는 뜻이다).
+ *
+ * ⚠ 사유를 `|| null` 로 눕히지 **않는다**. 본인 취소는 비워도 되지만 여기는 필수라,
+ * 빈 값이면 서버가 400 으로 돌려주는 게 맞다 — null 로 바꿔 보내면 그 400 이 «사유를
+ * 안 보냈다」가 아니라 «본문이 이상하다」로 보인다.
+ */
+export function adminCancelOrder(id, reason) {
+  return apiPost(`/api/orders/${id}/admin-cancel`, { reason });
+}
+
 /** 반품 요청(본인, DELIVERED만). 사유 필수. 승인 시 재고 복원 + 적립금 환불(2026-07-24 C-9). */
 export function requestReturn(id, reason) {
   return apiPost(`/api/orders/${id}/return-request`, { reason });

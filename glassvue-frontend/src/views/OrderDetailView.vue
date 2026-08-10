@@ -190,6 +190,19 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <span class="shrink-0 text-ink-500">사유</span>
             <span class="text-ink-900">{{ order.cancelReason }}</span>
           </p>
+          <!--
+            누가 취소했는지(V43, B-25). **관리자가 대신 취소한 경우에만** 뜬다 —
+            `cancelledByName` 이 null 이면 본인이 취소한 것이라 줄을 그리지 않는다.
+
+            ⚠ 이 줄이 없으면 고객은 **자기가 안 한 취소를 자기가 한 것으로 읽는다.**
+              화면이 「취소됨」 하나만 말하고 주체를 말하지 않으면, 기본값처럼 읽히는 주체는 본인이다.
+              (2026-08-07 취소 폼이 적립금 환불을 «말하지 않아서» 안 하는 줄 알았던 것의 반대 방향이다 —
+               그때는 침묵이 기능 부재를 가렸고, 여기선 침묵이 행위자를 가린다.)
+          -->
+          <p v-if="order.cancelledByName" class="mt-2 flex gap-3 text-sm">
+            <span class="shrink-0 text-ink-500">처리</span>
+            <span class="text-ink-900">고객센터에서 대신 취소했어요 ({{ order.cancelledByName }})</span>
+          </p>
         </template>
         <ol v-else class="flex items-start">
           <li v-for="(st, i) in STEPS" :key="st.key" class="flex flex-1 flex-col items-center text-center">

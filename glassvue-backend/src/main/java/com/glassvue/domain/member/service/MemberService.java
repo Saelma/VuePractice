@@ -74,6 +74,22 @@ public class MemberService {
         return find(memberId).isSuspended();
     }
 
+    /**
+     * loginId 조회 — 감사 기록의 {@code target_login} <b>스냅샷용</b> 공개 API (2026-08-10, B-25).
+     *
+     * <p>관리자 대행 주문 취소가 감사를 남길 때 대상(주문자)의 loginId 가 필요한데, order 도메인은
+     * {@code member} 테이블을 직접 읽지 않는다(도메인 간 직접 참조 금지). {@code isSuspended} 와
+     * <b>같은 성격의 창구</b>다 — 엔티티가 아니라 <b>필요한 값 하나만</b> 내준다.
+     *
+     * <p>⚠ 주문에는 {@code buyer_nickname} 스냅샷이 있지만 <b>그걸 쓰면 안 된다</b> — 감사 테이블의
+     * 열 이름은 {@code target_login} 이고, 거기에 닉네임을 넣으면 <b>타입은 맞고 뜻이 틀린 값</b>이
+     * 원장에 남는다. 나중에 loginId 로 조회하는 사람이 못 찾는다.
+     */
+    @Transactional(readOnly = true)
+    public String loginIdOf(UUID memberId) {
+        return find(memberId).getLoginId();
+    }
+
     public MemberResponse changeNickname(UUID memberId, String nickname) {
         Member member = find(memberId);
         // 닉네임은 유니크. 본인은 제외해 같은 값 재저장은 허용하고, 남이 쓰는 값이면 막는다.

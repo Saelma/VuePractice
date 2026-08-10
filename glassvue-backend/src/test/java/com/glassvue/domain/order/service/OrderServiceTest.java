@@ -174,14 +174,18 @@ class OrderServiceTest {
     void cancel_restoresStock() {
         UUID p1 = UUID.randomUUID();
         Order order = orderWith(OrderItem.of(p1, p1, null, "지바", null, 10_000, null, 3));
-        when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
-        orderService.cancel(orderId, memberId, "단순 변심");
+        // ⚠ **조회 키를 주문의 실제 id 로 맞춘다**(2026-08-10). 여기 있던 `orderId`(별개의 randomUUID)는
+        //    운영에서 나올 수 없는 스텁이었다 — findByIdAndMemberId(x) 가 id 가 x 가 **아닌** 주문을
+        //    돌려주는 상황이다. id 를 앱에서 만들므로(BaseTimeEntity) Order.create 가 이미 자기 id 를 갖는다.
+        //    B-25 리팩터가 재고 이력에 넘기는 값을 «요청 id» 에서 «엔티티 id» 로 바꾸자 이 어긋남이 드러났다.
+        when(orderRepository.findByIdAndMemberId(order.getId(), memberId)).thenReturn(Optional.of(order));
+        orderService.cancel(order.getId(), memberId, "단순 변심");
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         // 언제 취소됐는지도 남긴다 — updated_at은 다른 변경에도 갱신돼 취소 시각이라 단정할 수 없다.
         assertThat(order.getCancelledAt()).isNotNull();
         // 취소 사유도 같은 자리에 남는다(B-17) — 반품에만 있던 것을 취소에도 뒀다.
         assertThat(order.getCancelReason()).isEqualTo("단순 변심");
-        verify(productCommandService, times(1)).increaseStock(p1, 3, StockChangeReason.CANCEL, orderId);
+        verify(productCommandService, times(1)).increaseStock(p1, 3, StockChangeReason.CANCEL, order.getId());
         verify(eventPublisher).publishEvent(any(OrderCancelledEvent.class));
     }
 
@@ -197,6 +201,32 @@ class OrderServiceTest {
         verify(productCommandService, never()).increaseStock(
                 any(), org.mockito.ArgumentMatchers.anyLong(), any(), any());
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    /**
+     * 관리자 취소의 사유 가드는 <b>엔티티에도</b> 있다 (B-25, 2026-08-10).
+     *
+     * <p>⚠ <b>변형 주입에서 이 가드만 안 잡혔다.</b> HTTP 로는 {@code AdminOrderCancelRequest} 의
+     * {@code @NotBlank} 가 먼저 400 을 내서 이 줄에 <b>닿지 않기 때문</b>이다 — 통합 테스트로는
+     * 영원히 못 덮는 자리라 여기서 직접 부른다.
+     *
+     * <p>가드를 지우지 않고 남긴 이유: 이 메서드는 {@code cancelledBy} 를 채우는 <b>유일한 경로</b>이고,
+     * 사유 없이 통과하면 «누가 취소했는지는 아는데 왜인지는 모르는» 행이 남는다. DTO 를 안 거치는
+     * 호출부(배치·내부 호출)가 생기면 그때는 막을 것이 없다 — G-3 이 엔티티 생성자와 DB 제약
+     * <b>양쪽</b>에 같은 규칙을 둔 것과 같은 판단(WA §2-4-2).
+     */
+    @Test
+    @DisplayName("관리자 취소: 사유가 비면 엔티티가 막는다 — DTO 를 안 거치는 호출부 대비")
+    void cancelByAdmin_blankReasonRejectedByEntity() {
+        Order order = sampleOrder();
+        UUID adminId = UUID.randomUUID();
+        assertThatThrownBy(() -> order.cancelByAdmin("   ", adminId, "관리자"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> order.cancelByAdmin(null, adminId, "관리자"))
+                .isInstanceOf(IllegalArgumentException.class);
+        // ⚠ 거절됐으면 상태도 안 변해야 한다 — 사유만 막고 취소는 되면 최악이다.
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.ORDERED);
+        assertThat(order.getCancelledBy()).isNull();
     }
 
     @Test

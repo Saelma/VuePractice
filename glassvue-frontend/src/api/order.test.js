@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT,
-  DELIVERY_CARRIERS, shipOrder, deliverOrder, cancelOrder, resolveOrderStatusFilter,
+  DELIVERY_CARRIERS, shipOrder, deliverOrder, cancelOrder, adminCancelOrder, resolveOrderStatusFilter,
 } from './order';
 import { clearSession } from '../stores/auth';
 
@@ -104,6 +104,31 @@ describe('발송·배송완료 요청', () => {
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ reason: null });
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ reason: null });
+  });
+
+  // 관리자 대행 취소(2026-08-10, B-25). 본인 취소와 **경로도 사유 규칙도 다르다.**
+  it('adminCancelOrder는 admin-cancel 경로로 POST한다 — 본인 취소와 경로가 갈린다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okRes);
+    global.fetch = fetchMock;
+
+    await adminCancelOrder('order-1', '고객 요청 (CS 대행)');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    // ⚠ /cancel 이 아니다. 같은 경로에 역할로 분기하면 관리자가 본인 취소 경로를 타 취소자가 안 남는다.
+    expect(url.pathname).toBe('/api/orders/order-1/admin-cancel');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ reason: '고객 요청 (CS 대행)' });
+  });
+
+  it('⚠ adminCancelOrder는 빈 사유를 null 로 눕히지 **않는다** — 서버가 400 으로 거절해야 맞다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okRes);
+    global.fetch = fetchMock;
+
+    await adminCancelOrder('order-1', '');
+
+    // cancelOrder 와 정반대다. 여기서 null 로 바꿔 보내면 서버의 400 이 「사유를 안 썼다」가 아니라
+    // 「본문이 이상하다」로 보여, 화면이 사용자에게 무엇을 고치라고 말할 수 없게 된다.
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ reason: '' });
   });
 });
 

@@ -5,6 +5,7 @@ import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.domain.order.dto.ReturnRequest;
 import com.glassvue.domain.order.service.OrderService;
+import com.glassvue.domain.order.dto.AdminOrderCancelRequest;
 import com.glassvue.domain.order.dto.OrderCancelRequest;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderShipRequest;
@@ -81,6 +82,17 @@ public class OrderControllerImpl implements OrderController {
             //    이걸 빼면 기존 호출(본문 없는 POST)이 전부 400 이 된다.
             @Valid @RequestBody(required = false) OrderCancelRequest request) {
         orderService.cancel(id, user.id(), OrderCancelRequest.reasonOf(request));
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    // 관리자 대행 취소는 관리자만 — SecurityConfig 의 /admin-cancel 매처가 막는다(ship·deliver 와 같은 방식).
+    // ⚠ 조회 전용인 AdminOrderController 가 아니라 여기 둔다 — 관리자 주문 «조작» 은 발송·배송완료·
+    //    반품승인/거절이 전부 /api/orders/{id}/… 에 있다(2026-08-10 실측). 새 자리를 만들면 규약이 갈린다.
+    @Override
+    @PostMapping("/{id}/admin-cancel")
+    public ResponseEntity<ApiResponse<Void>> cancelByAdmin(@LoginUser AuthUser admin, @PathVariable UUID id,
+                                                           @Valid @RequestBody AdminOrderCancelRequest request) {
+        orderService.cancelByAdmin(id, admin, request.reason());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 

@@ -32,7 +32,16 @@ public record AdminOrderResponse(
         String summary,
         Instant createdAt,
         Instant paidAt,
-        Instant shippedAt
+        Instant shippedAt,
+        /**
+         * 취소한 관리자 닉네임 스냅샷 — <b>NULL 이면 주문자 본인이 취소</b>했다는 뜻이다 (B-25, 2026-08-10).
+         *
+         * <p>⚠ 감사 로그에도 남지만 그건 {@code SUPER_ADMIN} 만 조회할 수 있어, <b>일반 ADMIN 이
+         * «이 주문 누가 취소했지» 를 볼 유일한 경로</b>가 여기다.
+         */
+        String cancelledByName,
+        /** 취소 사유(V40). 본인 취소는 없을 수 있고, 관리자 취소는 <b>반드시 있다</b>. */
+        String cancelReason
 ) {
     public static AdminOrderResponse from(Order o) {
         int count = o.getItems().size();
@@ -52,6 +61,8 @@ public record AdminOrderResponse(
                 count <= 1 ? first : first + " 외 " + (count - 1) + "건",
                 o.getCreatedAt(),
                 o.getPaidAt(),
-                o.getShippedAt());
+                o.getShippedAt(),
+                o.getCancelledByName(),
+                o.getCancelReason());
     }
 }

@@ -1,5 +1,6 @@
 package com.glassvue.domain.order.controller;
 
+import com.glassvue.domain.order.dto.AdminOrderCancelRequest;
 import com.glassvue.domain.order.dto.OrderCancelRequest;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
@@ -58,6 +59,18 @@ public interface OrderController {
                     """)
     ResponseEntity<ApiResponse<Void>> cancel(@Parameter(hidden = true) AuthUser user, UUID id,
             @Valid OrderCancelRequest request);
+
+    @Operation(summary = "주문 취소 — 관리자 대행 (ORDERED·PAID만)", description = """
+            CS 로 "취소해 주세요" 가 들어왔을 때 관리자가 대신 취소한다 (B-25, 2026-08-10).
+
+            **본인 취소와 같은 것**: 허용 상태(ORDERED·PAID) · 재고 복원 · 쓴 적립금 환불 · 구매자 알림.
+            **다른 것**: 사유가 **필수**이고, 누가 취소했는지가 `cancelledByName` 에 남으며 감사 로그에도 남는다.
+
+            ⚠ **발송 이후는 여기서 못 한다** — 물건이 나가 있어 회수 절차가 필요하고, 그 자리는
+            반품(요청 → 관리자 승인)이 맡는다. 열어 두면 돌아오지도 않은 물건으로 재고가 복원된다.
+            """)
+    ResponseEntity<ApiResponse<Void>> cancelByAdmin(@Parameter(hidden = true) AuthUser admin, UUID id,
+            @Valid AdminOrderCancelRequest request);
 
     @Operation(summary = "반품 요청 (본인, DELIVERED만)",
             description = "관리자 승인 시 옵션 재고 복원 + 결제금액을 적립금으로 환불하고 그 주문의 적립을 회수한다.")

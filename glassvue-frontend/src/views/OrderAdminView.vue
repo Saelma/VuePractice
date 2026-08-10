@@ -13,6 +13,7 @@ import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-gri
 import { DxTextBox } from 'devextreme-vue/text-box';
 import {
   fetchAdminOrders, fetchAdminOrderCounts, shipOrder, deliverOrder, approveReturn, rejectReturn,
+  adminCancelOrder,
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT, DELIVERY_CARRIERS,
   resolveOrderStatusFilter,
 } from '../api/order';
@@ -116,6 +117,37 @@ async function submitShip() {
     await loadCounts(); // 발송 대기 건수가 즉시 줄어드는 게 보이게
   } catch (e) {
     shipError.value = e.message;
+  }
+}
+
+/**
+ * 관리자 대행 취소 (2026-08-10, 백로그 B-25).
+ *
+ * ⚠ 발송 처리와 **같은 패널 패턴**이고 confirm 이 아니다 — 사유가 필수라 입력받을 자리가 필요하다.
+ *    반품 승인·거절이 confirm 인 것과 갈리는 이유가 이거다(그쪽은 입력이 없다).
+ * ⚠ 되돌릴 수 없는 조작이라 **무엇이 따라오는지**를 패널에 적는다(재고 복원·적립금 환불·고객 알림).
+ */
+const cancelTarget = ref(null);
+const cancelError = ref('');
+function openCancel(row) {
+  cancelError.value = '';
+  cancelTarget.value = { id: row.id, buyer: row.buyerNickname, orderNo: row.orderNo, reason: '' };
+}
+async function submitCancel() {
+  const reason = cancelTarget.value.reason.trim();
+  // 서버도 @NotBlank 로 막지만 화면에서 먼저 거른다(왕복 절약) — 송장번호와 같은 방식.
+  if (!reason) {
+    cancelError.value = '취소 사유를 입력해 주세요. 고객이 아닌 관리자가 취소한 주문은 사유가 유일한 단서입니다.';
+    return;
+  }
+  cancelError.value = '';
+  try {
+    await adminCancelOrder(cancelTarget.value.id, reason);
+    cancelTarget.value = null;
+    gridRef.value?.instance.refresh();
+    await loadCounts();
+  } catch (e) {
+    cancelError.value = e.message;
   }
 }
 
@@ -226,6 +258,35 @@ function fmt(v) {
       <p v-if="shipError" class="alert-error mt-3">{{ shipError }}</p>
     </div>
 
+    <!--
+      관리자 대행 취소(B-25). 발송 패널과 같은 자리·같은 모양 — 사유가 필수라 confirm 으로 못 한다.
+      ⚠ 되돌릴 수 없으므로 **무엇이 따라오는지**를 적는다. 반품 승인 confirm 이 「재고 복원 + 적립금
+        환불」을 말하는 것과 같은 규칙이다(조작 전에 결과를 읽게 한다).
+    -->
+    <div v-if="cancelTarget" class="card mb-4 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="section-title">주문 취소 — {{ cancelTarget.buyer }}님의 주문 ({{ cancelTarget.orderNo }})</h2>
+        <span class="muted">재고가 복원되고, 쓴 적립금은 돌려드리며, 고객에게 취소 알림이 갑니다. 되돌릴 수 없습니다.</span>
+      </div>
+      <div class="mt-3 flex flex-wrap items-end gap-3">
+        <label class="block grow">
+          <span class="muted mb-1 block">취소 사유 <strong>(필수)</strong></span>
+          <input
+            v-model="cancelTarget.reason"
+            class="field w-full"
+            placeholder="예) 고객 요청 — 전화 접수"
+            maxlength="500"
+            @keyup.enter="submitCancel"
+          />
+        </label>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-primary" @click="submitCancel">취소 처리</button>
+          <button type="button" class="btn btn-secondary" @click="cancelTarget = null; cancelError = ''">닫기</button>
+        </div>
+      </div>
+      <p v-if="cancelError" class="alert-error mt-3">{{ cancelError }}</p>
+    </div>
+
     <DxDataGrid
       ref="gridRef"
       :data-source="store"
@@ -272,6 +333,16 @@ function fmt(v) {
             <button type="button" class="btn btn-secondary btn-sm" @click="onReturnApprove(data.data)">반품승인</button>
             <button type="button" class="btn btn-ghost btn-sm" @click="onReturnReject(data.data)">거절</button>
           </template>
+          <!--
+            취소는 발송 전(ORDERED·PAID)에만 뜬다 — 서버의 isCancellable() 과 같은 조건이다.
+            ⚠ 발송 후에 버튼이 보이면 눌러 보고 400 을 받는데, 그건 화면이 «될 것처럼» 보여 준 탓이다.
+          -->
+          <button
+            v-if="data.data.status === 'ORDERED' || data.data.status === 'PAID'"
+            type="button"
+            class="btn btn-ghost btn-sm"
+            @click="openCancel(data.data)"
+          >취소</button>
           <button type="button" class="btn btn-ghost btn-sm" @click="router.push(`/orders/${data.data.id}`)">상세</button>
         </div>
       </template>

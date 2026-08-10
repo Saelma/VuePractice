@@ -44,6 +44,11 @@ public record OrderResponse(
         // 취소 사유(V40, B-17). **선택**이라 취소된 주문이어도 null 일 수 있고,
         // V40 이전에 취소된 주문은 **전부** null 이다(백필하지 않았다) — 화면은 값이 있을 때만 줄을 그린다.
         String cancelReason,
+        // 🔴 취소한 관리자 닉네임 (V43, B-25). **NULL 이면 본인이 취소한 것**이다.
+        // ⚠ 고객에게도 내려준다 — 남이 취소한 주문을 «내가 취소한 것» 처럼 보여주면, 고객은
+        //    자기가 안 한 일을 자기가 했다고 읽는다. 그게 CS 문의로 되돌아온다.
+        //    (반대로 본인 취소에 «관리자» 라고 쓸 일은 없다 — NULL 이면 화면이 줄을 안 그린다.)
+        String cancelledByName,
         Instant deliveredAt,
         // 반품(V24). 요청·완료 시각과 사유·환불액. 반품이 없었으면 전부 null/0.
         String returnReason,
@@ -90,6 +95,7 @@ public record OrderResponse(
                 o.getShippedAt(),
                 o.getCancelledAt(),
                 o.getCancelReason(),
+                o.getCancelledByName(),
                 o.getDeliveredAt(),
                 o.getReturnReason(),
                 o.getReturnRequestedAt(),

@@ -1,5 +1,7 @@
 package com.glassvue.domain.order.service;
 
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.cart.dto.CartItemResponse;
 import com.glassvue.domain.cart.dto.CartResponse;
 import com.glassvue.domain.cart.service.CartService;
@@ -302,15 +304,62 @@ public class OrderService {
     public void cancel(UUID id, UUID memberId, String reason) {
         Order order = orderRepository.findByIdAndMemberId(id, memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        requireCancellable(order);
+        order.cancel(reason);
+        applyCancellation(order);
+        log.info("Order cancelled: {} refundedPoint={}", id, order.getUsedPoint());
+    }
+
+    /**
+     * 관리자 대행 취소 (2026-08-10, 백로그 B-25).
+     *
+     * <p>⚠ <b>본인 취소와 다른 것은 「누구의 주문을 찾는가」와 「누가 했는지 남기는가」 둘뿐</b>이다.
+     * 재고 복원·적립금 환불·알림은 {@link #applyCancellation} 로 <b>같은 코드를 탄다</b> —
+     * 갈라 두면 한쪽만 고쳐지고, 그 어긋남은 <b>돈에서 난다</b>(2026-08-07 에 취소가 적립금을 안 돌려주던
+     * 것이 정확히 «반품만 고쳐진» 비대칭이었다, WA §1-2-1).
+     *
+     * <p>⚠ <b>허용 상태는 본인과 같다</b>({@code ORDERED}·{@code PAID}) — {@link Order#isCancellable} 을
+     * 그대로 쓴다. 발송 이후는 물건이 나가 있어 <b>회수 절차</b>가 필요한데, 그 자리는 이미
+     * 반품(요청 → 관리자 승인)이 맡고 있다. 여기서 발송 후를 열면 재고를 <b>돌아오지도 않은 물건</b>으로
+     * 복원하게 된다(2026-08-10 결정).
+     *
+     * <p>⚠ 감사 기록은 {@code AdminActionEvent} 로만 낸다 — order 가 audit 을 직접 부르지 않는다
+     * (도메인 간 직접 참조 금지). 같은 트랜잭션이라 <b>감사가 실패하면 취소도 롤백</b>된다.
+     */
+    @Transactional
+    public void cancelByAdmin(UUID id, AuthUser actor, String reason) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        requireCancellable(order);
+        order.cancelByAdmin(reason, actor.id(), actor.nickname());
+        applyCancellation(order);
+        // ⚠ 대상은 «주문» 이 아니라 «주문자» 다 — 감사 테이블의 target 은 회원이라 모양이 맞는다.
+        //   주문 자체는 detail 에 주문번호로 남긴다(B-18 에서 리뷰에 감사를 못 붙인 이유가 여기엔 없다).
+        eventPublisher.publishEvent(new AdminActionEvent(
+                AuditAction.ORDER_CANCEL, actor.id(), actor.nickname(),
+                order.getMemberId(), memberService.loginIdOf(order.getMemberId()),
+                order.getOrderNo() + " / " + reason));
+        log.info("Order cancelled by admin: {} admin={} refundedPoint={}",
+                id, actor.id(), order.getUsedPoint());
+    }
+
+    private void requireCancellable(Order order) {
         if (!order.isCancellable()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_CANCELLABLE);
         }
-        order.cancel(reason);
+    }
+
+    /**
+     * 취소가 확정된 뒤 <b>따라와야 하는 일 전부</b> — 재고 복원 → 적립금 환불 → 알림.
+     *
+     * <p>⚠ 순서가 규약이다(반품 승인과 동일): <b>재고 → 환불 → 이벤트</b>. 앞의 둘은 동기이고
+     * 이벤트만 뒤에 온다 — 알림이 «취소됐다» 고 말하는 시점에는 재고도 적립금도 이미 맞아 있어야 한다.
+     */
+    private void applyCancellation(Order order) {
         order.getItems().forEach(it -> productCommandService.increaseStock(
-                it.getVariantId(), it.getQuantity(), StockChangeReason.CANCEL, id));
-        pointService.refundCancelledOrder(order.getMemberId(), order.getUsedPoint(), id);
+                it.getVariantId(), it.getQuantity(), StockChangeReason.CANCEL, order.getId()));
+        pointService.refundCancelledOrder(order.getMemberId(), order.getUsedPoint(), order.getId());
         eventPublisher.publishEvent(OrderCancelledEvent.from(order));
-        log.info("Order cancelled: {} refundedPoint={}", id, order.getUsedPoint());
     }
 
     /**

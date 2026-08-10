@@ -133,10 +133,40 @@ public class Order extends BaseTimeEntity {
      * 길이·semantics 는 {@link #returnReason} 과 <b>같게</b> 맞춘다 — 같은 성격의 값이라 갈리면
      * 한쪽에서 되던 입력이 다른 쪽에서 터진다(WA §2-2-1).
      *
-     * <p>⚠ 행위자 컬럼은 두지 않는다 — <b>취소자는 항상 주문자 본인</b>이다(관리자 취소 API 가 없다).
+     * <p>🔴 <b>2026-08-10 정정</b>: 여기 *"행위자 컬럼은 두지 않는다 — 취소자는 항상 주문자 본인이다"*
+     * 라고 적혀 있었다. <b>B-25 가 그 전제를 깼다</b> — 관리자도 취소할 수 있게 되면서 아래
+     * {@link #cancelledBy} 가 생겼다. 전제에 기대어 «안 만든다» 고 적은 주석은 전제가 바뀌면
+     * <b>틀린 설명으로 남는다</b>. 그래서 지우지 않고 정정해 둔다.
+     *
+     * <p>⚠ 사유의 <b>필수 여부는 누가 취소하느냐로 갈린다</b>: 본인 취소는 선택(위), 관리자 취소는
+     * <b>필수</b>다({@code AdminOrderCancelRequest}). 고객은 자기가 왜 취소했는지 알지만,
+     * 남이 취소한 주문은 <b>사유가 유일한 단서</b>다.
      */
     @Column(name = "cancel_reason", length = 500)
     private String cancelReason;
+
+    /**
+     * 취소한 관리자 id — <b>관리자 취소일 때만</b> 채워진다 (2026-08-10, V43, 백로그 B-25).
+     *
+     * <p>⚠ <b>NULL 이 «본인이 취소했다» 는 뜻</b>이다. 별도 플래그를 두지 않은 이유: 플래그와 id 가
+     * 어긋난 행(플래그는 true 인데 id 가 NULL 등)이 생길 수 있고, 그런 행은 <b>앱이 멀쩡히 돌면서</b>
+     * 화면에만 이상하게 나온다(G-3 의 {@code product_id}·{@code inquiry_type} 쌍에서 겪은 그 모양).
+     * 값 하나면 어긋날 자리가 없다.
+     * <p>⚠ 기존 취소 주문은 <b>백필하지 않는다</b> — 관리자 취소가 없던 시절이라 NULL 이 **사실**이다
+     * (V40·V39 와 같은 판단. V41 이 백필한 것은 «아니다» 가 사실이어서였다).
+     */
+    @Column(name = "cancelled_by")
+    private UUID cancelledBy;
+
+    /**
+     * 취소한 관리자 닉네임 <b>스냅샷</b> (2026-08-10, V43).
+     *
+     * <p>⚠ id 만으로는 못 보여준다 — 관리자 계정은 <b>강제 삭제될 수 있고</b>(B-24) 닉네임도 바뀐다.
+     * 감사 로그가 {@code actor_name}·{@code target_login} 을 스냅샷으로 뜨는 것과 <b>같은 이유·같은 방식</b>이다.
+     * 조인으로 풀면 관리자가 지워진 순간 «누가 취소했는지» 가 화면에서 사라진다.
+     */
+    @Column(name = "cancelled_by_name", length = 50)
+    private String cancelledByName;
 
     // --- 배송 추적(V13) ---
     // 발송 처리는 있었지만 고객이 추적할 방법이 없었다. 배송지(V11)가 "어디로 보낼지"라면 이건 "어떻게 갔는지"다.
@@ -285,10 +315,32 @@ public class Order extends BaseTimeEntity {
      * 없는 것과 있는데 비어 보이는 것은 다르게 다뤄야 하므로 여기서 NULL 로 눕힌다.
      * {@code requestReturn} 은 사유가 필수라 이 가드가 없다(그쪽은 화면·DTO 가 빈 값을 막는다).
      */
+    /** 본인 취소. 행위자 컬럼은 비워 둔다 — <b>NULL 이 «주문자 본인» 을 뜻한다</b>({@link #cancelledBy}). */
     public void cancel(String reason) {
         this.status = OrderStatus.CANCELLED;
         this.cancelledAt = Instant.now();
         this.cancelReason = (reason == null || reason.isBlank()) ? null : reason.trim();
+    }
+
+    /**
+     * 관리자 대행 취소 (2026-08-10, B-25). 상태 전이는 본인 취소와 <b>완전히 같고</b> 행위자만 더 남는다.
+     *
+     * <p>⚠ {@link #cancel} 을 부르고 행위자를 덧칠하는 식으로 쓰지 않는다 — 두 줄로 나뉘면
+     * <b>한쪽만 부른 호출부</b>가 생길 수 있고, 그러면 «관리자가 취소했는데 NULL 인» 행이 남는다.
+     * 그 행은 위 {@link #cancelledBy} 규칙상 «본인이 취소했다» 로 <b>거짓말을 한다.</b>
+     * 한 메서드 안에서 함께 정해야 어긋날 자리가 없다.
+     *
+     * @param reason    <b>필수</b>다(호출부 DTO 가 {@code @NotBlank} 로 막는다). 남이 취소한 주문은
+     *                  사유가 유일한 단서라, 여기서도 빈 값이면 그대로 두지 않고 막는다.
+     * @param adminName 닉네임 스냅샷 — 관리자가 지워지거나 개명해도 남아야 한다.
+     */
+    public void cancelByAdmin(String reason, UUID adminId, String adminName) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("관리자 취소에는 사유가 필요하다");
+        }
+        cancel(reason);
+        this.cancelledBy = adminId;
+        this.cancelledByName = adminName;
     }
 
     /** 배송완료 주문만 반품 요청할 수 있다(운송 중·미결제 주문은 취소로 처리). */
