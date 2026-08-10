@@ -48,9 +48,44 @@ export function inquiryStatusText(status) {
  *    ⚠ 「전체」에 `'ALL'` 같은 문자열을 보내면 서버가 enum 변환에 실패해 **400** 이고,
  *    화면에는 그게 "문의가 없다" 로 보인다(관리자 주문·리뷰에서 두 번 겪은 자리).
  */
-export function fetchAdminInquiries({ status = null, page = 0, size = 20, sort = null } = {}) {
-  return apiGet('/api/admin/inquiries', { status, page, size, sort });
+export function fetchAdminInquiries({
+  status = null, hidden = null, page = 0, size = 20, sort = null,
+} = {}) {
+  return apiGet('/api/admin/inquiries', { status, hidden, page, size, sort });
 }
+
+/**
+ * 문의 숨김(관리자) — 2026-08-10, 백로그 B-18 잔여. **삭제가 아니라 숨김**이다.
+ *
+ * 숨기면 **상품 문의 목록**과 **내 문의**에서 빠진다 — ⚠ **작성자 본인에게도** 안 보인다
+ * (리뷰 숨김과 같은 규칙). 🔴 **관리자 목록에는 남는다** — 안 남으면 되돌릴 방법이 없다.
+ *
+ * ⚠ **리뷰 숨김과 「닿는 자리」가 다르다.** 리뷰는 숨기면 **평균 별점·리뷰 수까지** 움직이는데
+ * 문의는 집계도 개수 제한도 없다. 그래서 확인 문구에 별점 얘기를 옮겨 오면 **틀린 말**이 된다.
+ *
+ * ⚠ 이미 숨긴 문의에 또 호출해도 **200** 이다. 다만 아무 일도 안 하고 **감사도 안 남긴다**
+ * (일어나지 않은 조작을 원장에 적지 않는다).
+ */
+export function hideInquiry(id) {
+  return apiPost(`/api/admin/inquiries/${id}/hide`);
+}
+
+/** 숨김 해제(관리자). 다시 상품 문의 목록·내 문의에 나타난다. 감사에 `INQUIRY_UNHIDE` 로 남는다. */
+export function unhideInquiry(id) {
+  return apiPost(`/api/admin/inquiries/${id}/unhide`);
+}
+
+/**
+ * 숨김 필터 선택지 — `status` 와 같은 **세 가지 상태**다(`null` = 전체).
+ *
+ * ⚠ `false` 를 falsy 로 다루면 안 된다. `apiGet` 은 **`null` 만 빼고 `false` 는 보내므로**
+ * 호출부에서 `hidden || undefined` 같은 처리를 하면 「보이는 것만」이 「전체」가 되어 조용히 틀린다.
+ */
+export const INQUIRY_HIDDEN_OPTIONS = [
+  { value: false, text: '보이는 것만' },
+  { value: true, text: '숨긴 것만' },
+  { value: null, text: '전체' },
+];
 
 /**
  * 상태 필터 선택지.

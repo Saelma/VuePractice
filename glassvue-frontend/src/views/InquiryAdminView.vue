@@ -23,11 +23,19 @@ import { DxSelectBox } from 'devextreme-vue/select-box';
 //    되어 입력칸이 통째로 안 그려지고, 빌드도 테스트도 통과한다(2026-08-03 에 실제로 겪었다).
 import { DxTextArea } from 'devextreme-vue/text-area';
 import {
-  fetchAdminInquiries, answerInquiry, INQUIRY_STATUS_OPTIONS, inquiryTypeText,
+  fetchAdminInquiries, answerInquiry, hideInquiry, unhideInquiry,
+  INQUIRY_STATUS_OPTIONS, INQUIRY_HIDDEN_OPTIONS, inquiryTypeText,
 } from '../api/inquiry';
 
 // 기본 「답변대기」 — 목록을 여는 이유가 그것이다(위 주석).
-const filter = ref({ status: 'WAITING' });
+//
+// 🔴 숨김 기본은 **「보이는 것만」(false)** 이고, 관리자 리뷰 화면(기본 「전체」)과 **일부러 다르다**.
+//    숨김과 답변 상태는 **독립**이라, 숨긴 미답변 문의가 「답변대기」 목록에 그대로 남는다 —
+//    부적절해서 내린 문의를 매번 건너뛰며 «답할 것» 을 세게 된다.
+//    리뷰 화면은 «숨길 것을 찾는» 용도라 전체가 맞고, 여기는 «답할 것을 찾는» 용도라 다르다.
+// ⚠ 이건 **화면의 판단**이다 — 서버는 안 보내면 전체를 준다(`status` 기본값과 같은 규칙).
+//    숨긴 것은 필터로 언제든 볼 수 있고, 목록에 뜰 때는 「숨김」 배지로 구분된다.
+const filter = ref({ status: 'WAITING', hidden: false });
 const gridRef = ref(null);
 const error = ref('');
 
@@ -44,7 +52,11 @@ const store = new CustomStore({
     try {
       // ⚠ status 는 null 을 그대로 넘긴다 — apiGet 이 null 만 뺀다.
       //    'ALL' 같은 문자열을 지어 보내면 서버가 400 을 내고, 화면엔 그게 "문의가 없다" 로 보인다.
-      const res = await fetchAdminInquiries({ status: filter.value.status, page, size });
+      // ⚠ hidden 도 같다. 다만 여기는 **false 가 의미 있는 값**이라 falsy 처리를 하면 안 된다 —
+      //    `hidden || undefined` 로 쓰면 「보이는 것만」이 조용히 「전체」가 된다.
+      const res = await fetchAdminInquiries({
+        status: filter.value.status, hidden: filter.value.hidden, page, size,
+      });
       error.value = '';
       return { data: res.content, totalCount: res.totalElements };
     } catch (e) {
@@ -63,6 +75,31 @@ function applyFilter() {
 function startAnswer(row) {
   editing.value = row;
   answerText.value = row.answer || ''; // 이미 답한 문의는 고쳐 쓰는 것이라 원문을 채워 둔다
+}
+
+/**
+ * 숨김 · 해제 (B-18 잔여, 2026-08-10).
+ *
+ * ⚠ **문구를 리뷰 화면에서 그대로 옮겨 오지 않았다.** 리뷰는 숨기면 평균 별점·리뷰 수까지
+ *    움직이지만 문의는 집계가 없다 — 그대로 복사하면 **없는 결과를 예고하는 문구**가 된다.
+ *    대신 문의에만 있는 것을 적는다: 「내 문의」에서도 빠지고, 작성자 본인에게도 안 보인다.
+ * ⚠ 답변 카드를 열어 둔 채 숨기면 사라진 줄을 편집 중인 상태가 되므로 함께 닫는다.
+ */
+async function toggleHidden(row) {
+  const willHide = !row.hidden;
+  const message = willHide
+    ? '이 문의를 숨길까요?\n\n상품 문의 목록과 「내 문의」에서 사라집니다.\n(작성자 본인에게도 보이지 않습니다.)\n\n관리자 목록에는 남고, 되돌릴 수 있습니다.'
+    : '숨김을 해제할까요?\n\n다시 상품 문의 목록과 「내 문의」에 나타납니다.';
+  if (!window.confirm(message)) return;
+
+  error.value = '';
+  try {
+    await (willHide ? hideInquiry(row.id) : unhideInquiry(row.id));
+    editing.value = null;
+    gridRef.value?.instance.refresh();
+  } catch (e) {
+    error.value = e.message;
+  }
 }
 
 function cancelAnswer() {
@@ -115,6 +152,8 @@ function productText(row) {
       <p class="muted mt-1">
         상품을 <strong>가로질러</strong> 문의를 봅니다. 기본은 <strong>답변대기</strong>이고,
         답변을 저장하면 작성자에게 <strong>알림이 갑니다</strong>(첫 답변에만).
+        부적절한 문의는 <strong>숨김</strong> 처리합니다 — 삭제가 아니라 되돌릴 수 있고,
+        숨겨도 <strong>이 목록에는 남습니다</strong>.
       </p>
     </div>
 
@@ -126,6 +165,22 @@ function productText(row) {
         <DxSelectBox
           v-model:value="filter.status"
           :items="INQUIRY_STATUS_OPTIONS"
+          display-expr="text"
+          value-expr="value"
+          :width="160"
+          @value-changed="applyFilter"
+        />
+      </label>
+      <!--
+        숨김 필터(B-18 잔여). 기본은 「보이는 것만」 — 근거는 스크립트의 filter 주석.
+        ⚠ 이 칸이 없으면 숨긴 문의를 **되돌릴 방법이 없다**. 서버가 관리자 목록에만 숨긴 것을
+          남겨 두는 이유가 그거라, 화면에 필터가 따라오지 않으면 그 설계가 무의미해진다.
+      -->
+      <label class="field">
+        <span class="field-label">노출 상태</span>
+        <DxSelectBox
+          v-model:value="filter.hidden"
+          :items="INQUIRY_HIDDEN_OPTIONS"
           display-expr="text"
           value-expr="value"
           :width="160"
@@ -155,7 +210,11 @@ function productText(row) {
       <DxColumn data-field="title" caption="제목" :width="200" cell-template="titleCell" />
       <DxColumn data-field="content" caption="내용" />
       <DxColumn data-field="status" caption="상태" :width="90" alignment="center" cell-template="stateCell" />
-      <DxColumn caption="처리" :width="110" alignment="center" cell-template="actionCell" />
+      <!-- 🔴 「상태」(답변)와 **별개 칸**이다 — 숨김과 답변 상태는 독립이라 한 칸에 겹쳐 놓으면
+           «숨긴 미답변» 을 표시할 방법이 없다. 기본 필터가 「보이는 것만」이라 평소엔 전부 노출이지만,
+           필터를 전체로 두면 여기서 갈린다. -->
+      <DxColumn data-field="hidden" caption="노출" :width="80" alignment="center" cell-template="hiddenCell" />
+      <DxColumn caption="처리" :width="150" alignment="center" cell-template="actionCell" />
 
       <DxPaging :page-size="20" />
       <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50]" :show-info="true" info-text="{2}건 중 {0}-{1}" />
@@ -169,10 +228,24 @@ function productText(row) {
         <span v-if="data.data.status === 'ANSWERED'" class="badge badge-success">답변완료</span>
         <span v-else class="badge badge-warning">답변대기</span>
       </template>
+      <template #hiddenCell="{ data }">
+        <span v-if="data.data.hidden" class="badge badge-danger">숨김</span>
+        <span v-else class="badge badge-success">노출</span>
+      </template>
       <template #actionCell="{ data }">
-        <button type="button" class="btn btn-sm btn-secondary" @click="startAnswer(data.data)">
-          {{ data.data.status === 'ANSWERED' ? '답변 수정' : '답변' }}
-        </button>
+        <div class="flex justify-center gap-1">
+          <!-- ⚠ 숨긴 문의에도 답변 버튼을 남긴다 — 숨김은 «공개를 내리는 것» 이고 답변은
+               «작성자에게 답하는 것» 이라 별개다. 잘못 숨긴 것을 해제하기 전에 답할 수도 있다. -->
+          <button type="button" class="btn btn-sm btn-secondary" @click="startAnswer(data.data)">
+            {{ data.data.status === 'ANSWERED' ? '답변 수정' : '답변' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm"
+            :class="data.data.hidden ? 'btn-secondary' : 'btn-danger'"
+            @click="toggleHidden(data.data)"
+          >{{ data.data.hidden ? '해제' : '숨김' }}</button>
+        </div>
       </template>
     </DxDataGrid>
 

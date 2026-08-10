@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   fetchAdminInquiries, answerInquiry, INQUIRY_STATUS_OPTIONS,
+  hideInquiry, unhideInquiry, INQUIRY_HIDDEN_OPTIONS,
   createGeneralInquiry, fetchMyInquiries, inquiryTypeText, GENERAL_INQUIRY_TYPE_OPTIONS,
 } from './inquiry';
 import { clearSession } from '../stores/auth';
@@ -47,6 +48,55 @@ describe('관리자 문의 목록 파라미터 (G-3)', () => {
     // ⚠ 기본값은 **첫 항목**이 아니라 화면이 정한다. 다만 선택지에 둘 다 있어야 고를 수 있다.
     expect(INQUIRY_STATUS_OPTIONS.map((o) => o.value)).toContain('WAITING');
     expect(INQUIRY_STATUS_OPTIONS.map((o) => o.value)).toContain('ANSWERED');
+  });
+
+  // ── 숨김 필터 (2026-08-10, B-18 잔여) ──────────────────────────────────
+
+  it('🔴 hidden=false 는 **보내진다** — falsy 라고 빠지면 「보이는 것만」이 「전체」가 된다', async () => {
+    // status 와 달리 여기는 false 가 의미 있는 값이다. apiGet 은 null 만 빼야 한다.
+    expect((await callOf({ hidden: false })).searchParams.get('hidden')).toBe('false');
+    expect((await callOf({ hidden: true })).searchParams.get('hidden')).toBe('true');
+  });
+
+  it('hidden 이 null 이면(=전체) 파라미터가 아예 빠진다 — status 와 같은 세 가지 상태', async () => {
+    expect((await callOf({ hidden: null })).searchParams.has('hidden')).toBe(false);
+    expect((await callOf()).searchParams.has('hidden')).toBe(false);
+  });
+
+  it('선택지가 세 가지 상태를 다 갖는다 — 「전체」는 null, 나머지는 boolean', () => {
+    expect(INQUIRY_HIDDEN_OPTIONS.map((o) => o.value)).toEqual([false, true, null]);
+    // ⚠ 「전체」를 문자열 'ALL' 로 두면 서버가 Boolean 변환에 실패해 400 이고,
+    //    화면엔 그게 "문의가 없다" 로 보인다(status 와 같은 함정).
+    expect(INQUIRY_HIDDEN_OPTIONS.find((o) => o.text === '전체').value).toBeNull();
+  });
+
+  it('status 와 hidden 을 **함께** 보낸다 — 둘은 독립이라 한쪽이 다른 쪽을 지우면 안 된다', async () => {
+    const url = await callOf({ status: 'WAITING', hidden: false });
+    expect(url.searchParams.get('status')).toBe('WAITING');
+    expect(url.searchParams.get('hidden')).toBe('false');
+  });
+});
+
+describe('문의 숨김 · 해제 (B-18 잔여)', () => {
+  const okRes = { ok: true, status: 200, json: () => Promise.resolve({ success: true, data: null }) };
+
+  beforeEach(() => {
+    clearSession();
+    vi.restoreAllMocks();
+  });
+
+  it('관리자 경로로 POST 한다 — 숨김과 해제가 **다른 엔드포인트**다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okRes);
+    global.fetch = fetchMock;
+
+    await hideInquiry('i-1');
+    await unhideInquiry('i-1');
+
+    expect(fetchMock.mock.calls[0][0].pathname).toBe('/api/admin/inquiries/i-1/hide');
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+    expect(fetchMock.mock.calls[1][0].pathname).toBe('/api/admin/inquiries/i-1/unhide');
+    // ⚠ 하나의 토글 엔드포인트로 합치지 않았다 — 서버가 「이미 그 상태면 아무것도 안 한다」로
+    //    멱등을 보장하는데, 토글이면 두 번 눌렀을 때 원래대로 돌아가 그 보장이 사라진다.
   });
 });
 
