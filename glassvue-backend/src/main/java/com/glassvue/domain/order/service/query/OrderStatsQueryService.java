@@ -35,13 +35,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderStatsQueryService {
 
     /**
-     * 매출로 보는 주문 상태 — <b>명시적 열거</b>다.
+     * 매출로 보는 주문 상태 — 판정은 {@link OrderStatus#isRevenue()} <b>한 곳</b>에 있다.
      *
-     * <p>{@code <> CANCELLED} 로 쓰면 나중에 추가되는 상태(환불·교환 등)가 <b>자동으로 매출에 섞인다.</b>
-     * 새 상태는 여기 직접 넣도록 opt-in 으로 둔다({@code existsPurchase} 와 같은 판단).
+     * <p>🔴 <b>2026-08-11 정정</b>: 여기 {@code PAID·SHIPPED·DELIVERED} 를 손으로 열거하고
+     * *"새 상태는 여기 직접 넣도록 opt-in 으로 둔다({@code existsPurchase} 와 같은 판단)"* 라고 적혀 있었다.
+     * <b>같은 판단이 맞았고, 같은 방식으로 어긋났다</b> — {@code existsPurchase} 는 {@code DELIVERED} 를
+     * 놓쳤고(오늘 아침 §3-1) 여기는 {@code RETURN_REQUESTED} 를 놓쳤다.
+     * <b>주석으로 적은 opt-in 은 두 자리에서 다 안 지켜졌다.</b>
+     * → 판정을 enum 옆({@code default} 없는 switch)으로 옮겨 <b>상태를 추가하면 컴파일이 깨지게</b> 했다.
+     *
+     * <p>⚠ 이 필드를 지우지 않고 남긴 이유: 쿼리가 <b>문자열 목록</b>을 받으므로 변환이 한 번 필요하고,
+     * 세 쿼리({@code summarize}·{@code daily}·{@code topProducts})가 <b>같은 값</b>을 쓰는지 한눈에 보여야 한다.
      */
-    private static final List<String> REVENUE_STATUSES = List.of(
-            OrderStatus.PAID.name(), OrderStatus.SHIPPED.name(), OrderStatus.DELIVERED.name());
+    private static final List<String> REVENUE_STATUSES = OrderStatus.revenueStatusNames();
 
     /** 매출 일자는 <b>한국 시간</b> 기준이다. UTC 로 자르면 00:00~09:00 결제가 전날로 간다. */
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");

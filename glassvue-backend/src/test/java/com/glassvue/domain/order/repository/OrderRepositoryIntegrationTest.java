@@ -123,6 +123,36 @@ class OrderRepositoryIntegrationTest {
                         OrderStatus.SHIPPED, OrderStatus.DELIVERED);
     }
 
+    /**
+     * 🔴 <b>매출 판정은 구매 인증과 다르다</b> (2026-08-11, 08-10 §16-4 8번).
+     *
+     * <p>둘을 한 메서드로 합치고 싶어지는데, <b>실제로 갈리는 자리가 둘 있다</b>:
+     * {@code ORDERED}(샀지만 결제 전 → 매출 아님)와 {@code RETURNED}(받아 봤지만 환불 → 매출 아님).
+     * 여기서 그 차이를 못 박아 <b>누군가 합치면 빨개지게</b> 한다.
+     *
+     * <p>⚠ {@code RETURN_REQUESTED} 는 <b>매출이지만 구매 인증은 아니다</b> — 반대 방향으로도 갈린다.
+     */
+    @Test
+    @DisplayName("정책 자체 — 매출(isRevenue)과 구매 인증(isPurchaseProven)은 **같지 않다**")
+    void revenuePolicy_differsFromPurchaseProven() {
+        // 결제 전이라 매출이 아니지만, 「샀다」로는 친다.
+        assertThat(OrderStatus.ORDERED.isRevenue()).isFalse();
+        assertThat(OrderStatus.ORDERED.isPurchaseProven()).isTrue();
+        // 돈을 돌려줬으니 매출도 아니고 구매 인증도 아니다.
+        assertThat(OrderStatus.RETURNED.isRevenue()).isFalse();
+        assertThat(OrderStatus.RETURNED.isPurchaseProven()).isFalse();
+        // 🔴 반품 요청은 아직 확정이 아니라 **매출에 남는다**. 구매 인증은 별개 판단이라 제외다.
+        assertThat(OrderStatus.RETURN_REQUESTED.isRevenue())
+                .as("요청만으로 빼면 거절 시 되살아나 **과거 날짜의 매출이 바뀐다**")
+                .isTrue();
+        assertThat(OrderStatus.RETURN_REQUESTED.isPurchaseProven()).isFalse();
+        // 양쪽이 통째로 뒤집히지 않았음도 함께 본다(전부 true/false 로 고쳐도 위가 통과하지 않게).
+        assertThat(OrderStatus.CANCELLED.isRevenue()).isFalse();
+        assertThat(OrderStatus.PAID.isRevenue()).isTrue();
+        assertThat(OrderStatus.revenueStatusNames())
+                .containsExactlyInAnyOrder("PAID", "SHIPPED", "DELIVERED", "RETURN_REQUESTED");
+    }
+
     @Test
     @DisplayName("주문한 적 없는 상품 → 구매 안 함")
     void otherProduct_excluded() {

@@ -25,9 +25,10 @@ import org.springframework.data.repository.query.Param;
  *
  * <h3>무엇을 매출로 보는가</h3>
  * <ul>
- *   <li><b>상태</b>: {@code PAID · SHIPPED · DELIVERED} 를 <b>명시적으로 열거</b>한다.
- *       {@code <> CANCELLED} 로 쓰면 나중에 추가되는 상태(환불 등)가 자동으로 매출에 섞인다
- *       ({@code existsPurchase} 와 같은 판단).
+ *   <li><b>상태</b>: 판정은 {@code OrderStatus.isRevenue()} <b>한 곳</b>에 있다 —
+ *       <b>여기에 목록을 옮겨 적지 않는다.</b> ⚠ 2026-08-11 이전에는 {@code PAID·SHIPPED·DELIVERED} 를
+ *       이 주석과 호출부에 <b>두 번</b> 적어 뒀는데, {@code RETURN_REQUESTED} 가 생겼을 때
+ *       <b>둘 다 안 자랐다</b>(08-10 §16-4 8번). 복사본이 있으면 그 복사본이 낡는다.
  *       <b>{@code paid_at} 유무로 거르지 않는다</b> — 결제 후 취소된 주문이 실제로 있고(2026-07-24 기준 1건),
  *       그건 환불이라 매출이 아니다.</li>
  *   <li><b>시각</b>: {@code created_at} 이 아니라 <b>{@code paid_at}</b>. 주문한 시점은 영영 결제되지 않을 수도

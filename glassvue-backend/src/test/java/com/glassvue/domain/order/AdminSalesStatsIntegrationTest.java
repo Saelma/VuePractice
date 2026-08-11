@@ -123,6 +123,18 @@ class AdminSalesStatsIntegrationTest {
      * <p>정상 경로로는 "지금" 밖에 만들 수 없어서 <b>KST 경계를 재현할 방법이 없다.</b>
      * 그래서 테스트에서만 직접 쓴다. 운영 코드에는 이런 경로가 없다.
      */
+    /** 발송·배송완료(관리자). 반품은 배송완료 주문에서만 요청할 수 있어 여기까지 밀어 준다. */
+    private void ship(String admin, String orderId) throws Exception {
+        mockMvc.perform(post("/api/orders/" + orderId + "/ship").header("Authorization", admin)
+                        .contentType(JSON).content("{\"carrier\":\"CJ\",\"trackingNo\":\"123456789012\"}"))
+                .andExpect(status().isOk());
+    }
+
+    private void deliver(String admin, String orderId) throws Exception {
+        mockMvc.perform(post("/api/orders/" + orderId + "/deliver").header("Authorization", admin))
+                .andExpect(status().isOk());
+    }
+
     private void forcePaidAt(String orderId, Instant paidAt) {
         entityManager.flush();
         entityManager.createNativeQuery("UPDATE orders SET paid_at = ?1 WHERE id = ?2")
@@ -188,6 +200,70 @@ class AdminSalesStatsIntegrationTest {
                 .andExpect(status().isOk());
 
         // paid_at 은 그대로 남아 있다. 그래도 매출이 아니어야 한다(환불).
+        assertItemSalesDelta(admin, before, 0);
+    }
+
+    /**
+     * 🔴 <b>반품 「요청」만으로는 매출이 안 빠진다</b> (2026-08-11, 08-10 §16-4 8번).
+     *
+     * <p>고치기 전에는 {@code RETURN_REQUESTED} 가 매출 상태 목록에 없어 <b>요청하는 순간 빠졌다.</b>
+     * 두 가지가 어긋났다:
+     * <ul>
+     *   <li>{@code sold_count} 는 <b>승인</b>에만 반응해서({@code SalesEventListener}) 시점이 달랐다.</li>
+     *   <li>🔴 거절하면 {@code DELIVERED} 로 돌아가 금액이 <b>다시 잡힌다</b> —
+     *       <b>과거 날짜의 일별 매출이 나중에 바뀐다.</b></li>
+     * </ul>
+     * 실측(고치기 전): 매출 347,000원(14건) ↔ 요청 포함 355,000원(15건).
+     */
+    @Test
+    @DisplayName("🔴 반품 **요청**은 매출에 남는다 — 승인되어야 확정이고, 거절되면 되살아나 과거 매출이 바뀐다")
+    void returnRequestedStaysInRevenue() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+
+        long before = allTimeItemSales(admin);
+        String orderId = order(buyer, 1);
+        pay(buyer, orderId);
+        long afterPaid = allTimeItemSales(admin);
+        // 전제 — 결제로 매출이 실제로 늘었어야 «안 빠졌다» 가 뜻을 갖는다(WA §3-3).
+        org.assertj.core.api.Assertions.assertThat(afterPaid)
+                .as("결제가 매출에 안 잡혔다면 아래 단언은 아무것도 증명하지 않는다")
+                .isGreaterThan(before);
+
+        ship(admin, orderId);
+        deliver(admin, orderId);
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request")
+                        .header("Authorization", buyer).contentType(JSON)
+                        .content("{\"reason\":\"ZZ-반품요청\"}"))
+                .andExpect(status().isOk());
+
+        // 🔴 요청만으로는 매출이 그대로여야 한다.
+        org.assertj.core.api.Assertions.assertThat(allTimeItemSales(admin))
+                .as("반품 요청은 아직 확정이 아니다 — 빼면 거절 시 되살아나 과거 매출이 바뀐다")
+                .isEqualTo(afterPaid);
+    }
+
+    /**
+     * 대조군 — <b>승인</b>하면 빠진다. 위 테스트만 있으면 «반품은 매출에서 안 뺀다» 로 고쳐도 통과한다.
+     */
+    @Test
+    @DisplayName("대조군: 반품 **승인**은 매출에서 뺀다 (돈을 돌려줬으니)")
+    void returnApprovedIsExcluded() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+
+        long before = allTimeItemSales(admin);
+        String orderId = order(buyer, 1);
+        pay(buyer, orderId);
+        ship(admin, orderId);
+        deliver(admin, orderId);
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request")
+                        .header("Authorization", buyer).contentType(JSON)
+                        .content("{\"reason\":\"ZZ-반품요청\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-approve").header("Authorization", admin))
+                .andExpect(status().isOk());
+
         assertItemSalesDelta(admin, before, 0);
     }
 
@@ -266,14 +342,24 @@ class AdminSalesStatsIntegrationTest {
         String admin = login(adminLoginId);
         pay(login(buyerLoginId), order(login(buyerLoginId), 2));   // 이 트랜잭션 안에서만 보이는 주문
 
-        // 서비스가 쓰는 것과 **같은 정의**를 SQL 로 다시 쓴다. 둘이 갈라지면 여기서 잡힌다.
+        // 서비스가 쓰는 것과 **같은 정의**로 SQL 을 만든다. 둘이 갈라지면 여기서 잡힌다.
+        //
+        // 🔴 ⚠ **상태 목록을 손으로 적지 않는다**(2026-08-11). 예전엔 여기 `IN ('PAID','SHIPPED','DELIVERED')`
+        //    라고 박아 뒀는데, 그게 **정의의 세 번째 복사본**이었다(서비스 상수 · 리포지토리 주석 · 여기).
+        //    RETURN_REQUESTED 를 매출에 넣자 **이 테스트만 옛 정의로 남아** 15 ≠ 16 으로 깨졌다 —
+        //    「코드와 SQL 이 같은지」를 본다면서 정작 **자기가 또 하나의 코드**였던 셈이다.
+        // → 목록은 OrderStatus.isRevenue() 에서 받는다. 이 테스트가 지키는 것은 «어느 상태인가» 가 아니라
+        //   **«같은 상태 집합으로 JPQL 과 native SQL 이 같은 답을 내는가»** 다(그게 원래 의도였다).
+        String statusList = com.glassvue.domain.order.entity.OrderStatus.revenueStatusNames().stream()
+                .map(s -> "'" + s + "'")
+                .collect(java.util.stream.Collectors.joining(","));
         Object[] expected = (Object[]) entityManager.createNativeQuery("""
                 SELECT COUNT(*),
                        NVL(SUM(o.total_price - o.coupon_discount), 0),
                        NVL(SUM(o.shipping_fee), 0)
                   FROM orders o
-                 WHERE o.status IN ('PAID','SHIPPED','DELIVERED')
-                """).getSingleResult();
+                 WHERE o.status IN (%s)
+                """.formatted(statusList)).getSingleResult();
 
         mockMvc.perform(get(URL).header("Authorization", admin))
                 .andExpect(status().isOk())

@@ -43,6 +43,47 @@ public enum OrderStatus {
         };
     }
 
+    /**
+     * 이 상태가 <b>매출로 잡히는가</b> — 관리자 매출 통계의 기준({@code OrderStatsQueryService}).
+     *
+     * <p>⚠ <b>{@link #isPurchaseProven()} 과 다르다.</b> 저건 «이 사람이 샀나»(리뷰 자격)이고
+     * 이건 «돈이 우리 것인가»다. 갈리는 자리가 실제로 있다:
+     * <ul>
+     *   <li>{@code ORDERED} — 샀다고 볼 수는 있지만 <b>결제 전</b>이라 매출이 아니다.</li>
+     *   <li>{@code RETURNED} — 물건은 받아 봤지만 <b>돈을 돌려줬으니</b> 매출이 아니다.</li>
+     * </ul>
+     * 그래서 둘을 한 메서드로 합치지 않는다 — 합치면 한쪽 정책을 바꿀 때 다른 쪽이 조용히 따라간다.
+     *
+     * <p>🔴 <b>{@code RETURN_REQUESTED} 는 매출이다</b>(2026-08-11 결정). 반품은 <b>승인되어야 확정</b>이고,
+     * 요청은 고객의 의사표시일 뿐이다. 요청만으로 빼면 두 가지가 어긋난다:
+     * <ul>
+     *   <li><b>판매량과 시점이 달라진다</b> — {@code sold_count} 는 승인(RETURNED)에만 반응한다
+     *       ({@code SalesEventListener}). 요청 상태에서 매출은 빠졌는데 판매량은 남는다.</li>
+     *   <li>🔴 <b>과거 날짜의 매출이 나중에 바뀐다</b> — 거절하면 {@code DELIVERED} 로 돌아가
+     *       그 금액이 <b>다시 잡힌다.</b> 어제 본 일별 매출과 오늘 본 것이 달라진다.</li>
+     * </ul>
+     * 실측(2026-08-11, 고치기 전): 매출 347,000원(14건) ↔ 요청 포함 355,000원(15건) — <b>8,000원이
+     * 승인도 거절도 안 된 채 빠져 있었다</b>(08-10 §16-4 8번).
+     *
+     * <p>⚠ <b>{@code default} 가 없다</b> — 상태를 추가하면 컴파일이 깨진다({@link #isPurchaseProven()} 과
+     * 같은 장치). 「새 상태는 여기 직접 넣도록 opt-in 으로 둔다」를 주석으로만 적어 두면 안 지켜진다는 것을
+     * 오늘 아침에 이미 겪었다(§3-1).
+     */
+    public boolean isRevenue() {
+        return switch (this) {
+            case PAID, SHIPPED, DELIVERED, RETURN_REQUESTED -> true;
+            case ORDERED, CANCELLED, RETURNED -> false;
+        };
+    }
+
+    /** {@link #isRevenue()} 인 상태 이름 전부 — 통계 쿼리가 문자열로 받는다. */
+    public static java.util.List<String> revenueStatusNames() {
+        return java.util.Arrays.stream(values())
+                .filter(OrderStatus::isRevenue)
+                .map(Enum::name)
+                .toList();
+    }
+
     /** {@link #isPurchaseProven()} 인 상태 전부 — 쿼리 파라미터로 넘길 때 쓴다. */
     public static java.util.Set<OrderStatus> purchaseProven() {
         return java.util.EnumSet.allOf(OrderStatus.class).stream()

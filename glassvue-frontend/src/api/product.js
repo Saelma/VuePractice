@@ -6,8 +6,13 @@ export function fetchProducts({ name, categoryId, minPrice, maxPrice, status, so
 }
 
 /**
- * 상품 목록 정렬 옵션 — 백엔드 SORTABLE 화이트리스트(createdAt·price·stock·name·avgRating·soldCount)와 맞춰야 한다.
+ * 상품 목록 정렬 옵션 — 백엔드 화이트리스트(`ProductRepositoryImpl.SORTABLE`)에 있는 값만 쓴다.
  * 여기 없는 값을 보내면 서버가 400으로 거부한다.
+ *
+ * ⚠ **화이트리스트 목록을 여기 옮겨 적지 않는다**(2026-08-11). 예전엔
+ * `(createdAt·price·stock·name·avgRating·soldCount)` 라고 적어 뒀는데 `reviewCount` 가 추가됐을 때
+ * **주석만 안 자랐다** — 아래 옵션에는 이미 `reviewCount,desc` 가 있어서, 주석이 옵션보다 낡은 상태였다.
+ * 복사본은 원본이 자랄 때 따라오지 않는다. **원본이 어디인지만 가리킨다.**
  */
 export const SORT_OPTIONS = [
   { value: 'createdAt,desc', text: '최신순' },
