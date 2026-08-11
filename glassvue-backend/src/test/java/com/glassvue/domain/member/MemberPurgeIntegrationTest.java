@@ -152,7 +152,7 @@ class MemberPurgeIntegrationTest {
         orderId = orderRepository.save(Order.create(targetId, "ZZ정리대상",
                 List.of(OrderItem.of(UUID.randomUUID(), productId, null, "ZZ상품", null, 10_000, null, 1)),
                 "ZZ수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
-                3_000, "20260101-" + suffix(), null, 0L, 0L)).getId();
+                3_000, "20260101-" + suffix(), null, 0L, null, 0L)).getId();
     }
 
     private String login(String loginId) throws Exception {

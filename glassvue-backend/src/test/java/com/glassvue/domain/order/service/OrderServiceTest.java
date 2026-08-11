@@ -53,6 +53,9 @@ class OrderServiceTest {
     @Mock ApplicationEventPublisher eventPublisher;
     // 적립은 배송완료 때 **동기로** 일어난다(이벤트가 아니다) — 스텁 없이 0을 돌려주면 "적립 없음"이다.
     @Mock com.glassvue.domain.point.service.PointService pointService;
+    // 취소·반품 때 쿠폰을 되돌리는 창구(2026-08-11). 결제 경로에서도 쓰이지만 스텁 없이 0/ null 이라
+    // "쿠폰 안 씀"이 되어 기존 테스트엔 영향이 없다.
+    @Mock com.glassvue.domain.coupon.service.CouponService couponService;
     // 정지 회원 주문 차단 가드(B-11 후속)용. 기본 false(활성)라 정상 주문 경로엔 영향 없다.
     @Mock com.glassvue.domain.member.service.MemberService memberService;
     // 설정 객체라 목이 아니라 실제 인스턴스를 넣는다 — 조회 링크 생성은 순수 문자열 조립이고,
@@ -71,7 +74,7 @@ class OrderServiceTest {
             "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, null, null);
 
     private Order orderWith(OrderItem... items) {
-        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000, "20260101-0001", null, 0L, 0L);
+        return Order.create(memberId, "구매자닉", List.of(items), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000, "20260101-0001", null, 0L, null, 0L);
     }
     private Order sampleOrder() {
         return orderWith(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, "지바", "/uploads/z_t.webp", 10_000, null, 2));
@@ -189,6 +192,88 @@ class OrderServiceTest {
         assertThat(order.getCancelReason()).isEqualTo("단순 변심");
         verify(productCommandService, times(1)).increaseStock(p1, 3, StockChangeReason.CANCEL, order.getId());
         verify(eventPublisher).publishEvent(any(OrderCancelledEvent.class));
+    }
+
+    /**
+     * 🔴 <b>「되돌리는 것들」이 하나도 빠지지 않는가</b> (2026-08-11, 08-10 §16-4 3번).
+     *
+     * <p>이 자리는 <b>두 번 연속 걸렸다</b>: 2026-08-07 에 취소가 <b>적립금</b>을 안 돌려주고 있었고,
+     * 그걸 고친 뒤에도 2026-08-11 에 <b>쿠폰</b>이 같은 이유로 빠져 있었다. 원인은 매번 같다 —
+     * 되돌릴 것들이 한 줄로 모여 있지 않으면 새로 생긴 것이 조용히 누락된다.
+     *
+     * <p>⚠ 그래서 이 테스트는 <b>재고·적립금·쿠폰·이벤트를 한 곳에서 함께</b> 못 박는다. 갈라 두면
+     * «쿠폰 테스트가 없어서 쿠폰이 빠졌다» 가 그대로 반복된다. <b>다음에 되돌릴 것이 생기면 여기에 줄이 는다.</b>
+     */
+    @Test
+    @DisplayName("취소: 되돌리는 것 전부 — 재고 · 적립금 · **쿠폰** · 알림")
+    void cancel_restoresEverything() {
+        UUID p1 = UUID.randomUUID();
+        UUID memberCouponId = UUID.randomUUID();
+        Order order = Order.create(memberId, "구매자닉",
+                List.of(OrderItem.of(p1, p1, null, "지바", null, 10_000, null, 3)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
+                3_000, "20260101-0009", "5천원 쿠폰", 5_000L, memberCouponId, 500L);
+        when(orderRepository.findByIdAndMemberId(order.getId(), memberId)).thenReturn(Optional.of(order));
+
+        orderService.cancel(order.getId(), memberId, "단순 변심");
+
+        verify(productCommandService).increaseStock(p1, 3, StockChangeReason.CANCEL, order.getId());
+        verify(pointService).refundCancelledOrder(memberId, 500L, order.getId());
+        // 🔴 쿠폰 — 2026-08-11 이전에는 이 줄이 없었고, 그래서 고객이 쿠폰을 잃었다.
+        verify(couponService).restore(memberCouponId);
+        verify(eventPublisher).publishEvent(any(OrderCancelledEvent.class));
+    }
+
+    /**
+     * 쿠폰을 안 쓴 주문도 <b>같은 경로</b>를 탄다 — 호출부가 «쿠폰 썼나» 로 갈라지지 않게
+     * {@code CouponService.restore(null)} 가 받아 준다. 갈라 두면 그 분기가 다음 누락 자리가 된다.
+     * ⚠ 대조군이다: 위 테스트만 있으면 «항상 restore 를 부른다» 로 고쳐도 통과한다.
+     */
+    @Test
+    @DisplayName("취소: 쿠폰을 안 쓴 주문도 같은 경로 — restore(null) 이 간다 (분기를 만들지 않는다)")
+    void cancel_noCoupon_stillSamePath() {
+        Order order = sampleOrder(); // memberCouponId = null
+        when(orderRepository.findByIdAndMemberId(order.getId(), memberId)).thenReturn(Optional.of(order));
+
+        orderService.cancel(order.getId(), memberId, null);
+
+        verify(couponService).restore(null);
+    }
+
+    /**
+     * 🔴 <b>반품 승인은 취소의 짝이다</b> — 되돌리는 목록이 같아야 한다 (2026-08-11).
+     *
+     * <p>⚠ <b>이 경로에는 서비스 테스트가 아예 없었다.</b> 2026-08-07 사고가 «반품만 고쳐지고 취소는
+     * 안 고쳐진» 비대칭이었는데, 정작 반품 쪽은 단위 테스트 없이 돌고 있었다 — 즉 <b>비대칭을 잡아 줄
+     * 것이 어느 쪽에도 없었다.</b> 취소 쪽에 줄을 더할 때 여기도 같이 봐야 한다.
+     *
+     * <p>⚠ 환불액이 «상품합계 − 쿠폰» 인 것과 쿠폰 복구는 <b>앞뒤가 맞아야 한다</b>: 할인받은 만큼은
+     * 돈으로 안 돌려주므로, 그 할인의 근거였던 쿠폰을 돌려줘야 고객이 손해를 안 본다.
+     */
+    @Test
+    @DisplayName("반품 승인: 되돌리는 것 전부 — 재고(RETURN) · 적립금 · **쿠폰**")
+    void approveReturn_restoresEverything() {
+        UUID p1 = UUID.randomUUID();
+        UUID memberCouponId = UUID.randomUUID();
+        Order order = Order.create(memberId, "구매자닉",
+                List.of(OrderItem.of(p1, p1, null, "지바", null, 10_000, null, 2)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
+                3_000, "20260101-0010", "5천원 쿠폰", 5_000L, memberCouponId, 0L);
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        order.deliver();
+        order.requestReturn("ZZ-반품사유");
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+
+        orderService.approveReturn(order.getId());
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURNED);
+        // 재고 이력은 취소와 **구분**된다(B-19) — 원장에서 «왜 돌아왔는지» 가 보여야 값이 있다.
+        verify(productCommandService).increaseStock(p1, 2, StockChangeReason.RETURN, order.getId());
+        verify(pointService).refundReturnedOrder(eq(memberId), eq(order.refundableAmount()),
+                eq(order.getEarnedPoint()), eq(order.rewardableAmount()), eq(order.getId()));
+        // 🔴 취소와 같은 줄 — 한쪽에만 넣으면 그게 다음 비대칭의 시작이다.
+        verify(couponService).restore(memberCouponId);
     }
 
     @Test

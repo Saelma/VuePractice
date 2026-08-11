@@ -87,7 +87,7 @@ class AdminOrderCancelIntegrationTest {
         Order order = Order.create(userId, MARK + "-구매자",
                 List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, MARK + "-상품", null, 10_000, null, 1)),
                 "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000,
-                uniqueOrderNo(), null, 0L, usedPoint);
+                uniqueOrderNo(), null, 0L, null, usedPoint);
         transition.accept(order);
         return orderRepository.save(order);
     }
@@ -275,7 +275,7 @@ class AdminOrderCancelIntegrationTest {
         Order order = orderRepository.save(Order.create(goneMemberId, MARK + "-탈퇴자",
                 List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, MARK + "-상품", null, 10_000, null, 1)),
                 "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000,
-                uniqueOrderNo(), null, 0L, 0L));
+                uniqueOrderNo(), null, 0L, null, 0L));
 
         cancel(order.getId(), login(adminLoginId), BODY).andExpect(status().isOk());
 

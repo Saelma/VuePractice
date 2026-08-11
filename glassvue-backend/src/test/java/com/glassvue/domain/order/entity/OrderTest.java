@@ -13,7 +13,7 @@ class OrderTest {
     private Order newOrder() {
         return Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, "지바", null, 10_000, null, 2)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000, "20260101-0001", null, 0L, 0L);
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000, "20260101-0001", null, 0L, null, 0L);
     }
 
     @Test
@@ -37,7 +37,7 @@ class OrderTest {
     void freeShipping() {
         Order o = Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, "지바", null, 40_000, null, 1)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 0, "20260101-0002", null, 0L, 0L);
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 0, "20260101-0002", null, 0L, null, 0L);
         assertThat(o.getShippingFee()).isZero();
         assertThat(o.getPayAmount()).isEqualTo(o.getTotalPrice());
     }
@@ -140,7 +140,7 @@ class OrderTest {
     void ownership() {
         UUID me = UUID.randomUUID();
         Order o = Order.create(me, "구매자닉", List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, "x", null, 1000, null, 1)),
-                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000, "20260101-0001", null, 0L, 0L);
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000, "20260101-0001", null, 0L, null, 0L);
         assertThat(o.isOwnedBy(me)).isTrue();
         assertThat(o.isOwnedBy(UUID.randomUUID())).isFalse();
     }
@@ -149,13 +149,19 @@ class OrderTest {
     @DisplayName("쿠폰: 결제 금액 = 상품합계 − 쿠폰할인 + 배송비 (배송비는 할인 전 기준이라 그대로)")
     void payAmountWithCoupon() {
         // 상품합계 20,000 / 배송비 3,000 / 쿠폰 5,000 할인
+        UUID memberCouponId = UUID.randomUUID();
         Order o = Order.create(UUID.randomUUID(), "구매자닉",
                 List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, "지바", null, 10_000, null, 2)),
                 "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
-                3_000, "20260101-0003", "5천원 쿠폰", 5_000L, 0L);
+                3_000, "20260101-0003", "5천원 쿠폰", 5_000L, memberCouponId, 0L);
 
         assertThat(o.getTotalPrice()).isEqualTo(20_000);   // 상품합계는 할인 전 그대로
         assertThat(o.getCouponDiscount()).isEqualTo(5_000);
+        // 🔴 이름·금액(스냅샷)만이 아니라 **어느 장이었는지**도 남아야 한다 — 이게 없어서
+        //    취소해도 쿠폰을 못 돌려줬다(V46, 2026-08-11).
+        assertThat(o.getMemberCouponId())
+                .as("취소·반품 때 되돌릴 대상이라, 이름만 남기면 복구가 불가능하다")
+                .isEqualTo(memberCouponId);
         assertThat(o.getShippingFee()).isEqualTo(3_000);
         assertThat(o.getPayAmount()).isEqualTo(18_000);    // 20,000 - 5,000 + 3,000
         assertThat(o.getCouponName()).isEqualTo("5천원 쿠폰");

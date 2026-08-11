@@ -152,6 +152,37 @@ public class CouponService {
         return discount;
     }
 
+    /**
+     * 사용한 쿠폰을 <b>되돌린다</b> — 주문 취소·반품 승인의 진입점 (2026-08-11, 08-10 §16-4 3번).
+     *
+     * <p>⚠ <b>이 자리가 통째로 비어 있었다.</b> 취소는 재고와 적립금을 되돌리면서 쿠폰은 그냥 뒀다 —
+     * 고객이 5,000원짜리 쿠폰을 쓰고 취소하면 <b>주문도 없고 쿠폰도 없는</b> 상태가 됐다.
+     * 적립금이 2026-08-07 에 정확히 같은 이유로 빠져 있었고(«반품만 고쳐진» 비대칭), 그때
+     * 되돌리는 것들을 한 줄에 모으지 않아 <b>쿠폰이 또 빠졌다.</b>
+     *
+     * <p>⚠ <b>없는 쿠폰은 조용히 넘긴다</b>(예외를 던지지 않는다). 취소 트랜잭션 안에서 도는데
+     * 여기서 던지면 <b>취소 자체가 롤백</b>돼, 고객은 «쿠폰이 안 돌아온» 게 아니라 «취소가 안 되는»
+     * 상태가 된다 — 더 나쁘다. 발급쿠폰은 탈퇴 정리({@link #deleteAllForMember})로 사라질 수 있고,
+     * 그때 그 회원은 이미 없으므로 되돌릴 대상도 의미가 없다.
+     * ⚠ 대신 <b>로그로 남긴다</b> — 조용히 넘기는 것과 아무도 모르는 것은 다르다.
+     *
+     * @param memberCouponId 주문이 스냅샷한 발급쿠폰 id(V46). 쿠폰을 안 쓴 주문이면 null 이 온다.
+     */
+    @Transactional
+    public void restore(UUID memberCouponId) {
+        if (memberCouponId == null) {
+            return; // 쿠폰을 안 쓴 주문 — 호출부가 갈라 두지 않아도 되게 여기서 받는다
+        }
+        memberCouponRepository.findById(memberCouponId).ifPresentOrElse(
+                mc -> {
+                    if (mc.restore()) {
+                        log.info("Coupon restored: {} for member {}", memberCouponId, mc.getMemberId());
+                    }
+                },
+                () -> log.warn("Coupon restore skipped — member_coupon not found: {} "
+                        + "(탈퇴 정리로 지워졌거나 V46 이전 주문)", memberCouponId));
+    }
+
     /** 주문에 스냅샷할 쿠폰명 — order 가 쿠폰 엔티티를 직접 보지 않게 한다. */
     @Transactional(readOnly = true)
     public String nameOf(UUID memberCouponId) {

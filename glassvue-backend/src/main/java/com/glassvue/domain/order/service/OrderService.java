@@ -117,7 +117,11 @@ public class OrderService {
         Order order = orderRepository.save(Order.create(memberId, user.nickname(), orderItems,
                 req.recipient(), req.phone(), req.zipcode(), req.address1(), req.address2(),
                 req.shipMemo(),
-                shippingFee, nextOrderNo(), couponName, couponDiscount, usedPoint));
+                shippingFee, nextOrderNo(),
+                // ⚠ 쿠폰은 이름·금액(스냅샷)과 **id(되돌릴 대상)** 를 함께 남긴다 — id 가 없으면
+                //   취소 때 «어느 장이었는지» 를 알 수 없어 복구가 불가능하다(V46, 2026-08-11).
+                couponName, couponDiscount, req.memberCouponId(),
+                usedPoint));
 
         // 재고 차감도 **주문을 만든 뒤**로 옮겼다(2026-08-04, B-19) — 아래 적립금과 **같은 이유**다.
         // 재고 이력이 "어느 주문 때문인지"를 담아야 하는데, 주문보다 먼저 차감하면 order_id 가 없어
@@ -349,15 +353,24 @@ public class OrderService {
     }
 
     /**
-     * 취소가 확정된 뒤 <b>따라와야 하는 일 전부</b> — 재고 복원 → 적립금 환불 → 알림.
+     * 취소가 확정된 뒤 <b>따라와야 하는 일 전부</b> — 재고 복원 → 적립금 환불 → 쿠폰 복구 → 알림.
      *
-     * <p>⚠ 순서가 규약이다(반품 승인과 동일): <b>재고 → 환불 → 이벤트</b>. 앞의 둘은 동기이고
-     * 이벤트만 뒤에 온다 — 알림이 «취소됐다» 고 말하는 시점에는 재고도 적립금도 이미 맞아 있어야 한다.
+     * <p>⚠ 순서가 규약이다(반품 승인과 동일): <b>되돌리기(동기) → 이벤트</b>. 되돌리는 것들은 전부
+     * 앞에 오고 이벤트만 뒤에 온다 — 알림이 «취소됐다» 고 말하는 시점에는 재고도 적립금도 쿠폰도
+     * 이미 맞아 있어야 한다.
+     *
+     * <p>🔴 <b>이 메서드가 「되돌리는 것들」의 목록이다.</b> 2026-08-07 에 적립금이 빠져 있었고
+     * («반품만 고쳐진» 비대칭), 2026-08-11 에 <b>같은 자리에서 쿠폰이 또 빠져 있었다</b>.
+     * 두 번 다 원인이 같다 — <b>되돌릴 것들이 한 줄로 모여 있지 않으면 하나씩 빠진다.</b>
+     * → 앞으로 «주문에 붙는 것»(할인·혜택·차감)을 새로 만들면 <b>여기에 되돌리는 줄이 있는지</b>
+     * 먼저 본다. 없으면 그 기능은 아직 절반이다.
+     * ⚠ 이 목록은 {@link #approveReturn} 과 <b>짝</b>이다. 한쪽에만 넣으면 그게 비대칭의 시작이다.
      */
     private void applyCancellation(Order order) {
         order.getItems().forEach(it -> productCommandService.increaseStock(
                 it.getVariantId(), it.getQuantity(), StockChangeReason.CANCEL, order.getId()));
         pointService.refundCancelledOrder(order.getMemberId(), order.getUsedPoint(), order.getId());
+        couponService.restore(order.getMemberCouponId());
         eventPublisher.publishEvent(OrderCancelledEvent.from(order));
     }
 
@@ -397,6 +410,10 @@ public class OrderService {
         // 환불 = 상품합계−쿠폰을 적립금으로, 배송완료 적립은 회수, 등급 기준에서도 차감.
         pointService.refundReturnedOrder(order.getMemberId(),
                 order.refundableAmount(), order.getEarnedPoint(), order.rewardableAmount(), id);
+        // 🔴 쿠폰도 되돌린다 (2026-08-11) — 취소와 **같은 목록**이어야 한다(applyCancellation 참조).
+        // ⚠ 환불액이 «상품합계−쿠폰» 인 것과 앞뒤가 맞는다: 할인받은 만큼은 돈으로 안 돌려주니
+        //   그 할인의 근거였던 쿠폰을 돌려줘야 고객이 손해를 안 본다. 둘 중 하나만 하면 어느 쪽이든 틀린다.
+        couponService.restore(order.getMemberCouponId());
         // 판매량 되돌림은 catalog 가 구독한다 — 환불(동기)이 끝난 뒤 결과 알림(주문 취소와 같은 규약).
         eventPublisher.publishEvent(OrderReturnedEvent.from(order));
         log.info("Return approved: {}", id);

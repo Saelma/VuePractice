@@ -77,6 +77,23 @@ public class Order extends BaseTimeEntity {
     private long couponDiscount;
 
     /**
+     * 사용한 <b>발급쿠폰(member_coupon) id</b> — 취소·반품 때 되돌릴 대상 (2026-08-11, V46).
+     *
+     * <p>⚠ 위 둘과 성격이 다르다. {@code couponName}·{@code couponDiscount} 는 «대상이 사라져도
+     * 읽혀야 하는» <b>스냅샷</b>이고, 이건 «되돌리려고 가리키는» <b>참조</b>다. 그래서 화면에 안 나간다
+     * (이름은 계속 {@code couponName} 을 쓴다).
+     *
+     * <p>⚠ 이 값이 없던 동안 <b>취소해도 쿠폰이 안 돌아왔다</b> — 적립금은 금액만으로 되돌릴 수 있지만
+     * 쿠폰은 <b>어느 장인지</b>를 알아야 한다. 같은 회원이 같은 쿠폰을 여러 장 받을 수 있어
+     * ({@code CouponService.issue}) 이름으로는 못 찾는다.
+     *
+     * <p>⚠ FK 는 없다 — 탈퇴하면 발급쿠폰이 통째로 지워지는데(F-1) FK 가 있으면 그 삭제를 주문이 막는다.
+     * NULL 은 «안 썼거나 V46 이전 주문»이고, {@code couponDiscount > 0} 과 함께 보면 갈린다.
+     */
+    @Column(name = "member_coupon_id", updatable = false)
+    private UUID memberCouponId;
+
+    /**
      * 이 주문에 쓴 적립금 · 이 주문으로 받은 적립금 — 둘 다 <b>스냅샷</b>이다 (2026-07-24, V21).
      * 적립률이 나중에 바뀌어도 "그때 얼마 받았는지"는 이 값이 사실이다
      * (구매자 닉네임 V5 · 배송비 V14 · 정가 V16 · 쿠폰 V17 과 같은 원칙).
@@ -212,11 +229,13 @@ public class Order extends BaseTimeEntity {
                                String shipZipcode, String shipAddress1, String shipAddress2,
                                String shipMemo,
                                long shippingFee, String orderNo,
-                               String couponName, long couponDiscount, long usedPoint) {
+                               String couponName, long couponDiscount, UUID memberCouponId,
+                               long usedPoint) {
         Order order = new Order(memberId, buyerNickname, orderNo);
         order.shippingFee = shippingFee;
         order.couponName = couponName;
         order.couponDiscount = couponDiscount;
+        order.memberCouponId = memberCouponId;
         order.usedPoint = usedPoint;
         order.shipRecipient = shipRecipient;
         order.shipPhone = shipPhone;

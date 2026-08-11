@@ -86,7 +86,7 @@ class OrderRepositoryIntegrationTest {
     /** 해당 상품을 담은 주문을 만들고 상태를 전이시킨다. */
     private void orderWithStatus(Consumer<Order> transition) {
         Order order = Order.create(memberId, "ZZ구매자",
-                List.of(OrderItem.of(productId, UUID.randomUUID(), null, "ZZ-리뷰검증상품", null, 10_000, null, 1)), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000, uniqueOrderNo(), null, 0L, 0L);
+                List.of(OrderItem.of(productId, UUID.randomUUID(), null, "ZZ-리뷰검증상품", null, 10_000, null, 1)), "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000, uniqueOrderNo(), null, 0L, null, 0L);
         transition.accept(order);
         orderRepository.save(order);
     }
