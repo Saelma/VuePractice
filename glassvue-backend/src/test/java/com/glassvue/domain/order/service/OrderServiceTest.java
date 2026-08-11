@@ -3,6 +3,7 @@ package com.glassvue.domain.order.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -24,6 +25,8 @@ import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
+import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
+import com.glassvue.domain.order.event.OrderReturnedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.policy.ShippingPolicy;
@@ -274,6 +277,46 @@ class OrderServiceTest {
                 eq(order.getEarnedPoint()), eq(order.rewardableAmount()), eq(order.getId()));
         // 🔴 취소와 같은 줄 — 한쪽에만 넣으면 그게 다음 비대칭의 시작이다.
         verify(couponService).restore(memberCouponId);
+        // 🔴 알림 (2026-08-11) — 이벤트 발행까지 봐야 한다. 2026-08-11 변형 M14 에서 «발행을 지워도
+        //    아무도 안 잡는» 자리가 드러났다: 「되돌리는 것들」만 보고 **알리는 것**은 안 봤다.
+        ArgumentCaptor<OrderReturnedEvent> returned = ArgumentCaptor.forClass(OrderReturnedEvent.class);
+        verify(eventPublisher).publishEvent(returned.capture());
+        assertThat(returned.getValue().memberId()).isEqualTo(memberId);
+        // 환불액이 실려야 알림 문구가 «○○원이 환불되었습니다» 를 말할 수 있다(핸들러는 주문을 못 본다).
+        assertThat(returned.getValue().refundedPoint()).isEqualTo(order.refundableAmount());
+    }
+
+    /**
+     * 🔴 반품 <b>거절</b> — 재고·적립금·쿠폰은 안 건드리고 <b>알림만</b> 나간다 (2026-08-11).
+     *
+     * <p>⚠ <b>이 경로도 서비스 테스트가 없었다.</b> 거절은 상태가 조용히 {@code DELIVERED} 로
+     * 되돌아갈 뿐이라, 알림이 빠지면 고객은 <b>요청해 놓고 영영 소식이 없다</b> —
+     * 그런데 아무도 «알림 고장» 으로 신고하지 않는다(그런 알림이 있었다는 걸 모르니까).
+     *
+     * <p>⚠ 되돌리는 쪽을 <b>안 하는 것</b>도 함께 못 박는다: 승인 안 했으니 재고도 적립금도
+     * 쿠폰도 그대로여야 한다. 안 그러면 «거절인데 환불되는» 상태가 된다.
+     */
+    @Test
+    @DisplayName("반품 거절: 배송완료로 되돌리고 **알림만** 보낸다 (재고·적립금·쿠폰은 그대로)")
+    void rejectReturn_notifiesOnly() {
+        UUID p1 = UUID.randomUUID();
+        Order order = Order.create(memberId, "구매자닉",
+                List.of(OrderItem.of(p1, p1, null, "지바", null, 10_000, null, 2)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
+                3_000, "20260101-0011", "5천원 쿠폰", 5_000L, UUID.randomUUID(), 0L);
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        order.deliver();
+        order.requestReturn("ZZ-반품사유");
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+
+        orderService.rejectReturn(order.getId());
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        verify(eventPublisher).publishEvent(any(OrderReturnRejectedEvent.class));
+        // 승인 안 했으니 되돌리는 것은 하나도 없어야 한다.
+        verify(productCommandService, never()).increaseStock(any(), anyInt(), any(), any());
+        verify(couponService, never()).restore(any());
     }
 
     @Test
