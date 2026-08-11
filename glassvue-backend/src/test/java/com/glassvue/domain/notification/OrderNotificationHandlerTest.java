@@ -141,17 +141,38 @@ class OrderNotificationHandlerTest {
     /**
      * 🔴 셋 중 가장 급했던 자리 — 거절은 상태가 조용히 {@code DELIVERED} 로 돌아갈 뿐이라
      * 알림이 없으면 <b>요청해 놓고 영영 소식이 없다.</b>
-     * ⚠ 사유를 못 넣는다({@code rejectReturn} 이 안 받는다) — <b>지어내지 않고</b> 링크로 보낸다.
+     *
+     * <p>🔴 <b>사유를 문구에 담는다</b>(2026-08-11 같은 날 고쳤다, V47). 처음엔
+     * *"자세한 내용은 주문 상세에서 확인해 주세요"* 였는데 <b>그 상세에 아무것도 없었다</b> —
+     * 알림이 <b>없는 곳을 가리켰다.</b> «없는 값을 지어내지 않는다» 를 지키느라 문장을 비웠지만,
+     * 값이 없으면 문장을 비울 게 아니라 <b>값을 만들어야</b> 했다.
      */
     @Test
-    @DisplayName("반품 거절 → 구매자에게 알린다 (사유는 지어내지 않고 주문 상세로 보낸다)")
+    @DisplayName("반품 거절 → 구매자에게 **사유와 함께** 알린다 (안내가 가리키는 곳에 내용이 있어야 한다)")
     void returnRejectedNotifiesBuyer() {
-        handler.handle(new OrderReturnRejectedEvent(orderId, buyerId));
+        handler.handle(new OrderReturnRejectedEvent(orderId, buyerId, "사용 흔적이 있습니다"));
 
         Notified n = captured();
         assertThat(n.memberId()).isEqualTo(buyerId);
         assertThat(n.type()).isEqualTo(NotificationType.ORDER);
         assertThat(n.title()).contains("거절");
+        assertThat(n.message()).contains("사용 흔적이 있습니다");
         assertThat(n.link()).isEqualTo("/orders/" + orderId);
+    }
+
+    /**
+     * ⚠ 사유는 필수라 운영에서 {@code null} 이 올 수 없지만, 옛 jar 가 만든 이벤트 등의 경계를 막는다 —
+     * <b>«null» 이라는 글자가 고객 알림에 뜨는 것</b>이 최악이다.
+     * ⚠ 이때도 «주문 상세에서 확인하라» 고 하지 <b>않는다</b> — 그 상세에도 사유가 없을 것이기 때문이다.
+     * 같은 실수를 반복하지 않으려고 **고객센터**로 보낸다.
+     */
+    @Test
+    @DisplayName("⚠ 거절 사유가 비면 「null」을 보여주지 않고 고객센터로 안내한다")
+    void returnRejectedWithoutReason() {
+        handler.handle(new OrderReturnRejectedEvent(orderId, buyerId, null));
+
+        Notified n = captured();
+        assertThat(n.message()).doesNotContain("null");
+        assertThat(n.message()).contains("고객센터");
     }
 }

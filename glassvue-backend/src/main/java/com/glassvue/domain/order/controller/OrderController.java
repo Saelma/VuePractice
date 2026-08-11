@@ -7,6 +7,7 @@ import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderShipRequest;
+import com.glassvue.domain.order.dto.ReturnRejectRequest;
 import com.glassvue.domain.order.dto.ReturnRequest;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.security.AuthUser;
@@ -80,6 +81,12 @@ public interface OrderController {
     @Operation(summary = "반품 승인 (관리자, RETURN_REQUESTED→RETURNED)")
     ResponseEntity<ApiResponse<Void>> approveReturn(UUID id);
 
-    @Operation(summary = "반품 거절 (관리자, RETURN_REQUESTED→DELIVERED)")
-    ResponseEntity<ApiResponse<Void>> rejectReturn(UUID id);
+    @Operation(summary = "반품 거절 (관리자, RETURN_REQUESTED→DELIVERED)",
+            description = """
+                    사유가 **필수**다(2026-08-11, V47). 거절은 상태를 남기지 않으므로
+                    (`DELIVERED` 로 되돌아간다) 사유가 **「거절이 있었다」를 나타내는 유일한 표시**이고,
+                    고객 화면의 반품 카드도 이 값으로 뜬다. 사유는 고객 알림 문구에도 그대로 들어간다.
+                    ⚠ 승인에 본문이 없는 것과 다른 이유: 거절은 **고객의 요청을 뒤집는 결정**이라 근거가 따라와야 한다.
+                    """)
+    ResponseEntity<ApiResponse<Void>> rejectReturn(UUID id, ReturnRejectRequest request);
 }

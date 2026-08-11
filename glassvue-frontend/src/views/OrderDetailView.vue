@@ -84,7 +84,36 @@ async function submitReturn() {
 }
 const onApproveReturn = () => act(approveReturn,
   '반품을 승인할까요? 재고가 복원되고 결제금액이 적립금으로 환불됩니다(적립·등급은 회수).');
-const onRejectReturn = () => act(rejectReturn, '반품을 거절할까요? 배송완료 상태로 되돌아갑니다.');
+
+/**
+ * 반품 카드의 상태 문구. 세 갈래다 — ⚠ **거절이 세 번째로 뒤늦게 생겼다**(2026-08-11).
+ * 거절은 주문 상태를 DELIVERED 로 되돌리므로 `order.status` 만으로는 «거절됨» 을 말할 수 없고,
+ * `returnRejectedAt` 이 유일한 근거다(그게 없던 동안 화면에서 반품 이야기가 통째로 사라졌다).
+ */
+const returnStatusText = computed(() => {
+  if (!order.value) return '';
+  if (order.value.status === 'RETURNED') return '반품 완료 (환불됨)';
+  if (order.value.status === 'RETURN_REQUESTED') return '반품 요청됨 (관리자 처리 대기)';
+  return '반품 요청이 거절됨';
+});
+
+// 거절은 **사유가 필수**라 confirm 으로 못 받는다 — 인라인 폼을 연다(발송·반품요청과 같은 이유).
+// ⚠ 2026-08-11 이전에는 confirm 한 번으로 끝났고, 그래서 고객은 «왜 거절됐는지» 를 알 방법이 없었다.
+//   알림은 "주문 상세에서 확인해 주세요" 라고 했는데 **그 상세에도 아무것도 없었다.**
+const rejectForm = ref(null);
+function openRejectForm() { rejectForm.value = { reason: '' }; }
+async function submitReject() {
+  const reason = (rejectForm.value?.reason || '').trim();
+  if (!reason) { error.value = '거절 사유를 입력하세요.'; return; }
+  error.value = '';
+  try {
+    await rejectReturn(props.id, reason);
+    rejectForm.value = null;
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
 
 /**
  * 발송 처리는 운송장 입력이 필요해 `window.confirm`으로 처리할 수 없다 — 그래서 인라인 폼을 연다.
@@ -381,7 +410,7 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
           >배송완료 처리</button>
           <template v-if="isAdmin && order.status === 'RETURN_REQUESTED'">
             <button type="button" class="btn btn-primary" @click="onApproveReturn">반품 승인</button>
-            <button type="button" class="btn btn-secondary" @click="onRejectReturn">반품 거절</button>
+            <button type="button" class="btn btn-secondary" @click="openRejectForm">반품 거절</button>
           </template>
         </div>
       </div>
@@ -438,17 +467,48 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
         </div>
       </div>
 
-      <!-- 반품 진행 상태 안내 -->
-      <div v-if="order.status === 'RETURN_REQUESTED' || order.status === 'RETURNED'" class="card mt-4 p-5">
+      <!-- 반품 거절 폼(관리자). 사유가 **필수**라 confirm 으로 못 받는다(발송·반품요청과 같은 이유). -->
+      <div v-if="rejectForm" class="card mt-4 p-5">
+        <h2 class="section-title">반품 거절</h2>
+        <p class="muted mt-1">
+          배송완료 상태로 되돌아갑니다. 재고·적립금은 움직이지 않습니다.
+          <strong>입력한 사유가 고객에게 그대로 전달</strong>됩니다(알림 + 주문 상세).
+        </p>
+        <label class="field mt-3">
+          <span class="field-label">사유</span>
+          <input v-model="rejectForm.reason" class="field" placeholder="예: 사용 흔적이 있어 반품이 어렵습니다" />
+        </label>
+        <div class="mt-3 flex gap-2">
+          <button type="button" class="btn btn-primary" @click="submitReject">반품 거절</button>
+          <button type="button" class="btn btn-secondary" @click="rejectForm = null">닫기</button>
+        </div>
+      </div>
+
+      <!--
+        반품 진행 상태 안내.
+        ⚠ **거절도 여기 뜬다**(2026-08-11). 거절하면 상태가 DELIVERED 로 돌아가는데, 예전엔 렌더 조건이
+          RETURN_REQUESTED·RETURNED 뿐이라 **카드가 통째로 사라졌다** — 반품을 요청한 적 없는 주문과
+          구분이 안 됐고, 거절 알림의 "주문 상세에서 확인해 주세요" 가 **없는 곳을 가리켰다.**
+          거절은 상태를 안 남기므로 returnRejectedAt 이 유일한 근거다.
+      -->
+      <div
+        v-if="order.status === 'RETURN_REQUESTED' || order.status === 'RETURNED' || order.returnRejectedAt"
+        class="card mt-4 p-5"
+      >
         <h2 class="section-title">반품</h2>
         <dl class="mt-3 space-y-2 text-sm">
           <div class="flex justify-between gap-4">
             <dt class="text-ink-500">상태</dt>
-            <dd>{{ order.status === 'RETURNED' ? '반품 완료 (환불됨)' : '반품 요청됨 (관리자 처리 대기)' }}</dd>
+            <dd>{{ returnStatusText }}</dd>
           </div>
           <div v-if="order.returnReason" class="flex justify-between gap-4">
-            <dt class="text-ink-500">사유</dt>
+            <dt class="text-ink-500">요청 사유</dt>
             <dd class="text-ink-900">{{ order.returnReason }}</dd>
+          </div>
+          <!-- 거절 사유는 «고객이 알아야 할 답» 이라 요청 사유보다 눈에 띄게 둔다. -->
+          <div v-if="order.returnRejectedReason" class="flex justify-between gap-4">
+            <dt class="text-ink-500">거절 사유</dt>
+            <dd class="text-ink-900">{{ order.returnRejectedReason }}</dd>
           </div>
           <div v-if="order.status === 'RETURNED'" class="flex justify-between gap-4">
             <dt class="text-ink-500">환불 적립금</dt>

@@ -420,19 +420,27 @@ public class OrderService {
         log.info("Return approved: {}", id);
     }
 
-    /** 반품 거절(관리자) — 배송완료로 되돌린다. 재고·적립은 건드리지 않는다(승인 안 했으니). */
+    /**
+     * 반품 거절(관리자) — 배송완료로 되돌린다. 재고·적립은 건드리지 않는다(승인 안 했으니).
+     *
+     * <p>⚠ <b>사유가 필수</b>다(2026-08-11, V47). 거절은 상태를 안 남기므로
+     * {@code return_rejected_reason} 이 «거절이 있었다» 를 나타내는 <b>유일한 표시</b>이고,
+     * 그게 없으면 고객 화면에서 반품 이야기가 통째로 사라진다.
+     */
     @Transactional
-    public void rejectReturn(UUID id) {
+    public void rejectReturn(UUID id, String reason) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!order.isReturnPending()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_RETURN_PENDING);
         }
-        order.rejectReturn();
+        order.rejectReturn(reason);
         // 🔴 고객에게 알린다 (2026-08-11) — 거절은 상태가 조용히 DELIVERED 로 돌아갈 뿐이라
         //    알리지 않으면 «요청해 놓고 영영 소식이 없는» 상태가 된다(08-10 §16-4 4번).
         //    재고·적립금을 안 건드리므로(승인 안 했으니) 구독자는 알림 하나뿐이다.
+        // ⚠ 사유를 이벤트에 싣는다 — 알림 문구가 **왜 거절됐는지**를 말해야 한다.
+        //    처음(같은 날 오전)엔 «주문 상세에서 확인해 주세요» 로 보냈는데 **그 상세에 아무것도 없었다.**
         eventPublisher.publishEvent(OrderReturnRejectedEvent.from(order));
-        log.info("Return rejected: {}", id);
+        log.info("Return rejected: {} reason={}", id, reason);
     }
 }

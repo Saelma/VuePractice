@@ -196,7 +196,7 @@ class OrderReturnIntegrationTest {
     }
 
     @Test
-    @DisplayName("반품 거절 → 배송완료로 되돌아가고 재고·적립은 그대로")
+    @DisplayName("반품 거절 → 배송완료로 되돌아가고 재고·적립은 그대로 · **거절 사유가 고객에게 보인다**")
     void reject_revertsToDelivered() throws Exception {
         String buyer = login(buyerLoginId);
         String admin = login(adminLoginId);
@@ -204,14 +204,48 @@ class OrderReturnIntegrationTest {
         long before = balance();
 
         requestReturn(buyer, orderId, "변심");
-        mockMvc.perform(post("/api/orders/" + orderId + "/return-reject").header("Authorization", admin))
-                .andExpect(status().isOk());
+        rejectReturn(admin, orderId, "ZZ-사용 흔적이 있습니다");
 
         mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
-                .andExpect(jsonPath("$.data.status").value("DELIVERED"));
+                .andExpect(jsonPath("$.data.status").value("DELIVERED"))
+                // 🔴 거절은 상태를 안 남긴다 — 이 둘이 없으면 고객 화면에서 반품 이야기가 통째로 사라진다
+                //    (2026-08-11: 거절 알림이 «주문 상세에서 확인하세요» 라 했는데 상세가 비어 있었다).
+                .andExpect(jsonPath("$.data.returnRejectedReason").value("ZZ-사용 흔적이 있습니다"))
+                .andExpect(jsonPath("$.data.returnRejectedAt").exists())
+                // ⚠ 요청 시각도 남아야 «언제 요청해서 언제 거절됐나» 가 읽힌다(예전엔 NULL 로 지웠다).
+                .andExpect(jsonPath("$.data.returnRequestedAt").exists());
         assertThat(balance()).isEqualTo(before); // 환불 없음
         entityManager.clear();
         assertThat(variantRepository.findById(variantId).orElseThrow().getStock()).isEqualTo(99); // 복원 안 됨
+    }
+
+    /**
+     * ⚠ 사유는 <b>필수</b>다 — 빈 값으로 거절하면 «거절이 있었다» 를 나타낼 것이 아무것도 안 남는다.
+     * DTO 검증이 실제 요청에서도 걸리는지는 여기서만 확인된다(단위 테스트는 DTO 를 안 거친다).
+     */
+    @Test
+    @DisplayName("⚠ 거절 사유 없이 보내면 400 — 사유가 「거절이 있었다」의 유일한 표시라 비울 수 없다")
+    void reject_requiresReason() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+        requestReturn(buyer, orderId, "변심");
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-reject")
+                        .header("Authorization", admin).contentType(JSON)
+                        .content("{\"reason\":\"  \"}"))
+                .andExpect(status().isBadRequest());
+
+        // 거절이 안 됐으니 여전히 승인 대기여야 한다 — 400 이 «막았다» 를 뜻하는지 확인한다.
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.status").value("RETURN_REQUESTED"));
+    }
+
+    private void rejectReturn(String admin, String orderId, String reason) throws Exception {
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-reject")
+                        .header("Authorization", admin).contentType(JSON)
+                        .content("{\"reason\":\"" + reason + "\"}"))
+                .andExpect(status().isOk());
     }
 
     @Test

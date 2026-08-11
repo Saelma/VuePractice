@@ -111,8 +111,15 @@ export function approveReturn(id) {
   return apiPost(`/api/orders/${id}/return-approve`);
 }
 
-export function rejectReturn(id) {
-  return apiPost(`/api/orders/${id}/return-reject`);
+/**
+ * 반품 거절(관리자). **사유 필수**(2026-08-11, V47).
+ *
+ * ⚠ 거절은 상태를 안 남긴다(배송완료로 되돌아간다) — 사유가 「거절이 있었다」를 나타내는 유일한
+ * 표시이고, 고객 화면의 반품 카드와 알림 문구가 둘 다 이 값으로 만들어진다.
+ * 그 전에는 본문 없이 보냈고, 고객은 왜 거절됐는지 알 방법이 없었다.
+ */
+export function rejectReturn(id, reason) {
+  return apiPost(`/api/orders/${id}/return-reject`, { reason });
 }
 
 export const ORDER_STATUS_TEXT = {

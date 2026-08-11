@@ -209,6 +209,26 @@ public class Order extends BaseTimeEntity {
     @Column(name = "returned_at")
     private Instant returnedAt;
 
+    /**
+     * 반품 <b>거절</b> 사유·시각 (2026-08-11, V47).
+     *
+     * <p>⚠ <b>거절은 상태를 남기지 않는다</b> — {@code DELIVERED} 로 되돌아가므로, 이 값이
+     * «거절이 있었다» 를 나타내는 <b>유일한 표시</b>다. 화면도 이걸로 반품 카드를 띄운다.
+     *
+     * <p>🔴 <b>왜 뒤늦게 생겼나</b>: 같은 날 붙인 거절 알림이 *"자세한 내용은 주문 상세에서
+     * 확인해 주세요"* 라고 말하는데 <b>주문 상세에 아무것도 없었다.</b> 사유가 없는 정도가 아니라
+     * 반품 카드가 아예 안 떴고({@code DELIVERED} 는 렌더 조건 밖), {@code returnRequestedAt} 까지
+     * 지워져 <b>요청한 적 없는 주문과 구분이 안 됐다.</b>
+     *
+     * <p>⚠ 사유는 <b>필수</b>다(요청 DTO 가 강제). 고객은 자기가 왜 요청했는지 알지만
+     * <b>남이 거절한 이유는 사유가 유일한 단서</b>다 — 관리자 취소({@code cancelReason})와 같은 판단.
+     */
+    @Column(name = "return_rejected_reason", length = 500)
+    private String returnRejectedReason;
+
+    @Column(name = "return_rejected_at")
+    private Instant returnRejectedAt;
+
     // @BatchSize: 목록 조회에서 주문마다 items를 따로 읽는 N+1을 막는다(IN 쿼리 한 번으로 묶음).
     // 컬렉션 fetch join은 페이징과 같이 쓰면 전체를 메모리에 올리므로(HHH000104) 쓰지 않는다.
     @BatchSize(size = 100)
@@ -372,10 +392,22 @@ public class Order extends BaseTimeEntity {
         return status == OrderStatus.RETURN_REQUESTED;
     }
 
+    /**
+     * 고객의 반품 요청.
+     *
+     * <p>⚠ <b>거절당한 뒤 다시 요청할 수 있다</b> — 거절은 {@code DELIVERED} 로 되돌리므로
+     * {@link #isReturnRequestable()} 이 다시 참이 된다. 그때 <b>이전 거절 기록을 지운다</b>(2026-08-11):
+     * 안 지우면 화면에 «요청됨» 과 «거절됨» 이 <b>동시에</b> 뜨고, 어느 쪽이 지금인지 알 수 없다.
+     * ⚠ 지우는 것이 이력 손실이긴 하다. 주문 한 건이 반품 사이클을 <b>하나만</b> 들고 있는 구조라
+     * ({@code returnReason} 도 덮어쓴다) 여기서만 특별히 쌓아 둘 수 없다 —
+     * 이력이 필요해지면 <b>별도 테이블</b>이 답이지 컬럼을 늘리는 게 아니다.
+     */
     public void requestReturn(String reason) {
         this.status = OrderStatus.RETURN_REQUESTED;
         this.returnReason = reason;
         this.returnRequestedAt = Instant.now();
+        this.returnRejectedReason = null;
+        this.returnRejectedAt = null;
     }
 
     /** 관리자 승인 — 재고 복원·환불은 서비스가 하고, 여기선 상태·시각만 남긴다. */
@@ -384,10 +416,22 @@ public class Order extends BaseTimeEntity {
         this.returnedAt = Instant.now();
     }
 
-    /** 관리자 거절 — 배송완료 상태로 되돌린다. 사유는 기록으로 남겨 둔다(요청이 있었다는 흔적). */
-    public void rejectReturn() {
+    /**
+     * 관리자 거절 — 배송완료 상태로 되돌리되 <b>있었던 일은 전부 남긴다</b>.
+     *
+     * <p>🔴 <b>2026-08-11 정정</b>: 예전 주석은 *"사유는 기록으로 남겨 둔다(요청이 있었다는 흔적)"*
+     * 였는데 <b>동작이 그 의도를 배신했다</b> — {@code returnRequestedAt} 을 NULL 로 지웠고,
+     * 화면의 반품 카드는 {@code DELIVERED} 를 렌더 조건에서 빼 놓아 <b>카드째 사라졌다.</b>
+     * 결과적으로 «반품을 요청한 적 없는 배송완료 주문» 과 구분이 안 됐다.
+     * → <b>요청 시각을 지우지 않는다.</b> 요청 시각 + 거절 시각이 함께 있어야
+     * «언제 요청해서 언제 거절됐나» 가 읽힌다.
+     *
+     * <p>⚠ 재고·적립금·쿠폰은 <b>건드리지 않는다</b> — 승인하지 않았으므로 되돌릴 것이 없다.
+     */
+    public void rejectReturn(String reason) {
         this.status = OrderStatus.DELIVERED;
-        this.returnRequestedAt = null;
+        this.returnRejectedReason = reason;
+        this.returnRejectedAt = Instant.now();
     }
 
     /**

@@ -54,6 +54,11 @@ public record OrderResponse(
         String returnReason,
         Instant returnRequestedAt,
         Instant returnedAt,
+        // 반품 거절(V47, 2026-08-11). ⚠ **거절은 상태를 안 남긴다**(DELIVERED 로 되돌아간다) —
+        // 그래서 이 값이 «거절이 있었다» 를 화면에 알리는 유일한 근거이고, 반품 카드도 이걸로 뜬다.
+        // 이 필드가 생기기 전에는 거절 후 반품 이야기가 화면에서 통째로 사라졌다(오늘 사용자 지적).
+        String returnRejectedReason,
+        Instant returnRejectedAt,
         long refundAmount,
         // 배송지 스냅샷(주문 시점). 배송지 도입(V11) 이전 주문은 전부 null이다.
         String shipRecipient,
@@ -100,6 +105,8 @@ public record OrderResponse(
                 o.getReturnReason(),
                 o.getReturnRequestedAt(),
                 o.getReturnedAt(),
+                o.getReturnRejectedReason(),
+                o.getReturnRejectedAt(),
                 (o.getStatus() == com.glassvue.domain.order.entity.OrderStatus.RETURNED
                         || o.getStatus() == com.glassvue.domain.order.entity.OrderStatus.RETURN_REQUESTED)
                         ? o.refundableAmount() : 0L,

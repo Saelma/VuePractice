@@ -16,13 +16,17 @@ import java.util.UUID;
  * catalog 가 되돌릴 것이 없다 — 구독자는 알림 하나뿐이다. 없는 필드를 «짝이니까» 로 넣지 않는다
  * (넣으면 다음 사람이 «판매량을 되돌리나?» 로 읽는다).
  *
- * <p>⚠ 거절 <b>사유</b>는 아직 없다. {@code Order.rejectReturn()} 이 사유를 받지 않기 때문이고,
- * 그건 별개 작업이다(취소 사유가 B-17 에서 뒤늦게 붙은 것과 같은 자리). 문구는 «주문 상세에서
- * 확인해 주세요» 로 링크를 준다 — <b>없는 값을 지어내 문장에 넣지 않는다.</b>
+ * <p>🔴 <b>2026-08-11 같은 날 고쳤다 — 처음엔 사유가 없었다.</b> 그때 문구는 «주문 상세에서
+ * 확인해 주세요» 였는데 <b>그 상세에 아무것도 없었다</b>(카드가 {@code DELIVERED} 를 렌더 조건에서
+ * 빼 놓았고 거절 기록도 안 남았다). 사용자가 브라우저 검증 중에 *"뭘 확인하라는 지 안 나와있어"* 로
+ * 지적해 드러났다.
+ * ⚠ 교훈: <b>«없는 값을 지어내지 않는다» 와 «없는 곳을 가리키지 않는다» 는 다른 규칙이다.</b>
+ * 앞은 지켰는데 뒤를 어겼다 — 값이 없으면 문장을 비우는 게 아니라 <b>값을 만들어야</b> 했다(V47).
  */
-public record OrderReturnRejectedEvent(UUID orderId, UUID memberId) implements DomainEvent {
+public record OrderReturnRejectedEvent(UUID orderId, UUID memberId, String reason) implements DomainEvent {
 
     public static OrderReturnRejectedEvent from(Order order) {
-        return new OrderReturnRejectedEvent(order.getId(), order.getMemberId());
+        return new OrderReturnRejectedEvent(order.getId(), order.getMemberId(),
+                order.getReturnRejectedReason());
     }
 }

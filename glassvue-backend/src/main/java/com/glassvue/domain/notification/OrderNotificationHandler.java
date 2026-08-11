@@ -73,14 +73,20 @@ public class OrderNotificationHandler {
      * 눈치챌 수라도 있지만, 거절은 상태가 조용히 {@code DELIVERED} 로 돌아갈 뿐이라
      * <b>요청해 놓고 영영 소식이 없다.</b>
      *
-     * <p>⚠ 사유를 문구에 못 넣는다 — {@code Order.rejectReturn()} 이 사유를 안 받는다.
-     * <b>없는 값을 지어내지 않고</b> 링크로 보낸다(취소 사유가 B-17 에서 뒤늦게 붙은 것과 같은 자리).
+     * <p>🔴 <b>사유를 문구에 담는다</b>(2026-08-11, V47). 처음엔 «자세한 내용은 주문 상세에서
+     * 확인해 주세요» 였는데 <b>그 상세에 아무것도 없었다</b> — 알림이 <b>없는 곳을 가리켰다.</b>
+     * ⚠ «없는 값을 지어내지 않는다» 를 지키느라 문장을 비웠지만, 그 결과가 <b>더 나쁜 안내</b>였다.
+     * 값이 없으면 문장을 비울 게 아니라 <b>값을 만들어야</b> 했다.
+     *
+     * <p>⚠ 사유는 필수라 {@code null} 이 올 수 없지만, 옛 jar 가 만든 이벤트가 큐에 남는 등의
+     * 경계는 방어해 둔다 — <b>«null» 이라는 글자가 고객 알림에 뜨는 것</b>보다는 낫다.
      */
     public void handle(OrderReturnRejectedEvent event) {
+        String message = (event.reason() == null || event.reason().isBlank())
+                ? "자세한 내용은 고객센터로 문의해 주세요."
+                : "사유: " + event.reason();
         notificationService.create(event.memberId(), NotificationType.ORDER,
-                "반품 요청이 거절되었어요",
-                "자세한 내용은 주문 상세에서 확인해 주세요.",
-                "/orders/" + event.orderId());
+                "반품 요청이 거절되었어요", message, "/orders/" + event.orderId());
         log.info("[알림] 반품 거절 — order={} member={}", event.orderId(), event.memberId());
     }
 }

@@ -310,13 +310,52 @@ class OrderServiceTest {
         order.requestReturn("ZZ-반품사유");
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
 
-        orderService.rejectReturn(order.getId());
+        orderService.rejectReturn(order.getId(), "ZZ-거절사유");
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
-        verify(eventPublisher).publishEvent(any(OrderReturnRejectedEvent.class));
+
+        // 🔴 거절은 상태를 안 남긴다(DELIVERED 로 돌아간다) — 그래서 **이 둘이 「거절이 있었다」의
+        //    유일한 증거**이고, 화면의 반품 카드도 이걸로 뜬다(V47, 2026-08-11).
+        assertThat(order.getReturnRejectedReason()).isEqualTo("ZZ-거절사유");
+        assertThat(order.getReturnRejectedAt()).isNotNull();
+        // ⚠ 요청 시각을 **지우지 않는다** — 예전엔 NULL 로 지워서 «언제 요청했나» 가 사라졌다.
+        assertThat(order.getReturnRequestedAt())
+                .as("요청 시각이 남아야 «언제 요청해서 언제 거절됐나» 가 읽힌다")
+                .isNotNull();
+
+        ArgumentCaptor<OrderReturnRejectedEvent> rejected =
+                ArgumentCaptor.forClass(OrderReturnRejectedEvent.class);
+        verify(eventPublisher).publishEvent(rejected.capture());
+        // 사유가 이벤트에 실려야 알림 문구가 «왜 거절됐는지» 를 말할 수 있다.
+        assertThat(rejected.getValue().reason()).isEqualTo("ZZ-거절사유");
+
         // 승인 안 했으니 되돌리는 것은 하나도 없어야 한다.
         verify(productCommandService, never()).increaseStock(any(), anyInt(), any(), any());
         verify(couponService, never()).restore(any());
+    }
+
+    /**
+     * ⚠ 거절당한 뒤 <b>다시 요청</b>할 수 있다(거절이 {@code DELIVERED} 로 되돌리므로).
+     * 그때 이전 거절 기록을 지우지 않으면 화면에 «요청됨» 과 «거절됨» 이 <b>동시에</b> 떠서
+     * 어느 쪽이 지금인지 알 수 없게 된다(2026-08-11).
+     */
+    @Test
+    @DisplayName("거절 후 재요청하면 이전 거절 기록이 지워진다 (두 상태가 겹쳐 보이지 않게)")
+    void requestReturn_clearsPreviousRejection() {
+        Order order = sampleOrder();
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        order.deliver();
+        order.requestReturn("ZZ-첫요청");
+        order.rejectReturn("ZZ-거절사유");
+        assertThat(order.getReturnRejectedReason()).isNotNull();   // 전제 확인
+
+        order.requestReturn("ZZ-다시요청");
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURN_REQUESTED);
+        assertThat(order.getReturnReason()).isEqualTo("ZZ-다시요청");
+        assertThat(order.getReturnRejectedReason()).isNull();
+        assertThat(order.getReturnRejectedAt()).isNull();
     }
 
     @Test

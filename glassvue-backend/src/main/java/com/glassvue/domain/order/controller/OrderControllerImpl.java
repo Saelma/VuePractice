@@ -3,6 +3,7 @@ package com.glassvue.domain.order.controller;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.domain.order.dto.ReturnRejectRequest;
 import com.glassvue.domain.order.dto.ReturnRequest;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.domain.order.dto.AdminOrderCancelRequest;
@@ -114,8 +115,9 @@ public class OrderControllerImpl implements OrderController {
 
     @Override
     @PostMapping("/{id}/return-reject")
-    public ResponseEntity<ApiResponse<Void>> rejectReturn(@PathVariable UUID id) {
-        orderService.rejectReturn(id);
+    public ResponseEntity<ApiResponse<Void>> rejectReturn(@PathVariable UUID id,
+                                                          @Valid @RequestBody ReturnRejectRequest request) {
+        orderService.rejectReturn(id, request.reason());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 }
