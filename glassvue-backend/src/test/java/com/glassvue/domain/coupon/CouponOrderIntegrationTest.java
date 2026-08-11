@@ -177,6 +177,79 @@ class CouponOrderIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("COUPON-409"));
     }
 
+    /**
+     * 🔴 <b>취소하면 쿠폰이 실제로 돌아오는가</b> (2026-08-11, 08-10 §16-4 3번).
+     *
+     * <p>⚠ <b>단위 테스트로는 이걸 못 본다.</b> {@code OrderServiceTest} 는 {@code CouponService} 가
+     * 목이라 «restore 를 불렀다» 까지만 확인한다 — <b>실제로 되돌아왔는지는 모른다.</b>
+     * 실제로 2026-08-11 변형 주입(M9)에서 {@code MemberCoupon.restore()} 가 <b>아무것도 안 하게</b>
+     * 바꿔도 전체가 초록이었다(7/31 H-2 의 «@Mock 착시» 와 같은 자리).
+     *
+     * <p>→ 그래서 «되돌아왔다» 를 <b>다시 쓸 수 있다</b> 로 확인한다. {@code used_at} 을 직접 읽지 않는
+     * 이유는 그게 곧 «고객이 얻는 것» 이기 때문이다 — 컬럼이 비어도 다른 가드에 걸려 못 쓰면 소용없다.
+     * ({@code sameCouponCannotBeUsedTwice} 가 <b>대조군</b>이다: 취소를 안 하면 두 번째는 409 다.)
+     */
+    @Test
+    @DisplayName("🔴 취소하면 쿠폰이 돌아온다 — 같은 쿠폰으로 **다시 주문된다**")
+    void cancelRestoresCoupon() throws Exception {
+        String admin = login(adminLoginId);
+        String buyer = login(buyerLoginId);
+        String couponId = issueCouponTo(admin, buyer, buyerId);
+
+        fillCart(buyer);
+        String orderId = JsonPath.read(checkout(buyer, couponId)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.data");
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+                        .header("Authorization", buyer).contentType(JSON)
+                        .content("{\"reason\":\"ZZ-쿠폰복구검증\"}"))
+                .andExpect(status().isOk());
+
+        // 🔴 여기가 본론 — 2026-08-11 이전에는 이 요청이 COUPON-409 로 막혔다(쿠폰이 안 돌아왔다).
+        fillCart(buyer);   // 결제가 장바구니를 비우므로 다시 담는다
+        checkout(buyer, couponId)
+                .andExpect(status().isCreated());
+    }
+
+    /**
+     * 대조군 — 쿠폰을 <b>안 쓴</b> 주문을 취소해도 <b>남의 일에 손대지 않는다.</b>
+     *
+     * <p>⚠ <b>미사용 쿠폰만 두고 개수를 세면 판별이 안 된다</b>(2026-08-11 변형 M10 이 그걸 드러냈다).
+     * 「취소할 때 아무 쿠폰이나 되살린다」로 고쳐도, 되살릴 것이 전부 이미 미사용이면
+     * <b>개수가 그대로라 초록이다.</b> → <b>실제로 쓴 쿠폰이 살아 있는 상태</b>를 만들어 둔다:
+     * 여전히 유효한 주문 하나가 쿠폰 A 를 쥐고 있고, <b>무관한 주문의 취소가 A 를 풀어 주면 안 된다.</b>
+     */
+    @Test
+    @DisplayName("대조군: 쿠폰 없는 주문의 취소는 **다른 주문이 쓴 쿠폰**을 되살리지 않는다")
+    void cancelWithoutCoupon_doesNotTouchOtherCoupons() throws Exception {
+        String admin = login(adminLoginId);
+        String buyer = login(buyerLoginId);
+        String couponA = issueCouponTo(admin, buyer, buyerId);
+        issueCouponTo(admin, buyer, buyerId);   // 쿠폰 B — 안 쓴다
+
+        // 주문 1: 쿠폰 A 를 쓰고 **그대로 둔다**(취소하지 않는다) → A 는 사용 상태로 살아 있어야 한다
+        fillCart(buyer);
+        checkout(buyer, couponA).andExpect(status().isCreated());
+        mockMvc.perform(get("/api/coupons/me").header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.length()").value(1));   // B 만 남는다
+
+        // 주문 2: 쿠폰 없이 주문하고 취소한다
+        fillCart(buyer);
+        String orderId = JsonPath.read(mockMvc.perform(post("/api/orders")
+                        .header("Authorization", buyer).contentType(JSON)
+                        .content("{" + SHIPPING + "}"))   // memberCouponId 없음
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.data");
+        mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+                        .header("Authorization", buyer).contentType(JSON)
+                        .content("{\"reason\":\"ZZ-대조군\"}"))
+                .andExpect(status().isOk());
+
+        // 🔴 여전히 B 한 장뿐이어야 한다 — A 가 돌아왔다면 살아 있는 주문의 할인이 공짜가 된다.
+        mockMvc.perform(get("/api/coupons/me").header("Authorization", buyer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1));
+    }
+
     @Test
     @DisplayName("⚠ 남의 쿠폰으로는 주문할 수 없다 — **404(없는 것)** 로 답해 존재를 알려주지 않는다")
     void strangersCouponIsRejectedAsMissing() throws Exception {
