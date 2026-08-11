@@ -151,4 +151,24 @@ class MemberServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
     }
+
+    /**
+     * 🔴 재고 알림 수신자 (2026-08-11, 2026-08-10 §16-3 여섯째 자리).
+     *
+     * <p>{@code findIdsByRole(Role.ADMIN)} 이던 시절 <b>SUPER_ADMIN 한 사람만 조용히 빠졌다</b> —
+     * 다른 관리자에게는 알림이 가므로 <b>«알림 고장» 으로도 안 보이는</b> 종류의 결함이다.
+     * 여기서 못 박는 것은 «관리자 전원» 의 <b>전원이 무엇인가</b>이고, 그 답은
+     * {@link Role#adminRoles()} 가 갖는다(테스트가 역할을 손으로 나열하면 같은 사고가 반복된다).
+     */
+    @Test
+    @DisplayName("재고 알림 수신자(adminIds)는 SUPER_ADMIN 을 포함한 관리자 전원을 묻는다")
+    void adminIds_includesSuperAdmin() {
+        java.util.List<UUID> ids = java.util.List.of(UUID.randomUUID(), UUID.randomUUID());
+        when(memberRepository.findIdsByRoleIn(Role.adminRoles())).thenReturn(ids);
+
+        assertThat(service.adminIds()).isEqualTo(ids);
+
+        // 인자 자체도 본다 — 위 stub 이 안 맞으면 빈 목록이 나와 "알림 0건"이 정상처럼 보인다.
+        assertThat(Role.adminRoles()).contains(Role.SUPER_ADMIN, Role.ADMIN);
+    }
 }

@@ -9,7 +9,6 @@ import com.glassvue.domain.catalog.entity.StockChangeReason;
 import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.coupon.service.CouponService;
 import com.glassvue.domain.point.service.PointService;
-import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.domain.order.dto.AdminOrderResponse;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
@@ -197,10 +196,10 @@ public class OrderService {
         return counts;
     }
 
-    /** 주문 상세 — 본인 주문만. 단, ADMIN은 발송 처리를 위해 전체 주문 조회 가능. */
+    /** 주문 상세 — 본인 주문만. 단, 관리자(SUPER_ADMIN 포함)는 발송 처리를 위해 전체 주문 조회 가능. */
     @Transactional(readOnly = true)
     public OrderResponse get(UUID id, AuthUser user) {
-        Order order = (user.role() == Role.ADMIN
+        Order order = (user.isAdmin()
                 ? orderRepository.findById(id)
                 : orderRepository.findByIdAndMemberId(id, user.id()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));

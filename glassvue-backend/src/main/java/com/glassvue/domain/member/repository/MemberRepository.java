@@ -28,9 +28,16 @@ public interface MemberRepository extends JpaRepository<Member, UUID> {
             """)
     Page<Member> searchForAdmin(@Param("keyword") String keyword, Pageable pageable);
 
-    /** 특정 역할의 회원 id 목록 — 관리자 대상 알림(재고 부족 등)에서 쓴다. */
-    @Query("select m.id from Member m where m.role = :role")
-    List<UUID> findIdsByRole(@Param("role") Role role);
+    /**
+     * 여러 역할에 걸친 회원 id 목록 — 관리자 대상 알림(재고 부족 등)에서 쓴다.
+     *
+     * <p>⚠ 단수형 {@code findIdsByRole(Role.ADMIN)} 이었을 때 <b>SUPER_ADMIN 이 조용히 빠졌다</b>
+     * (2026-08-10 §16-3). 한 사람만 알림을 못 받는 자리라 «알림 고장» 으로도 안 보인다 —
+     * 그래서 호출부가 역할을 하나씩 고르지 못하게 <b>목록</b>으로 받는다.
+     * 경계는 {@link Role#adminRoles()} 가 갖는다.
+     */
+    @Query("select m.id from Member m where m.role in :roles")
+    List<UUID> findIdsByRoleIn(@Param("roles") List<Role> roles);
 
     /**
      * 마케팅 수신에 <b>동의한</b> 회원 id 목록 (2026-08-03, B-21 후속).

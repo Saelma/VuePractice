@@ -1,8 +1,10 @@
 package com.glassvue.domain.order.repository;
 
 import com.glassvue.domain.order.entity.Order;
+import com.glassvue.domain.order.entity.OrderStatus;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -25,20 +27,32 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, OrderReposi
     /**
      * 회원이 해당 상품을 실제로 주문(취소되지 않은 주문)했는지 — 리뷰 구매 인증용.
      *
-     * <p>정상 흐름(ORDERED·PAID·SHIPPED)을 **명시적으로 열거**한다. {@code <> CANCELLED}로 쓰면
-     * 나중에 추가되는 상태(환불 등)가 자동으로 "구매함"에 포함돼버리므로, 새 상태는 여기 직접
-     * 추가하도록 opt-in으로 둔다.
+     * <p>「구매함」으로 치는 상태를 <b>{@link OrderStatus#purchaseProven()} 한 곳</b>에서 받는다.
+     * 상태를 여기 문자로 열거하던 것을 2026-08-11 에 옮겼다 — 이유는 아래.
+     *
+     * <p>⚠ <b>같은 자리가 두 번 어긋났다.</b> 2026-07-20 에 {@code ORDERED} 만 세던 것을
+     * {@code ORDERED·PAID·SHIPPED} 로 고쳤는데(그때는 그게 «CANCELLED만 제외» 였다), 2026-07-23(V13)에
+     * {@code DELIVERED} 가 생기면서 <b>다시 빠졌다.</b> «새 상태는 여기 직접 추가한다(opt-in)» 는
+     * 주석은 의도를 적어 뒀지만, <b>추가할 계기를 아무도 못 받는다</b> — 열거를 손으로 늘리는 모양
+     * 자체가 원인이라, opt-in 을 <b>enum 옆으로 옮겨</b> 상태를 새로 만드는 사람의 눈앞에 뒀다.
+     *
+     * <p>⚠ <b>리뷰를 쓰는 가장 자연스러운 시점이 배송완료다.</b> 그런데 주문 직후~발송 사이엔 통과하므로
+     * 손으로 눌러 보는 검증에서는 안 드러난다 — 「받고 나서」 눌러야만 막혔다.
      */
     @Query("""
             select count(oi) > 0 from OrderItem oi
             where oi.order.memberId = :memberId
               and oi.productId = :productId
-              and oi.order.status in (
-                    com.glassvue.domain.order.entity.OrderStatus.ORDERED,
-                    com.glassvue.domain.order.entity.OrderStatus.PAID,
-                    com.glassvue.domain.order.entity.OrderStatus.SHIPPED)
+              and oi.order.status in :provenStatuses
             """)
-    boolean existsPurchase(@Param("memberId") UUID memberId, @Param("productId") UUID productId);
+    boolean existsPurchaseIn(@Param("memberId") UUID memberId,
+                             @Param("productId") UUID productId,
+                             @Param("provenStatuses") Set<OrderStatus> provenStatuses);
+
+    /** {@link #existsPurchaseIn} 의 호출부용 — 「구매함」의 기준은 호출부가 고르지 않는다. */
+    default boolean existsPurchase(UUID memberId, UUID productId) {
+        return existsPurchaseIn(memberId, productId, OrderStatus.purchaseProven());
+    }
 
     /**
      * 상태별 주문 건수 — 관리자 화면이 "지금 발송할 게 몇 건인지"를 한눈에 보여주기 위함.

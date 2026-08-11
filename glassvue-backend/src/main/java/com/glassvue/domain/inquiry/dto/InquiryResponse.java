@@ -3,7 +3,6 @@ package com.glassvue.domain.inquiry.dto;
 import com.glassvue.domain.image.dto.ImageResponse;
 import com.glassvue.domain.inquiry.entity.Inquiry;
 import com.glassvue.domain.inquiry.entity.InquiryStatus;
-import com.glassvue.domain.member.entity.Role;
 import com.glassvue.global.security.AuthUser;
 import java.time.Instant;
 import java.util.List;
@@ -38,7 +37,7 @@ public record InquiryResponse(
      */
     public static InquiryResponse from(Inquiry i, AuthUser viewer, List<ImageResponse> images) {
         boolean canView = !i.isSecret()
-                || (viewer != null && (viewer.role() == Role.ADMIN || i.isOwnedBy(viewer.id())));
+                || (viewer != null && (viewer.isAdmin() || i.isOwnedBy(viewer.id())));
         boolean masked = !canView;
         return new InquiryResponse(
                 i.getId(),

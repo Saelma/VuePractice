@@ -35,6 +35,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -239,11 +241,21 @@ class OrderServiceTest {
         verify(orderRepository, never()).findById(any());
     }
 
-    @Test
-    @DisplayName("상세: 관리자는 전체 주문 조회(findById)")
-    void get_admin_all() {
+    /**
+     * ⚠ 2026-08-11 이전에는 이 테스트가 {@code Role.ADMIN} <b>하나만</b> 넣었고, 운영 코드는
+     * {@code user.role() == Role.ADMIN} 이었다 — 즉 <b>테스트가 통과하는데 실제 운영 계정
+     * (SUPER_ADMIN)은 남의 주문 상세에서 404 를 받고 있었다</b>(2026-08-10 §16-3).
+     * 역할을 하나만 넣는 테스트는 <b>역할 경계를 지키지 못한다.</b> 관리자 역할 전부를 돌린다.
+     *
+     * <p>⚠ 반대편(USER 가 전체 조회로 새지 않는다)은 {@code get_user_scoped} 가 잡는다 —
+     * 그게 없으면 «전부 findById» 로 고쳐도 이 테스트는 초록이다.
+     */
+    @ParameterizedTest(name = "{0} 은 전체 주문 조회")
+    @EnumSource(value = Role.class, names = {"ADMIN", "SUPER_ADMIN"})
+    @DisplayName("상세: 관리자는 전체 주문 조회(findById) — SUPER_ADMIN 포함")
+    void get_admin_all(Role role) {
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(sampleOrder()));
-        AuthUser admin = new AuthUser(UUID.randomUUID(), Role.ADMIN, "admin");
+        AuthUser admin = new AuthUser(UUID.randomUUID(), role, "admin");
         orderService.get(orderId, admin);
         verify(orderRepository).findById(orderId);
         verify(orderRepository, never()).findByIdAndMemberId(any(), any());

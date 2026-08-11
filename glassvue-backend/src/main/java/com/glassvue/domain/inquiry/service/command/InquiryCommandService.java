@@ -12,7 +12,6 @@ import com.glassvue.domain.inquiry.entity.Inquiry;
 import com.glassvue.domain.inquiry.entity.InquiryType;
 import com.glassvue.domain.inquiry.event.InquiryAnsweredEvent;
 import com.glassvue.domain.inquiry.repository.InquiryRepository;
-import com.glassvue.domain.member.entity.Role;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
@@ -108,7 +107,7 @@ public class InquiryCommandService {
     /** 삭제는 본인 또는 관리자. */
     public void delete(UUID id, AuthUser user) {
         Inquiry inquiry = findById(id);
-        boolean allowed = user.role() == Role.ADMIN || inquiry.isOwnedBy(user.id());
+        boolean allowed = user.isAdmin() || inquiry.isOwnedBy(user.id());
         if (!allowed) {
             throw new BusinessException(ErrorCode.INQUIRY_NOT_OWNER);
         }

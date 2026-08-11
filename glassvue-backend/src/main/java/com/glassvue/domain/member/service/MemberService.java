@@ -46,10 +46,15 @@ public class MemberService {
     private final Mailer mailer;
     private final ApplicationEventPublisher eventPublisher;
 
-    /** 관리자 회원 id 목록 — 관리자 대상 알림(재고 부족 등)을 만들 때 쓰는 다른 도메인용 공개 API. */
+    /**
+     * 관리자 회원 id 목록 — 관리자 대상 알림(재고 부족 등)을 만들 때 쓰는 다른 도메인용 공개 API.
+     *
+     * <p>{@link Role#adminRoles()} 라 <b>SUPER_ADMIN 도 포함</b>한다. 2026-08-10 §16-3 이전에는
+     * {@code ADMIN} 하나만 물어서 최상위 관리자에게만 재고 알림이 안 갔다.
+     */
     @Transactional(readOnly = true)
     public java.util.List<UUID> adminIds() {
-        return memberRepository.findIdsByRole(Role.ADMIN);
+        return memberRepository.findIdsByRoleIn(Role.adminRoles());
     }
 
     /**

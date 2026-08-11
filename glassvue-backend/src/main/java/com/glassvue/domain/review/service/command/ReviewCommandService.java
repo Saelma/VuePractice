@@ -4,7 +4,6 @@ import com.glassvue.domain.audit.entity.AuditAction;
 import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
 import com.glassvue.domain.image.service.ImageService;
-import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.domain.review.dto.ReviewCreateRequest;
@@ -126,11 +125,11 @@ public class ReviewCommandService {
                 new ReviewRatingChangedEvent(productId, stats.roundedAverage(), stats.count()));
     }
 
-    /** 존재 확인 + (본인 리뷰이거나 ADMIN이면) 반환. 아니면 403. */
+    /** 존재 확인 + (본인 리뷰이거나 관리자면) 반환. 아니면 403. */
     private Review findManageable(UUID id, AuthUser user) {
         Review review = reviewRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REVIEW_NOT_FOUND));
-        boolean allowed = user.role() == Role.ADMIN || review.isOwnedBy(user.id());
+        boolean allowed = user.isAdmin() || review.isOwnedBy(user.id());
         if (!allowed) {
             throw new BusinessException(ErrorCode.REVIEW_NOT_OWNER);
         }

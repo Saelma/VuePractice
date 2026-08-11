@@ -1,7 +1,6 @@
 package com.glassvue.domain.notice.service.command;
 
 import java.util.UUID;
-import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.notice.dto.NoticeCreateRequest;
 import com.glassvue.domain.notice.dto.NoticeUpdateRequest;
 import com.glassvue.domain.notice.entity.Notice;
@@ -56,11 +55,11 @@ public class NoticeCommandService {
         noticeRepository.delete(notice);
     }
 
-    /** 존재 확인 + (본인 글이거나 ADMIN이면) 반환. 아니면 403. */
+    /** 존재 확인 + (본인 글이거나 관리자면) 반환. 아니면 403. */
     private Notice findManageable(UUID id, AuthUser user) {
         Notice notice = noticeRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTICE_NOT_FOUND));
-        boolean allowed = user.role() == Role.ADMIN || notice.isOwnedBy(user.id());
+        boolean allowed = user.isAdmin() || notice.isOwnedBy(user.id());
         if (!allowed) {
             throw new BusinessException(ErrorCode.NOTICE_NOT_OWNER);
         }
