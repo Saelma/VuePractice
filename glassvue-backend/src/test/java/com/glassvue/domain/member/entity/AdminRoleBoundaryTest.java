@@ -30,6 +30,18 @@ import org.junit.jupiter.params.provider.EnumSource;
  */
 class AdminRoleBoundaryTest {
 
+    /**
+     * 행위자 역할을 {@code ADMIN} 과 직접 비교하는 자리.
+     *
+     * <p>⚠ <b>정규식인 이유</b>: 처음엔 {@code line.contains(".role() == Role.ADMIN")} 이었는데,
+     * 2026-08-11 변형 주입(M3)에서 <b>완전수식명</b>
+     * ({@code user.role() == com.glassvue.domain.member.entity.Role.ADMIN})을 놓쳤다 —
+     * 되돌린 버그를 <b>이 테스트가 못 잡았다.</b> 임포트를 안 쓰면 통과하는 검사는 검사가 아니다.
+     * 공백·수식 접두사·{@code !=} 를 전부 흡수한다.
+     */
+    private static final java.util.regex.Pattern ACTOR_ROLE_COMPARISON =
+            java.util.regex.Pattern.compile("\\.role\\(\\)\\s*[!=]=\\s*(?:[\\w.]*\\.)?Role\\.ADMIN");
+
     // ── 판정 함수 ────────────────────────────────────────────────────────────
 
     @ParameterizedTest
@@ -103,7 +115,7 @@ class AdminRoleBoundaryTest {
                     if (code.startsWith("*") || code.startsWith("//") || code.startsWith("/*")) {
                         continue;
                     }
-                    if (line.contains(".role() == Role.ADMIN") || line.contains(".role() != Role.ADMIN")) {
+                    if (ACTOR_ROLE_COMPARISON.matcher(line).find()) {
                         offenders.add(main.relativize(file) + ":" + (i + 1) + "  " + code);
                     }
                 }
