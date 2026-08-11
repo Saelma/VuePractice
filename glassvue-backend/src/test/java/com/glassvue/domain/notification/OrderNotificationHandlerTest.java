@@ -8,6 +8,8 @@ import com.glassvue.domain.notification.service.NotificationCommandService;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
+import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
+import com.glassvue.domain.order.event.OrderReturnedEvent;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -105,6 +107,51 @@ class OrderNotificationHandlerTest {
         assertThat(n.memberId()).isEqualTo(buyerId);
         assertThat(n.type()).isEqualTo(NotificationType.ORDER);
         assertThat(n.message()).contains("30000");     // 얼마짜리가 취소됐는지
+        assertThat(n.link()).isEqualTo("/orders/" + orderId);
+    }
+
+    // ── 반품 (2026-08-11, 08-10 §16-4 4번 — 여기가 통째로 비어 있었다) ──────
+
+    /**
+     * ⚠ 배송완료의 적립 문구와 <b>같은 분기</b>다 — 값이 0이면 안 넣는다.
+     * 「0원이 환불되었습니다」는 안내가 아니라 혼란이라는 판단을 반품 쪽에도 그대로 적용한다.
+     */
+    @Test
+    @DisplayName("반품 승인 → 구매자에게 **환불 금액과 함께** (돈이 움직였는데 말이 없으면 안 된다)")
+    void returnedNotifiesBuyer() {
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, 25_000L, List.of()));
+
+        Notified n = captured();
+        assertThat(n.memberId()).isEqualTo(buyerId);
+        assertThat(n.type()).isEqualTo(NotificationType.ORDER);
+        assertThat(n.message()).contains("25000");
+        assertThat(n.link()).isEqualTo("/orders/" + orderId);
+    }
+
+    @Test
+    @DisplayName("⚠ 환불액이 0이면 금액 문구를 **넣지 않는다** (배송완료 적립과 같은 판단)")
+    void returnedWithoutRefund() {
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, 0L, List.of()));
+
+        Notified n = captured();
+        assertThat(n.message()).isEqualTo("반품이 완료되었어요.");
+        assertThat(n.message()).doesNotContain("환불");
+    }
+
+    /**
+     * 🔴 셋 중 가장 급했던 자리 — 거절은 상태가 조용히 {@code DELIVERED} 로 돌아갈 뿐이라
+     * 알림이 없으면 <b>요청해 놓고 영영 소식이 없다.</b>
+     * ⚠ 사유를 못 넣는다({@code rejectReturn} 이 안 받는다) — <b>지어내지 않고</b> 링크로 보낸다.
+     */
+    @Test
+    @DisplayName("반품 거절 → 구매자에게 알린다 (사유는 지어내지 않고 주문 상세로 보낸다)")
+    void returnRejectedNotifiesBuyer() {
+        handler.handle(new OrderReturnRejectedEvent(orderId, buyerId));
+
+        Notified n = captured();
+        assertThat(n.memberId()).isEqualTo(buyerId);
+        assertThat(n.type()).isEqualTo(NotificationType.ORDER);
+        assertThat(n.title()).contains("거절");
         assertThat(n.link()).isEqualTo("/orders/" + orderId);
     }
 }

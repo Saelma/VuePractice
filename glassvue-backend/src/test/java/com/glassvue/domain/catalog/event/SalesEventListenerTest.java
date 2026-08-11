@@ -41,7 +41,8 @@ class SalesEventListenerTest {
     @Test
     @DisplayName("반품 승인 → 판매량 감소에 위임한다")
     void returnedDecreases() {
-        listener.onOrderReturned(new OrderReturnedEvent(UUID.randomUUID(), UUID.randomUUID(), lines));
+        // refundedPoint 는 알림 문구용이라 catalog 는 안 본다 — 0 이든 아니든 판매량 감소는 같다.
+        listener.onOrderReturned(new OrderReturnedEvent(UUID.randomUUID(), UUID.randomUUID(), 0L, lines));
         verify(salesSyncHandler).decrease(lines);
     }
 }

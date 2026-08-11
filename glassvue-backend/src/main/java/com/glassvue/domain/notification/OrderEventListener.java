@@ -3,6 +3,8 @@ package com.glassvue.domain.notification;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
+import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
+import com.glassvue.domain.order.event.OrderReturnedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -43,6 +45,27 @@ public class OrderEventListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrderDelivered(OrderDeliveredEvent event) {
+        notificationHandler.handle(event);
+    }
+
+    /**
+     * 반품 승인·거절 (2026-08-11, 08-10 §16-4 4번).
+     *
+     * <p>⚠ <b>이 둘이 통째로 빠져 있었다.</b> 취소·배송완료는 여기 줄이 있는데 반품만 없었고,
+     * 그래서 «돈이 환불됐는데 아무 말이 없다»·«요청해 놓고 소식이 없다» 가 됐다.
+     * ⚠ 이 리스너의 <b>메서드 목록이 곧 「고객에게 알리는 주문 사건」의 목록</b>이다 —
+     * 주문에 새 사건이 생기면 여기 줄이 있는지부터 본다(취소·반품의 되돌리기 목록이
+     * {@code OrderService.applyCancellation} 인 것과 같은 자리, §8).
+     */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderReturned(OrderReturnedEvent event) {
+        notificationHandler.handle(event);
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderReturnRejected(OrderReturnRejectedEvent event) {
         notificationHandler.handle(event);
     }
 }

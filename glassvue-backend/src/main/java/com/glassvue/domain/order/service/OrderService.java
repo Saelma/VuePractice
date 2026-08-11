@@ -22,6 +22,7 @@ import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
+import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
@@ -428,6 +429,10 @@ public class OrderService {
             throw new BusinessException(ErrorCode.ORDER_NOT_RETURN_PENDING);
         }
         order.rejectReturn();
+        // 🔴 고객에게 알린다 (2026-08-11) — 거절은 상태가 조용히 DELIVERED 로 돌아갈 뿐이라
+        //    알리지 않으면 «요청해 놓고 영영 소식이 없는» 상태가 된다(08-10 §16-4 4번).
+        //    재고·적립금을 안 건드리므로(승인 안 했으니) 구독자는 알림 하나뿐이다.
+        eventPublisher.publishEvent(OrderReturnRejectedEvent.from(order));
         log.info("Return rejected: {}", id);
     }
 }
