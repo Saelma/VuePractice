@@ -282,6 +282,42 @@ audit           관리자 조작 감사 이력 (append-only, 이벤트로만 유
 >   기억하지 못한다. 대신 줄마다 유형 배지를 단다. 조회 조건이 `authorId = 나` 라 **마스킹 판정이
 >   아예 없다**(이미 참인 것을 다시 묻지 않는다).
 
+### 상품 삭제 생명주기 (2026-08-12, F-7 · V48)
+
+**상품 삭제는 즉시가 아니라 「표시 → 유예 → 영구 삭제」 3단계다.** 그전에는 하드 삭제였고,
+지우면 FK CASCADE 로 **옵션(V22)·재고 이력(V39)이 함께** 사라지고 이미지 그룹도 지워졌다.
+취소 API 는 없었다 — **오조작의 대가가 그 셋 전부인데 방어는 확인 대화 하나뿐**이었다.
+
+| 단계 | 무엇이 남나 | 누가 |
+|---|---|---|
+| ① 삭제 = **표시** | `product.deleted_at` 이 찍힌다. **행·옵션·재고이력·이미지 전부 그대로** | 관리자(`DELETE /api/products/{id}`) |
+| ② 유예 (기본 7일) | 목록·검색·상세에서 빠지지만 **복구 가능** | — |
+| ③ **영구 삭제** | 행·옵션·재고이력·이미지가 사라진다 — **여기부터 되돌릴 수 없다** | `ProductPurgeScheduler`(`@Scheduled`, 이미지 스위퍼와 같은 모양) |
+
+🔴 **상태(`ProductStatus`)가 아니라 시각인 것이 설계의 핵심이다.** 「숨김」은 «계속 팔 생각이 있다»,
+삭제 대기는 «시한이 있다» 인데 **시한은 상태로 표현할 수 없다** — `deleted_at` 하나로
+«지워졌나» 와 «언제까지 되돌릴 수 있나» 가 **둘 다** 나온다(복구 화면의 D-day 가 그 값이다).
+⚠ enum 값을 늘렸으면 Oracle CHECK 제약 마이그레이션도 따라왔다.
+
+🔴 **「대기 상품을 어떻게 다루나」는 조회 자리마다 다르다 — 전역 필터(`@Where`)를 쓰지 않은 이유다:**
+
+| 자리 | 대기 상품을 | 왜 |
+|---|---|---|
+| 목록·검색 | **뺀다** | 안 빼면 지운 상품이 계속 팔린다 |
+| 상세 | **404** | URL 직접 접근(알림·북마크)이 남아 있다 |
+| 새 리뷰·문의(`ensureExists`) | **막는다** | 곧 사라질 상품에 답변자 없는 글이 생긴다 |
+| 재고 부족(대시보드) | **뺀다 — 목록·카운트 «양쪽»** | 한쪽만 고치면 카드 숫자와 줄이 어긋난다 |
+| **장바구니** | **줄을 남기고 구매만 막는다**(`available=false`) | 지우면 **복구해도 장바구니는 안 돌아온다** |
+| **리뷰 관리 목록** | **이름이 살아 있다** | 아직 안 지워졌다 — 「(지워진 상품)」은 ③ 이후의 표시다 |
+| **카테고리 삭제 가드** | **«있는 것» 으로 센다** | 복구했을 때 **돌아갈 카테고리**가 있어야 한다(`category_id` NOT NULL) |
+
+⚠ **삭제(①)에서 이미지를 안 지운다** — 지우면 복구해도 사진이 안 돌아와 유예의 목적이 절반 깨진다.
+이미지 삭제는 ③으로 옮겼다(위 「이미지 생명주기」의 *"소유 도메인이 deleteGroup 호출"* 은 그대로고,
+**부르는 시점만** 바뀌었다).
+
+⚠ **「지금 바로 지우는」 API 는 두지 않았다.** 유예를 건너뛸 수 있으면 이 기능이 무의미해진다 —
+영구 삭제의 호출자는 스케줄러 하나다.
+
 ### 이미지 생명주기 규칙 (2026-07-20)
 
 업로드가 **2단계**(①`POST /api/images`로 올려 id를 받고 ②저장 시 `imageIds`로 전달)라
@@ -717,6 +753,8 @@ audit           관리자 조작 감사 이력 (append-only, 이벤트로만 유
 > "언제 그 숫자가 됐는지" 가 오늘 날짜로 거짓이 된다(V37 이 동의 시각을 백필하지 않은 것과 같은 판단).
 > 따라서 **V39 이전 상품은 한동안 `SUM(quantity) ≠ 현재 재고`** 다 — **화면이 합계로 검산하면 안 된다.**
 > ⚠ 이력은 상품에 종속된다(`ON DELETE CASCADE`) — 상품이 없으면 그 재고 이력을 볼 화면도 없다.
+> ⚠ **2026-08-12(F-7) 이후로는 「상품이 없다」가 곧 「삭제했다」가 아니다** — 유예 동안은 상품도 이력도
+> 그대로 있고, **영구 삭제(③) 때 함께** 사라진다. 즉 오조작으로 이력이 날아가는 창이 7일 뒤로 밀렸다.
 > **감사 로그(`admin_audit_log`)와는 성격이 다르다**: 저건 조작 주체의 기록이라 대상이 사라져도 남는다.
 
 > **주문 취소 사유 (2026-08-04, B-17, V40)**: 반품엔 사유가 있는데 취소엔 없어
@@ -942,7 +980,7 @@ Spring Boot ──(로그)──┐
 | ~~**HTTPS** (nginx TLS 종단)~~ | ✅ **완료** 2026-07-16 — self-signed(SAN IP), 80→443 리다이렉트 (§6.0) |
 | **Sentry** (에러추적) | ⏸ 보류 — 관측/MSA 단계에 관측 스택과 함께 (모노레포 단계엔 오버엔지니어링, 2026-07-16 재판단) |
 | **Spring Batch** | 대량·재시작 배치 작업이 생길 때 (§6.0) |
-| ApplicationEventPublisher (스프링 내부 이벤트) | ✅ **도입 시작**(2026-07-16). **3층 구조**: ①`DomainEvent`(global/messaging 마커 인터페이스, 이벤트가 implements) ②`OrderEventListener`(어댑터 — `@TransactionalEventListener` AFTER_COMMIT + **`@Async`** 수신·위임만) ③`OrderNotificationHandler`(진짜 주체 — 로직). `OrderPlacedEvent`(checkout 발행) → 리스너 → 핸들러. order는 구독자를 모름. 비동기는 `AsyncConfig`(바운드 풀). 인프로세스 @Async는 best-effort → 유실 금지는 아웃박스/RabbitMQ. **MSA 시 리스너 자리에 RabbitMQ 컨슈머, Handler는 재사용**<br>**2026-07-20 확장**: `OrderCancelledEvent`(cancel 발행, Placed와 대칭) + **`StockRunningLowEvent`** 추가. 재고 이벤트는 **catalog가 발행 주체** — 재고는 catalog 소유이고 주문 외 경로(관리자 수정 등)로 줄어도 같은 알림이 나가야 하므로. 덕분에 order는 재고 알림의 존재를 모르고 `OrderService`는 무수정(fan-out 실증: 주문 1건 → Handler 2개가 각각 `event-*` 스레드에서 반응). 임계치는 `catalog.low-stock-threshold`(기본 5, 0=품절 포함). **재고 복원은 이벤트로 빼지 않는다** — 취소 처리의 일부(동기 성공 필수)지 best-effort 후처리가 아님<br>**2026-07-27 확장**: **`StockReplenishedEvent`**(재입고, B-9/V28) — `StockRunningLowEvent` 와 대칭으로 **catalog 가 발행 주체**. 상품 **총재고 0→양수** 전환 시 발행하며 경로는 셋(주문취소·반품복원=`increaseStock`, 관리자 재고편집=`update`). 구독자는 **restock 도메인**의 `RestockEventListener`→`RestockNotificationHandler`(신청자에게 RESTOCK 알림 + 구독 소진). 재고부족(STOCK)은 notification 이 받지만 재입고는 구독 생명주기를 소유한 restock 이 받는다(catalog→restock→notification, 순환 없음). 단위가 옵션이 아니라 상품인 이유는 §5 restock 참조<br>**2026-07-20 확장 2**: **`ReviewRatingChangedEvent`**(review 발행, 작성·수정·삭제) → catalog `ReviewEventListener` → `RatingSyncHandler`가 `product.avg_rating`/`review_count` 비정규화 갱신 + `products:list` 캐시 evict. **이벤트를 쓴 이유는 성능이 아니라 순환 회피** — catalog가 review를 조회하면 기존 `review → catalog`와 합쳐져 도메인 순환이 되고 MSA 분리가 깨진다. 그래서 **집계값을 이벤트 페이로드에 실어 보낸다**(`productId`만 보내면 구독자가 review를 되물어야 해서 순환이 되살아남). 결과: 상품 목록이 조인·추가쿼리 **0회**로 별점을 읽고, 의존 방향은 `review → catalog` 한쪽뿐<br>**2026-07-31 확장 2**: **`MemberSignedUpEvent`**(G-2) — member 가 발행, 구독자는 coupon(`WelcomeCouponListener`→`WelcomeCouponHandler`, 가입 쿠폰 자동 발급). ⚠ **같은 도메인의 `MemberWithdrawnEvent` 와 처리 방식이 정반대다**: 탈퇴는 기본 `@EventListener` 라 **발행측 트랜잭션에 합류**하고(정리 실패 시 회원 삭제도 롤백돼야 한다), 가입은 `@Async`+`AFTER_COMMIT` 이다(**쿠폰 발급이 실패해도 가입은 유효**해야 한다 — 쿠폰은 다시 줄 수 있지만 가입 실패는 사용자가 다시 겪는다). 같은 이유로 **적립금 계정 생성은 이벤트로 빼지 않고** 가입 트랜잭션 안에 뒀다(배송완료 적립을 동기로 둔 것과 같은 판단). 발급 대상은 **관리자가 「가입 쿠폰」으로 지정한 쿠폰 하나**(V36 `coupon.welcome` + 함수기반 유니크 인덱스 — 지정이 없으면 기능 꺼짐). ⚠ 처음엔 설정(.env)이었는데 **바꿀 때마다 재시작**이 필요하고 무엇이 가입 쿠폰인지 화면에서 안 보여 같은 날 데이터로 옮겼다<br>**2026-07-31 확장**: **`InquiryAnsweredEvent`**(B-15) — inquiry 가 발행 주체, 구독자는 notification(`InquiryEventListener`→`InquiryNotificationHandler`). 알림 대상이 **발행자(관리자)가 아니라 이벤트에 실린 작성자**인 첫 사례라 페이로드에 `authorId`·`productId`·`inquiryTitle` 을 함께 싣는다(구독자가 inquiry 를 되물으면 `notification → inquiry` 역방향이 생긴다 — `ReviewRatingChangedEvent` 와 같은 이유). ⚠ **발행 조건이 로직의 전부**: 등록·수정 겸용 API 라 **첫 답변에서만** 발행하고, 판정은 `inquiry.answer()` **앞**에서 읽어야 한다(뒤면 항상 `ANSWERED` → 영영 발행 안 됨)<br>🔴 **2026-08-11 확장**: **`OrderReturnRejectedEvent`** 신설 + **`OrderReturnedEvent` 에 notification 구독 추가**(08-10 §16-4 4번). 그전까지 반품은 **승인도 거절도 고객에게 안 알려졌다** — 취소·배송완료는 알림이 가는데 반품만 빠진 **비대칭**이었고, `OrderReturnedEvent` 의 구독자는 catalog(판매량 되돌리기) **하나뿐**이었다. 즉 **돈이 환불됐는데 아무 말이 없었고**, 거절은 상태가 조용히 `DELIVERED` 로 돌아가 **요청해 놓고 영영 소식이 없는** 상태였다(셋 중 이게 가장 나빴다). ⚠ 거절 이벤트에 `lines` 를 **넣지 않았다** — 거절은 재고·적립금을 안 건드려 catalog 가 되돌릴 것이 없다. «짝이니까» 로 없는 필드를 넣으면 다음 사람이 «판매량을 되돌리나?» 로 읽는다. ⚠ 승인 이벤트에는 `refundedPoint` 를 실었다(핸들러는 주문 엔티티를 못 본다 — `OrderDeliveredEvent` 의 `earnedPoint` 와 같은 자리). 🔴 **리스너의 메서드 목록이 곧 「고객에게 알리는 주문 사건」의 목록**인데, 그게 **손으로 적은 목록**이라 `OrderReturnedEvent` 가 2026-07-24 부터 있었는데도 **핸들러도 리스너도 없이** 지나갔다. → `OrderEventListenerTest.everyHandledEventIsWired` 가 **핸들러의 `handle` 오버로드마다 리스너 메서드가 있는지 반사로 대조**한다. ⚠ **배선 누락은 조용하다** — 컴파일도 되고 테스트도 초록인데 알림만 안 가고, 그런 알림이 있었다는 걸 모르니 아무도 신고하지 않는다<br>**2026-08-11 확장 2**: **`MemberWithdrawnEvent` 에 cart 구독 추가**(08-10 §16-4 6번) — 위 §회원 삭제 정리 참조. |
+| ApplicationEventPublisher (스프링 내부 이벤트) | ✅ **도입 시작**(2026-07-16). **3층 구조**: ①`DomainEvent`(global/messaging 마커 인터페이스, 이벤트가 implements) ②`OrderEventListener`(어댑터 — `@TransactionalEventListener` AFTER_COMMIT + **`@Async`** 수신·위임만) ③`OrderNotificationHandler`(진짜 주체 — 로직). `OrderPlacedEvent`(checkout 발행) → 리스너 → 핸들러. order는 구독자를 모름. 비동기는 `AsyncConfig`(바운드 풀). 인프로세스 @Async는 best-effort → 유실 금지는 아웃박스/RabbitMQ. **MSA 시 리스너 자리에 RabbitMQ 컨슈머, Handler는 재사용**<br>**2026-07-20 확장**: `OrderCancelledEvent`(cancel 발행, Placed와 대칭) + **`StockRunningLowEvent`** 추가. 재고 이벤트는 **catalog가 발행 주체** — 재고는 catalog 소유이고 주문 외 경로(관리자 수정 등)로 줄어도 같은 알림이 나가야 하므로. 덕분에 order는 재고 알림의 존재를 모르고 `OrderService`는 무수정(fan-out 실증: 주문 1건 → Handler 2개가 각각 `event-*` 스레드에서 반응). 임계치는 `catalog.low-stock-threshold`(기본 5, 0=품절 포함). **재고 복원은 이벤트로 빼지 않는다** — 취소 처리의 일부(동기 성공 필수)지 best-effort 후처리가 아님<br>**2026-07-27 확장**: **`StockReplenishedEvent`**(재입고, B-9/V28) — `StockRunningLowEvent` 와 대칭으로 **catalog 가 발행 주체**. 상품 **총재고 0→양수** 전환 시 발행하며 경로는 셋(주문취소·반품복원=`increaseStock`, 관리자 재고편집=`update`). 구독자는 **restock 도메인**의 `RestockEventListener`→`RestockNotificationHandler`(신청자에게 RESTOCK 알림 + 구독 소진). 재고부족(STOCK)은 notification 이 받지만 재입고는 구독 생명주기를 소유한 restock 이 받는다(catalog→restock→notification, 순환 없음). 단위가 옵션이 아니라 상품인 이유는 §5 restock 참조<br>**2026-07-20 확장 2**: **`ReviewRatingChangedEvent`**(review 발행, 작성·수정·삭제) → catalog `ReviewEventListener` → `RatingSyncHandler`가 `product.avg_rating`/`review_count` 비정규화 갱신 + `products:list` 캐시 evict. **이벤트를 쓴 이유는 성능이 아니라 순환 회피** — catalog가 review를 조회하면 기존 `review → catalog`와 합쳐져 도메인 순환이 되고 MSA 분리가 깨진다. 그래서 **집계값을 이벤트 페이로드에 실어 보낸다**(`productId`만 보내면 구독자가 review를 되물어야 해서 순환이 되살아남). 결과: 상품 목록이 조인·추가쿼리 **0회**로 별점을 읽고, 의존 방향은 `review → catalog` 한쪽뿐<br>**2026-07-31 확장 2**: **`MemberSignedUpEvent`**(G-2) — member 가 발행, 구독자는 coupon(`WelcomeCouponListener`→`WelcomeCouponHandler`, 가입 쿠폰 자동 발급). ⚠ **같은 도메인의 `MemberWithdrawnEvent` 와 처리 방식이 정반대다**: 탈퇴는 기본 `@EventListener` 라 **발행측 트랜잭션에 합류**하고(정리 실패 시 회원 삭제도 롤백돼야 한다), 가입은 `@Async`+`AFTER_COMMIT` 이다(**쿠폰 발급이 실패해도 가입은 유효**해야 한다 — 쿠폰은 다시 줄 수 있지만 가입 실패는 사용자가 다시 겪는다). 같은 이유로 **적립금 계정 생성은 이벤트로 빼지 않고** 가입 트랜잭션 안에 뒀다(배송완료 적립을 동기로 둔 것과 같은 판단). 발급 대상은 **관리자가 「가입 쿠폰」으로 지정한 쿠폰 하나**(V36 `coupon.welcome` + 함수기반 유니크 인덱스 — 지정이 없으면 기능 꺼짐). ⚠ 처음엔 설정(.env)이었는데 **바꿀 때마다 재시작**이 필요하고 무엇이 가입 쿠폰인지 화면에서 안 보여 같은 날 데이터로 옮겼다<br>**2026-07-31 확장**: **`InquiryAnsweredEvent`**(B-15) — inquiry 가 발행 주체, 구독자는 notification(`InquiryEventListener`→`InquiryNotificationHandler`). 알림 대상이 **발행자(관리자)가 아니라 이벤트에 실린 작성자**인 첫 사례라 페이로드에 `authorId`·`productId`·`inquiryTitle` 을 함께 싣는다(구독자가 inquiry 를 되물으면 `notification → inquiry` 역방향이 생긴다 — `ReviewRatingChangedEvent` 와 같은 이유). ⚠ **발행 조건이 로직의 전부**: 등록·수정 겸용 API 라 **첫 답변에서만** 발행하고, 판정은 `inquiry.answer()` **앞**에서 읽어야 한다(뒤면 항상 `ANSWERED` → 영영 발행 안 됨)<br>🔴 **2026-08-11 확장**: **`OrderReturnRejectedEvent`** 신설 + **`OrderReturnedEvent` 에 notification 구독 추가**(08-10 §16-4 4번). 그전까지 반품은 **승인도 거절도 고객에게 안 알려졌다** — 취소·배송완료는 알림이 가는데 반품만 빠진 **비대칭**이었고, `OrderReturnedEvent` 의 구독자는 catalog(판매량 되돌리기) **하나뿐**이었다. 즉 **돈이 환불됐는데 아무 말이 없었고**, 거절은 상태가 조용히 `DELIVERED` 로 돌아가 **요청해 놓고 영영 소식이 없는** 상태였다(셋 중 이게 가장 나빴다). ⚠ 거절 이벤트에 `lines` 를 **넣지 않았다** — 거절은 재고·적립금을 안 건드려 catalog 가 되돌릴 것이 없다. «짝이니까» 로 없는 필드를 넣으면 다음 사람이 «판매량을 되돌리나?» 로 읽는다. ⚠ 승인 이벤트에는 `refundedPoint` 를 실었다(핸들러는 주문 엔티티를 못 본다 — `OrderDeliveredEvent` 의 `earnedPoint` 와 같은 자리). 🔴 **리스너의 메서드 목록이 곧 「고객에게 알리는 주문 사건」의 목록**인데, 그게 **손으로 적은 목록**이라 `OrderReturnedEvent` 가 2026-07-24 부터 있었는데도 **핸들러도 리스너도 없이** 지나갔다. → `OrderEventListenerTest.everyHandledEventIsWired` 가 **핸들러의 `handle` 오버로드마다 리스너 메서드가 있는지 반사로 대조**한다. ⚠ **배선 누락은 조용하다** — 컴파일도 되고 테스트도 초록인데 알림만 안 가고, 그런 알림이 있었다는 걸 모르니 아무도 신고하지 않는다<br>**2026-08-11 확장 2**: **`MemberWithdrawnEvent` 에 cart 구독 추가**(08-10 §16-4 6번) — 위 §회원 삭제 정리 참조.<br>🔴 **2026-08-12 확장**: **`OrderReturnRequestedEvent`** 신설(08-11 이월) — 반품 «요청» 이 **관리자에게** 안 알려지던 자리다(승인·거절은 08-11 에 붙였는데 요청만 빠져 있었다). 🔴 **앞의 둘과 방향이 반대라 자리가 셋 다 갈렸다**: 받는 쪽이 «관리자 전원» 이므로 **이벤트가 대상을 모르고**(대상 선정은 `MemberService.adminIds()` 가 한다), 핸들러는 `ReturnRequestAlertHandler`(`StockAlertHandler` 와 같은 자리), 리스너는 **`AdminOrderEventListener` 신설**. ⚠ **`OrderEventListener` 에 섞지 않은 이유**: 그 클래스의 «메서드 목록이 곧 「고객에게 알리는 주문 사건」의 목록» 이라는 성질이 **실제로 일을 했는데**(08-11 에 빠진 둘을 그 목록을 세어 잡았다), 관리자 알림을 섞으면 **목록이 두 가지를 뜻하게 되어 세는 값이 사라진다.** ⚠ 알림 종류도 `ORDER` 가 아니라 **`RETURN_REQUEST` 신설** — 토글이 「종류×회원」 단위라 관리자가 자기 주문 알림을 끄면 **업무 알림까지 함께 꺼진다.** |
 | Spring Modulith (도메인 경계 검증) | 도메인이 늘어 경계 규칙을 테스트로 강제하고 싶을 때 |
 | Docker | 첫 서비스 분리를 시작할 때 (k8s 제외, compose까지) |
 | 컨테이너 모니터링 (Portainer/ctop + cAdvisor→Grafana) | Docker 전환과 세트. Docker Desktop은 서버엔 제외 |
