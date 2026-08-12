@@ -45,6 +45,7 @@
 | 변형을 넣었더니 **테스트가 아니라 워커가 죽는다** | 운영 코드가 한 겹 방어뿐(가드 하나에만 안전이 걸려 있다) | WA §3 · `handoffs/2026-08-05-handoff.md` §6-3 |
 | **카운트 쪽만** 망가뜨린 변형이 안 잡힌다 | 테스트가 `content[*]` 만 보고 **총건수를 안 본다**. 게다가 결과가 한 페이지에 들어가면 count 쿼리가 **아예 안 돈다** | WA §3 — 결과 수 > `size` 로 만들고 `totalElements` 를 단언 · `handoffs/2026-08-06-handoff.md` §4-5 |
 | **권한 규칙을 지웠는데** 테스트가 통과한다 | 버그가 아니라 **동치 변형**일 수 있다 — 컨트롤러가 `@LoginUser`(required=true)로 받으면 리졸버가 **같은 401** 을 낸다. 매처가 빠져도 안 열리는 경로가 있다 | WA §2-4-1 — 소유자를 **어디서 받나**로 가른다 · `handoffs/2026-08-07-handoff.md` §5-5 |
+| 전수 테스트가 `NoSuchFileException: build/test-results/test/binary/in-progress-results-generic.bin` 로 깨진다(테스트는 다 돈 뒤, XML 은 **0개**) | **같은 `build/` 를 쓰는 Gradle 실행이 하나 더 있다** — 한쪽의 `cleanTest`·`test` 가 다른 쪽의 진행 중 결과 디렉터리를 지운다. ⚠ 실패가 **끝에서** 나서 코드·환경 문제로 보이고, 재실행해도 같은 자리에서 또 깨진다 | 돌리기 **전에** 센다: `pgrep -af GradleWorkerMain` (0 이어야 한다). 데몬(`ps -ef \| grep Gradle`)이 여럿인 것은 정상 — **워커**가 있으면 남의 테스트가 도는 중이다. 끝날 때까지 기다린다: `while pgrep -f GradleWorkerMain >/dev/null; do sleep 15; done` · `handoffs/2026-08-12-handoff.md` §7 |
 | DB 제약을 걸었는데 **도는지 확인이 안 된다** | 앱 방어(엔티티·서비스)가 먼저 잡아 제약이 **한 번도 실행되지 않는다** | WA §2-4-2 — `esptest` 에서 직접 INSERT · **거부와 통과를 함께** 본다 |
 
 **DB · 마이그레이션**
@@ -79,7 +80,7 @@
 | 필터에서 **「전체」를 고르면 목록이 빈다** | 「전체」의 값이 `null` 이 아니라 문자열(`'ALL'` 등)이다 — 서버가 enum·Boolean 변환에 실패해 **400** 인데 화면엔 *"자료가 없다"* 로 보인다 | ⚠ **세 번 나왔다**(주문 `?status` · 리뷰 `?hidden` · 문의 `?status`). 「전체」는 **파라미터를 빼는 값**이어야 한다 |
 | 필터에서 **`false` 를 골랐는데 전체가 나온다** | 클라이언트가 falsy 를 걸러 버렸다(`hidden \|\| undefined`) — `false` 와 「안 보냄」은 **다른 상태**다 | `api/review.js` 주석 · `handoffs/2026-08-04-handoff.md` |
 | 관리자 목록인데 **비밀글 본문이 「🔒」로 나온다** | 고객용 응답 DTO 를 재사용했다 — 마스킹은 «볼 권한이 없는 사람» 규칙이라 관리자 화면에 그대로 쓰면 **답을 쓰라면서 질문을 가린다** | `AdminInquiryResponse` 주석 · `handoffs/2026-08-06-handoff.md` §4-1 |
-| 목록에서 **상품명 칸이 비어 있다** | 뜻이 **둘**이라 그것부터 가른다: ①상품이 지워졌다(느슨한 참조라 문의·리뷰는 함께 안 지워진다) ②애초에 상품이 없는 **일반 문의**다. 유형 열을 함께 보면 갈린다 | `InquiryAdminView.productText` · `handoffs/2026-08-07-handoff.md` §5-1 |
+| 목록에서 **상품명 칸이 비어 있다** | 뜻이 **둘**이라 그것부터 가른다: ①상품이 지워졌다(느슨한 참조라 문의·리뷰는 함께 안 지워진다) ②애초에 상품이 없는 **일반 문의**다. 유형 열을 함께 보면 갈린다 | `InquiryAdminView.productText` · `handoffs/2026-08-07-handoff.md` §5-1. ⚠ **리뷰 관리는 답이 다르다**(2026-08-12): 리뷰는 상품 문의뿐이라 이름이 빌 이유가 삭제 하나뿐이고, **서버가 `productDeleted` 로 답한다** — 화면에서 다시 판정하지 않는다. 문구는 두 화면이 `constants/labels.js` 의 `DELETED_PRODUCT` 하나를 쓴다 |
 
 **알림 · SSE**
 
