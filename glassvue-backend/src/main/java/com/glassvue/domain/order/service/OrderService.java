@@ -23,6 +23,7 @@ import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
+import com.glassvue.domain.order.event.OrderReturnRequestedEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
@@ -388,6 +389,9 @@ public class OrderService {
         }
         order.requestReturn(reason);
         log.info("Return requested: {} by {}", id, memberId);
+        // 관리자에게 알린다(2026-08-12, 08-11 이월). ⚠ 승인·거절과 달리 **받는 쪽이 관리자**라
+        // 구독자가 AdminOrderEventListener 다 — 이벤트는 대상을 모르고 «무슨 일이 있었나» 만 싣는다.
+        eventPublisher.publishEvent(OrderReturnRequestedEvent.from(order));
     }
 
     /**

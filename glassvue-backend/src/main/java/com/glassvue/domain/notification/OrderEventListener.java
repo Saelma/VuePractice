@@ -56,6 +56,8 @@ public class OrderEventListener {
      * ⚠ 이 리스너의 <b>메서드 목록이 곧 「고객에게 알리는 주문 사건」의 목록</b>이다 —
      * 주문에 새 사건이 생기면 여기 줄이 있는지부터 본다(취소·반품의 되돌리기 목록이
      * {@code OrderService.applyCancellation} 인 것과 같은 자리, §8).
+     * 🔴 <b>그래서 관리자에게 가는 알림은 여기 넣지 않는다</b>(2026-08-12) — 섞으면 이 목록이
+     * 두 가지를 뜻하게 되어 <b>세는 값이 사라진다.</b> 그쪽은 {@link AdminOrderEventListener} 다.
      */
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

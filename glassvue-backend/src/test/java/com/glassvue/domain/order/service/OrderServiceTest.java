@@ -26,6 +26,7 @@ import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
+import com.glassvue.domain.order.event.OrderReturnRequestedEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
@@ -356,6 +357,58 @@ class OrderServiceTest {
         assertThat(order.getReturnReason()).isEqualTo("ZZ-다시요청");
         assertThat(order.getReturnRejectedReason()).isNull();
         assertThat(order.getReturnRejectedAt()).isNull();
+    }
+
+    /**
+     * 🔴 반품 <b>요청</b>도 이벤트를 낸다 (2026-08-12, 08-11 이월).
+     *
+     * <p>⚠ <b>이 자리가 셋 중 마지막이었다.</b> 승인·거절은 2026-08-11 에 붙였는데 요청은
+     * 범위 밖이었고, 그래서 <b>관리자가 화면을 봐야만</b> 반품이 들어온 걸 알았다
+     * (재고 부족은 알림이 가는데 반품 승인 대기는 안 갔다).
+     *
+     * <p>⚠ 앞의 둘과 <b>방향이 반대</b>라 실리는 값도 다르다: 받는 쪽이 관리자라
+     * <b>이벤트가 대상을 모른다.</b> 대신 «어느 주문인지 · 누가 요청했는지 · 왜» 를 싣는다 —
+     * 핸들러는 주문을 못 보므로 여기서 안 실으면 알림 문구가 <b>«반품 요청이 있습니다» 뿐</b>이 된다.
+     */
+    @Test
+    @DisplayName("🔴 반품 요청: 관리자 알림용 이벤트를 낸다 (주문번호·요청자·사유가 실린다)")
+    void requestReturn_publishesEventForAdmins() {
+        Order order = sampleOrder();
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        order.deliver();
+        when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
+
+        orderService.requestReturn(orderId, memberId, "ZZ-사이즈가 안 맞아요");
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURN_REQUESTED);
+
+        ArgumentCaptor<OrderReturnRequestedEvent> requested =
+                ArgumentCaptor.forClass(OrderReturnRequestedEvent.class);
+        verify(eventPublisher).publishEvent(requested.capture());
+        OrderReturnRequestedEvent event = requested.getValue();
+        assertThat(event.orderId()).isEqualTo(order.getId());
+        assertThat(event.reason()).isEqualTo("ZZ-사이즈가 안 맞아요");
+        // 아래 둘이 없으면 알림이 «어느 주문인지 · 누가» 를 말할 수 없다 — 핸들러는 주문을 못 본다.
+        assertThat(event.orderNo()).isEqualTo(order.getOrderNo());
+        assertThat(event.buyerNickname()).isEqualTo(order.getBuyerNickname());
+    }
+
+    /**
+     * ⚠ <b>요청이 거부되면 이벤트도 없어야 한다.</b> 배송완료가 아닌 주문에 반품을 걸면
+     * {@code ORDER_NOT_RETURNABLE} 인데, 이때 알림이 나가면 <b>관리자가 있지도 않은 반품을 보러 간다.</b>
+     */
+    @Test
+    @DisplayName("⚠ 대조군: 반품이 불가능한 주문이면 이벤트를 내지 않는다")
+    void requestReturn_blocked_publishesNothing() {
+        Order order = sampleOrder();
+        order.pay(); // 아직 배송완료가 아니다
+        when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
+
+        assertErrorCode(() -> orderService.requestReturn(orderId, memberId, "ZZ-사유"),
+                ErrorCode.ORDER_NOT_RETURNABLE);
+
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
