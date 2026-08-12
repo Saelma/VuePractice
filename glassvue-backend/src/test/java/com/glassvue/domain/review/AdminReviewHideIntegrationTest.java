@@ -234,6 +234,77 @@ class AdminReviewHideIntegrationTest {
         assertThat(names).contains(productRepository.findById(productId).orElseThrow().getName());
     }
 
+    // ── 상품이 사라진 리뷰 (2026-08-12, Fable 감사 5번) ────────
+    //
+    // 🔴 리뷰에는 상품 FK 가 없어 **상품을 지워도 리뷰는 남는다**(ARCHITECTURE 「느슨한 UUID 참조」).
+    // 리포지토리로 직접 지운다 — 여기서 볼 것은 **읽는 쪽**이고, 상품 삭제 API 를 태우면
+    // 이미지 그룹·옵션까지 끌고 들어와 이 테스트가 무엇 때문에 깨졌는지 흐려진다.
+
+    @Test
+    @DisplayName("🔴 상품을 지워도 그 리뷰는 관리자 목록에 **남는다** — 안 보이면 고칠 대상이 있다는 것조차 모른다")
+    void adminList_keepsReviewOfDeletedProduct() throws Exception {
+        productRepository.deleteById(productId);
+        entityManager.flush();
+        entityManager.clear();
+
+        String body = mockMvc.perform(get("/api/admin/reviews?size=50").header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        java.util.List<String> ids = JsonPath.read(body, "$.data.content[*].id");
+        assertThat(ids).contains(reviewId.toString());
+    }
+
+    @Test
+    @DisplayName("🔴 상품이 지워진 줄은 `productDeleted=true` 로 내려간다(빈칸이면 «데이터가 잘못됐다»로 읽힌다)")
+    void adminList_flagsDeletedProduct() throws Exception {
+        productRepository.deleteById(productId);
+        entityManager.flush();
+        entityManager.clear();
+
+        String body = mockMvc.perform(get("/api/admin/reviews?size=50").header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        String row = "$.data.content[?(@.id=='" + reviewId + "')]";
+        assertThat(JsonPath.<java.util.List<Boolean>>read(body, row + ".productDeleted"))
+                .as("판정은 서버 한 곳에서 한다 — 화면이 «이름이 비었다»로 다시 판정하면 두 곳이 갈린다")
+                .containsExactly(true);
+        assertThat(JsonPath.<java.util.List<String>>read(body, row + ".productName"))
+                .as("이름은 비어야 한다 — 없는 상품의 이름을 지어내지 않는다")
+                .containsExactly((String) null);
+    }
+
+    @Test
+    @DisplayName("⚠ 대조군: 상품이 **살아 있으면** `productDeleted=false` — 플래그가 늘 참이면 표기가 무의미하다")
+    void adminList_liveProduct_notFlagged() throws Exception {
+        String body = mockMvc.perform(get("/api/admin/reviews?size=50").header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        String row = "$.data.content[?(@.id=='" + reviewId + "')]";
+        assertThat(JsonPath.<java.util.List<Boolean>>read(body, row + ".productDeleted"))
+                .containsExactly(false);
+        assertThat(JsonPath.<java.util.List<String>>read(body, row + ".productName"))
+                .containsExactly(productRepository.findById(productId).orElseThrow().getName());
+    }
+
+    @Test
+    @DisplayName("⚠ **숨김** 상품은 삭제가 아니다 — 이름이 그대로 실리고 플래그는 false 다")
+    void adminList_hiddenProduct_notFlagged() throws Exception {
+        Product p = productRepository.findById(productId).orElseThrow();
+        p.update(p.getName(), p.getTagline(), p.getDescription(), p.getPrice(), p.getListPrice(),
+                ProductStatus.HIDDEN, p.getImageGroupId(), p.getCategory());
+        productRepository.save(p);
+        entityManager.flush();
+        entityManager.clear();
+
+        String body = mockMvc.perform(get("/api/admin/reviews?size=50").header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        String row = "$.data.content[?(@.id=='" + reviewId + "')]";
+        assertThat(JsonPath.<java.util.List<Boolean>>read(body, row + ".productDeleted"))
+                .as("조회가 findAllById 라 상태로 거르지 않는다 — 여기가 true 가 되면 라벨이 거짓말을 한다")
+                .containsExactly(false);
+    }
+
     @Test
     @DisplayName("이미 숨긴 리뷰를 또 숨겨도 200 이고 상태는 그대로다(멱등)")
     void hide_isIdempotent() throws Exception {

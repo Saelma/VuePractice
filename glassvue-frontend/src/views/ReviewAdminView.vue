@@ -10,6 +10,11 @@
  *
  * ⚠ 숨기면 상품의 **평균 별점·리뷰 수가 함께 움직인다**(서버가 집계를 다시 낸다). 화면에도 그렇게
  *    적어 둔다 — 관리자가 "글 하나 감추는 것" 으로만 알면 별점이 왜 변했는지 못 짚는다.
+ *
+ * ⚠ **상품이 지워져도 그 리뷰는 남는다**(2026-08-12, Fable 감사 5번) — 리뷰는 상품을 느슨한 UUID 로만
+ *    가리킨다. 그런 줄은 **목록에서 빼지 않고**(빠지면 고칠 대상이 있다는 것조차 모른다) 상품 칸에
+ *    「(지워진 상품)」을 적는다. 빈칸으로 두면 **데이터가 잘못된 것으로 읽힌다.**
+ *    ⚠ 판정은 서버(`productDeleted`)가 한다 — 여기서 «이름이 비었다» 로 다시 판정하면 두 곳이 갈린다.
  */
 import { ref } from 'vue';
 import CustomStore from 'devextreme/data/custom_store';
@@ -18,6 +23,7 @@ import { DxSelectBox } from 'devextreme-vue/select-box';
 import {
   fetchAdminReviews, hideReview, unhideReview, REVIEW_HIDDEN_OPTIONS,
 } from '../api/review';
+import { DELETED_PRODUCT } from '../constants/labels';
 
 const filter = ref({ hidden: null });
 const gridRef = ref(null);
@@ -113,7 +119,7 @@ function ratingBadge(rating) {
       no-data-text="조건에 맞는 리뷰가 없습니다."
     >
       <DxColumn data-field="createdAt" caption="작성" :width="150" :calculate-display-value="(r) => fmt(r.createdAt)" />
-      <DxColumn data-field="productName" caption="상품" :width="180" />
+      <DxColumn data-field="productName" caption="상품" :width="180" cell-template="productCell" />
       <DxColumn data-field="author" caption="작성자" :width="120" />
       <DxColumn data-field="rating" caption="별점" :width="80" alignment="center" cell-template="ratingCell" />
       <DxColumn data-field="content" caption="내용" />
@@ -123,6 +129,12 @@ function ratingBadge(rating) {
       <DxPaging :page-size="20" />
       <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50]" :show-info="true" info-text="{2}건 중 {0}-{1}" />
 
+      <template #productCell="{ data }">
+        <!-- ⚠ 「비었다」와 「지워졌다」는 화면에서 같아 보인다 — 판정은 서버(productDeleted)가 하고
+             여기서는 문구만 고른다. 빈칸으로 두면 관리자는 데이터가 잘못된 줄 안다. -->
+        <span v-if="data.data.productDeleted" class="muted">{{ DELETED_PRODUCT }}</span>
+        <span v-else>{{ data.data.productName }}</span>
+      </template>
       <template #ratingCell="{ data }">
         <span class="badge" :class="ratingBadge(data.data.rating)">{{ data.data.rating }}점</span>
       </template>

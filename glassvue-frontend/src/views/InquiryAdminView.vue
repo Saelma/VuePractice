@@ -26,6 +26,7 @@ import {
   fetchAdminInquiries, answerInquiry, hideInquiry, unhideInquiry,
   INQUIRY_STATUS_OPTIONS, INQUIRY_HIDDEN_OPTIONS, inquiryTypeText,
 } from '../api/inquiry';
+import { DELETED_PRODUCT } from '../constants/labels';
 
 // 기본 「답변대기」 — 목록을 여는 이유가 그것이다(위 주석).
 //
@@ -140,7 +141,7 @@ function fmt(v) {
  */
 function productText(row) {
   if (row.type && row.type !== 'PRODUCT') return '—';
-  return row.productName || '(지워진 상품)';
+  return row.productName || DELETED_PRODUCT;
 }
 </script>
 

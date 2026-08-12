@@ -26,6 +26,7 @@ import {
   createGeneralInquiry, fetchMyInquiries, inquiryStatusText, inquiryTypeText,
   GENERAL_INQUIRY_TYPE_OPTIONS, INQUIRY_IMAGE_MAX,
 } from '../api/inquiry';
+import { DELETED_PRODUCT } from '../constants/labels';
 import ImageUploader from '../components/ImageUploader.vue';
 import EmptyState from '../components/EmptyState.vue';
 import SkeletonList from '../components/SkeletonList.vue';
@@ -106,7 +107,7 @@ function fmt(iso) {
  */
 function productText(q) {
   if (q.type !== 'PRODUCT') return null;
-  return q.productName || '(지워진 상품)';
+  return q.productName || DELETED_PRODUCT;
 }
 
 onMounted(async () => {

@@ -71,6 +71,9 @@ public class ReviewQueryService {
      * (고객 목록이 이미지 그룹을 모아 읽는 것과 같은 방식).
      * ⚠ 이름을 못 찾은 리뷰는 <b>목록에서 빼지 않고</b> 이름만 빈다 — 그 리뷰가 안 보이면
      * 관리자는 <b>고칠 수 있는 대상이 있다는 사실 자체를</b> 모르게 된다.
+     * <p>🔴 <b>그 「빈 이름」이 곧 «상품이 지워졌다» 는 뜻</b>이고(2026-08-12), 여기서 나온 {@code null} 을
+     * {@code AdminReviewResponse} 가 {@code productDeleted} 로 바꿔 화면에 알린다 — 빈칸으로만 두면
+     * 관리자는 <b>왜 비었는지</b>를 모른다. 판정은 그 한 곳이고 화면은 문구만 고른다.
      */
     public PageResponse<AdminReviewResponse> findForAdmin(Boolean hidden, Pageable pageable) {
         Page<Review> page = reviewRepository.findForAdmin(hidden, pageable);
