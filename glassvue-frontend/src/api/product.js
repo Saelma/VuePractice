@@ -38,8 +38,23 @@ export function updateProduct(id, payload) {
   return apiPut(`/api/products/${id}`, payload);
 }
 
+/**
+ * 상품 삭제 — ⚠ **바로 지워지지 않는다**(2026-08-12, F-7).
+ * 「삭제 대기」로 표시되고 유예 기간이 지나면 배치가 진짜로 지운다.
+ * 그 사이 `/admin/products/trash` 에서 복구할 수 있다.
+ */
 export function deleteProduct(id) {
   return apiDelete(`/api/products/${id}`);
+}
+
+/** 삭제 대기 상품 목록 (관리자). 각 줄이 **언제 사라지는지**(`purgeAt`)를 서버에서 받아 온다. */
+export function fetchDeletedProducts() {
+  return apiGet('/api/admin/products/deleted');
+}
+
+/** 삭제 대기 복구 (관리자). 대기 중이 아니어도 200 이다(멱등). */
+export function restoreProduct(id) {
+  return apiPost(`/api/admin/products/${id}/restore`);
 }
 
 // 공통: 상태 표시

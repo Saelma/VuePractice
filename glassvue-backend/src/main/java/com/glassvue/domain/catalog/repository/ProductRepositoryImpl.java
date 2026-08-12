@@ -35,6 +35,10 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
     @Override
     public Page<Product> search(ProductSearchCondition c, Pageable pageable) {
         BooleanBuilder where = ConditionBuilder.of(product, c).build(); // name, price(min/max), status
+        // 🔴 삭제 대기 상품은 목록·검색에서 뺀다(2026-08-12, F-7). **이 한 줄이 빠지면 지운 상품이
+        //    계속 팔린다** — 그리고 화면은 멀쩡해 보인다. content 와 count 가 같은 where 를 쓰므로
+        //    여기 한 곳이면 둘 다 걸린다(2026-08-11 에 count 쪽만 갈린 사고가 있었다).
+        where.and(product.deletedAt.isNull());
         if (c.categoryId() != null) {
             where.and(product.category.id.eq(c.categoryId())); // 연관 필터는 직접
         }

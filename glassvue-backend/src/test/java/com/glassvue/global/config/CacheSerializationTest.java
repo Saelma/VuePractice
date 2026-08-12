@@ -55,6 +55,7 @@ class CacheSerializationTest {
                 4.5,
                 2L,
                 123L,    // soldCount
+                false,   // deleted — 캐시에 실리는 목록은 **살아 있는 상품뿐**이다(F-7, 2026-08-12)
                 Instant.parse("2026-07-20T12:34:56Z"),
                 Instant.parse("2026-07-20T13:00:00Z"));
         return new PageResponse<>(List.of(p), 0, 20, 1L, 1, true);

@@ -58,6 +58,7 @@ const onAdminRoute = computed(() => route.path.startsWith('/admin'));
       <RouterLink to="/admin/orders" class="admin-menu-item" @click="open = false">주문 관리</RouterLink>
       <RouterLink to="/admin/members" class="admin-menu-item" @click="open = false">회원 관리</RouterLink>
       <RouterLink to="/admin/reviews" class="admin-menu-item" @click="open = false">리뷰 관리</RouterLink>
+      <RouterLink to="/admin/products/trash" class="admin-menu-item" @click="open = false">삭제 대기 상품</RouterLink>
       <!--
         ⚠ 위 주석의 "여기를 길게 만들지 말라"에 걸리는 자리라 **왜 넣는지** 적어 둔다:
         문의 관리는 카테고리·상품 등록 같은 **설정 화면이 아니라** 리뷰 관리와 같은 **처리 화면**이다

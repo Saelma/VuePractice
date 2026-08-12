@@ -1,11 +1,13 @@
 package com.glassvue.domain.catalog.controller;
 
+import com.glassvue.domain.catalog.dto.DeletedProductResponse;
 import com.glassvue.domain.catalog.dto.LowStockResponse;
 import com.glassvue.domain.catalog.dto.StockHistoryResponse;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
 import java.util.UUID;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
@@ -59,4 +61,29 @@ public interface AdminProductController {
                     """)
     ResponseEntity<ApiResponse<PageResponse<StockHistoryResponse>>> stockHistory(
             UUID id, @ParameterObject Pageable pageable);
+
+    // ── 삭제 유예 (2026-08-12, BACKLOG F-7) ──────────────────────
+
+    @Operation(summary = "삭제 대기 상품 목록",
+            description = """
+                    삭제된 상품은 **바로 사라지지 않고** 유예 기간 동안 여기 남는다(F-7).
+                    각 줄은 **언제 진짜로 사라지는지**(`purgeAt`)를 함께 준다 —
+                    화면이 날짜를 직접 계산하면 유예 설정을 바꿨을 때 화면만 낡는다
+                    (위 `low-stock` 의 `threshold` 와 같은 규칙).
+
+                    정렬은 **오래 기다린 것부터**다(먼저 사라질 것이 위로).
+                    """)
+    ResponseEntity<ApiResponse<List<DeletedProductResponse>>> deleted();
+
+    @Operation(summary = "삭제 대기 상품 복구",
+            description = """
+                    상품을 되살린다. 목록·검색·상세에 다시 나오고, **장바구니에 담겨 있던 줄도
+                    그대로 살아난다**(대기 중에도 줄을 지우지 않았기 때문이다).
+
+                    ⚠ 대기 중이 아닌 상품에 불러도 **200** 이다(멱등) — 원하는 상태는 이미 이뤄져 있다.
+
+                    🔴 **「지금 바로 지우는」 엔드포인트는 없다.** 유예를 건너뛸 수 있으면 이 기능이
+                    무의미해진다 — 영구 삭제는 배치(`ProductPurgeScheduler`)만 한다.
+                    """)
+    ResponseEntity<ApiResponse<Void>> restore(UUID id);
 }

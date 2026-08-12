@@ -61,6 +61,10 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
     /**
      * 재고가 임계치 <b>이하</b>인 옵션 목록 — 관리자 대시보드의 「재고 부족」 (2026-08-03, B-16).
      *
+     * <p>⚠ <b>삭제 대기 상품도 뺀다</b>(2026-08-12, F-7) — 곧 사라질 상품의 재고를 채울 이유가 없다.
+     * 🔴 <b>이 조건은 아래 {@code countLowStock} 에도 똑같이 들어간다</b>: 한쪽만 고치면
+     * <b>카드 숫자와 목록이 어긋난다</b>(«3건» 이라는데 두 줄만 보인다).
+     *
      * <p>⚠ <b>{@code HIDDEN} 상품은 뺀다.</b> 숨긴 상품은 팔리지 않으므로 재고를 채울 이유가 없다 —
      * 넣으면 "처리해야 할 것" 목록에 아무도 손댈 필요 없는 줄이 섞인다. {@code SOLD_OUT} 은
      * <b>남긴다</b>(관리자가 손으로 붙이는 표시일 뿐, 재입고가 필요한 상태인 건 그대로다).
@@ -74,6 +78,7 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
             from ProductVariant v, Product p
             where p.id = v.productId
               and p.status <> com.glassvue.domain.catalog.entity.ProductStatus.HIDDEN
+              and p.deletedAt is null
               and v.stock <= :threshold
             order by v.stock asc, p.name asc, v.sortOrder asc
             """)
@@ -89,6 +94,7 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
             from ProductVariant v, Product p
             where p.id = v.productId
               and p.status <> com.glassvue.domain.catalog.entity.ProductStatus.HIDDEN
+              and p.deletedAt is null
               and v.stock <= :threshold
             """)
     long countLowStock(@Param("threshold") long threshold);

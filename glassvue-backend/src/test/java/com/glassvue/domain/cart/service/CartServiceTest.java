@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.glassvue.domain.cart.CartStore;
@@ -42,11 +43,16 @@ class CartServiceTest {
 
     /** 옵션 하나짜리 상품 응답 — cart 가 variantId 로 찾아 가격·재고를 읽는다. */
     private ProductResponse product(long price, long stock, ProductStatus status) {
+        return product(price, stock, status, false);
+    }
+
+    /** {@code deleted} 는 「삭제 대기」다(2026-08-12, F-7) — 줄은 남고 구매만 막힌다. */
+    private ProductResponse product(long price, long stock, ProductStatus status, boolean deleted) {
         VariantResponse variant = new VariantResponse(variantId, "기본", 0, price, stock, stock <= 0);
         boolean soldOut = status != ProductStatus.SELLING || stock <= 0;
         return new ProductResponse(productId, "지바", null, "desc", price, null,
                 List.of(variant), stock, soldOut, status,
-                UUID.randomUUID(), "전자기기", List.of(), 0.0, 0L, 0L, null, null);
+                UUID.randomUUID(), "전자기기", List.of(), 0.0, 0L, 0L, deleted, null, null);
     }
 
     private void stubResolve(long price, long stock, ProductStatus status) {
@@ -85,6 +91,39 @@ class CartServiceTest {
         when(productQueryService.findByIds(any())).thenReturn(List.of(product(10_000, 10, ProductStatus.SOLD_OUT)));
         CartResponse res = service.getCart(memberId);
         assertThat(res.items().get(0).available()).isFalse();
+    }
+
+    /**
+     * 🔴 삭제 대기 상품 (2026-08-12, F-7) — <b>줄이 사라지지 않는 것</b>이 요점이다.
+     *
+     * <p>못 찾은 줄은 이 서비스가 그 자리에서 정리하는데(위 {@code cartStore.remove}),
+     * 삭제 대기는 <b>그 경로로 가면 안 된다</b>: 지워 버리면 상품을 복구해도 장바구니는 안 돌아온다.
+     * 그래서 {@code findByIds} 가 대기 상품도 돌려주고, 여기서 <b>available 로만</b> 막는다.
+     */
+    @Test
+    @DisplayName("🔴 삭제 대기 상품 → 줄은 남고 available=false (지우면 복구해도 안 돌아온다)")
+    void deletedProduct_lineRemainsButUnavailable() {
+        when(cartStore.items(memberId)).thenReturn(Map.of(variantId, 1L));
+        when(productQueryService.productIdsOfVariants(any())).thenReturn(Map.of(variantId, productId));
+        when(productQueryService.findByIds(any()))
+                .thenReturn(List.of(product(10_000, 10, ProductStatus.SELLING, true)));
+
+        CartResponse res = service.getCart(memberId);
+
+        assertThat(res.items()).as("줄이 사라지면 복구가 반쪽이 된다").hasSize(1);
+        assertThat(res.items().get(0).available()).isFalse();
+        verify(cartStore, never()).remove(any(), any());
+    }
+
+    @Test
+    @DisplayName("⚠ 대조군: 대기 중이 아니면 그대로 살 수 있다(플래그가 늘 참이면 막는 의미가 없다)")
+    void aliveProduct_stillAvailable() {
+        when(cartStore.items(memberId)).thenReturn(Map.of(variantId, 1L));
+        when(productQueryService.productIdsOfVariants(any())).thenReturn(Map.of(variantId, productId));
+        when(productQueryService.findByIds(any()))
+                .thenReturn(List.of(product(10_000, 10, ProductStatus.SELLING, false)));
+
+        assertThat(service.getCart(memberId).items().get(0).available()).isTrue();
     }
 
     @Test

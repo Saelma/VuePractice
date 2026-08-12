@@ -43,6 +43,13 @@ public interface ProductController {
     ResponseEntity<ApiResponse<Void>> update(@Parameter(hidden = true) AuthUser user,
             UUID id, @Valid ProductUpdateRequest request);
 
-    @Operation(summary = "상품 삭제 (관리자)")
-    ResponseEntity<ApiResponse<Void>> delete(UUID id);
+    @Operation(summary = "상품 삭제 (관리자) — **유예 후 삭제**",
+            description = """
+                    🔴 **바로 지우지 않는다**(2026-08-12, F-7). 상품은 **삭제 대기**로 표시되고
+                    유예 기간이 지나면 배치가 진짜로 지운다. 그 사이에는 관리자 화면에서 **복구**할 수 있다.
+
+                    대기 중인 상품은 목록·검색·상세에서 빠지고 새 리뷰·문의도 못 단다.
+                    ⚠ 다만 **장바구니에서는 줄이 사라지지 않는다** — 구매만 막히고, 복구되면 되살아난다.
+                    """)
+    ResponseEntity<ApiResponse<Void>> delete(@Parameter(hidden = true) AuthUser user, UUID id);
 }

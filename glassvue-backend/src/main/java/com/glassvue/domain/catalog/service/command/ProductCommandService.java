@@ -118,15 +118,63 @@ public class ProductCommandService {
         publishIfReplenished(id, stockBefore, product.getName());
     }
 
+    /**
+     * 상품 삭제 — 🔴 <b>표시만 한다(2026-08-12, F-7).</b> 행은 그대로 있고
+     * {@code deleted_at} 이 찍히며, <b>유예가 지나면 {@link ProductPurgeScheduler} 가 진짜로 지운다.</b>
+     *
+     * <p><b>왜 바꿨나</b>: 전에는 여기서 바로 행을 지웠고 FK CASCADE 로 <b>옵션·재고 이력까지</b>
+     * 함께 사라졌다(실측 2026-08-12: 상품 6 · 옵션 6 · 재고이력 23). 취소 API 는 없었다 —
+     * <b>오조작의 대가가 그 셋 전부인데 방어는 확인 대화 하나뿐</b>이었다.
+     *
+     * <p>⚠ <b>이미지 그룹도 여기서 안 지운다.</b> 지우면 복구해도 <b>사진이 안 돌아온다</b> —
+     * 되돌릴 수 있게 만드는 것이 이 변경의 목적인데 그 절반을 스스로 깨는 셈이다.
+     * 이미지 삭제는 진짜로 지우는 시점(배치)으로 옮겼다.
+     *
+     * <p>⚠ <b>멱등이다</b> — 이미 대기 중인 상품을 또 지워도 시각이 갱신되지 않는다
+     * ({@link Product#softDelete}). 갱신되면 <b>누를 때마다 유예가 처음으로 되돌아가</b> 영영 안 지워진다.
+     */
     @CacheEvict(cacheNames = "products:list", allEntries = true)
-    public void delete(UUID id) {
+    public void delete(UUID id, String actorName) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        product.softDelete(actorName);
+        log.info("[상품] 삭제 대기 — id={} name={} by={}", id, product.getName(), actorName);
+    }
+
+    /**
+     * 삭제 대기를 되돌린다 (2026-08-12, F-7).
+     *
+     * <p>⚠ <b>대기 중이 아닌 상품에 부르면 아무 일도 없다</b>(멱등). 에러로 만들지 않는 이유는
+     * 복구 화면에서 두 번 눌렀을 때 <b>«실패» 로 보이면 안 되기 때문</b>이다 — 원하는 상태(살아 있음)는
+     * 이미 이뤄져 있다(반품 숨김 해제가 멱등인 것과 같은 판단).
+     */
+    @CacheEvict(cacheNames = "products:list", allEntries = true)
+    public void restore(UUID id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        product.restore();
+        log.info("[상품] 삭제 대기 해제 — id={} name={}", id, product.getName());
+    }
+
+    /**
+     * 🔴 <b>진짜로 지운다</b> — 유예가 지난 상품만, 배치가 부른다 (2026-08-12, F-7).
+     *
+     * <p>여기서부터가 <b>되돌릴 수 없는 구간</b>이다. FK ON DELETE CASCADE 로 옵션(V22)·
+     * 재고 이력(V39)이 함께 지워지고 이미지 그룹도 지운다 — 재고 이력은 상품에 종속된 기록이라
+     * 상품이 없으면 볼 화면도 없다(감사 로그와 다르다).
+     *
+     * <p>⚠ <b>{@code public} 이지만 화면에서 부르지 않는다.</b> 부르는 곳은
+     * {@link ProductPurgeScheduler} 하나이고, <b>컨트롤러에 이 경로를 열지 않는다</b> —
+     * 열면 유예가 «건너뛸 수 있는 것» 이 되어 이 기능이 무의미해진다.
+     */
+    @CacheEvict(cacheNames = "products:list", allEntries = true)
+    public void purge(UUID id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         UUID imageGroupId = product.getImageGroupId();
-        // 재고 이력은 FK ON DELETE CASCADE(V39)로 상품과 함께 지워진다 — 상품이 없으면 그 재고 이력을
-        // 볼 화면도 없다(감사 로그와 달리 이건 상품에 종속된 기록이다).
         productRepository.delete(product); // FK ON DELETE CASCADE 로 옵션도 함께 지워진다(V22)
         imageService.deleteGroup(imageGroupId);
+        log.info("[상품] 영구 삭제 — id={} name={} (유예 경과)", id, product.getName());
     }
 
     /**

@@ -90,7 +90,12 @@ public class CartService {
 
             long qty = e.getValue();
             long lineTotal = variant.price() * qty;
-            boolean available = product.status() == ProductStatus.SELLING && variant.stock() >= qty;
+            // 🔴 삭제 대기 상품은 **줄을 지우지 않고 구매만 막는다**(2026-08-12, F-7, 사용자 결정).
+            //    지워 버리면 상품을 복구해도 장바구니는 안 돌아온다 — 유예를 둔 의미가 절반 사라진다.
+            //    ⚠ 그래서 위의 «못 찾은 줄 정리» 에도 안 걸린다: findByIds 가 대기 상품도 돌려준다.
+            boolean available = product.status() == ProductStatus.SELLING
+                    && !product.deleted()
+                    && variant.stock() >= qty;
             String thumb = product.images().isEmpty() ? null : product.images().get(0).thumbUrl();
             // 단일 옵션 상품은 옵션명을 감춘다("기본" 노이즈 방지). 옵션이 2개 이상일 때만 보여준다.
             String optionName = product.variants().size() > 1 ? variant.name() : null;

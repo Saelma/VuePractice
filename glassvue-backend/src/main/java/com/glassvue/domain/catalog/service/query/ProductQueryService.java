@@ -4,6 +4,8 @@ import com.glassvue.domain.catalog.config.CatalogProperties;
 import com.glassvue.domain.catalog.dto.LowStockItemResponse;
 import com.glassvue.domain.catalog.dto.LowStockResponse;
 import com.glassvue.domain.catalog.dto.ProductResponse;
+import java.time.Duration;
+import com.glassvue.domain.catalog.dto.DeletedProductResponse;
 import com.glassvue.domain.catalog.dto.ProductSearchCondition;
 import com.glassvue.domain.catalog.entity.Product;
 import com.glassvue.domain.catalog.entity.ProductVariant;
@@ -44,17 +46,31 @@ public class ProductQueryService {
     private final ImageService imageService;
     private final CatalogProperties catalogProperties;
 
+    /**
+     * 상품 상세.
+     *
+     * <p>🔴 <b>삭제 대기 상품은 없는 것으로 답한다</b>(2026-08-12, F-7). 목록에서 뺐어도
+     * <b>URL 을 직접 치면 열린다</b> — 알림·북마크·검색엔진에 남은 링크가 그 경로다.
+     * ⚠ 「삭제 대기라서 못 본다」가 아니라 <b>404</b> 인 이유: 고객에게는 «없는 상품» 이 맞고,
+     * 관리자는 복구 화면에서 본다(그쪽은 이 메서드를 안 탄다).
+     */
     public ProductResponse get(UUID id) {
         Product product = productRepository.findById(id)
+                .filter(p -> !p.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         List<ProductVariant> variants =
                 variantRepository.findByProductIdOrderBySortOrderAscCreatedAtAsc(id);
         return ProductResponse.from(product, variants, imageService.findByGroup(product.getImageGroupId()));
     }
 
-    /** 상품 존재 확인 (리뷰·문의 등 타 도메인이 상품에 종속 리소스를 만들 때). 없으면 PRODUCT_NOT_FOUND. */
+    /**
+     * 상품 존재 확인 (리뷰·문의 등 타 도메인이 상품에 종속 리소스를 만들 때). 없으면 PRODUCT_NOT_FOUND.
+     *
+     * <p>⚠ <b>삭제 대기 상품에는 새 리뷰·문의를 달 수 없다</b>(2026-08-12, F-7) — 곧 사라질 상품에
+     * 글을 남기게 하면 <b>답변자도 없는 문의</b>가 생긴다. 이미 달린 것은 그대로 남는다(느슨한 참조).
+     */
     public void ensureExists(UUID id) {
-        if (!productRepository.existsById(id)) {
+        if (!productRepository.existsAliveById(id)) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
     }
@@ -143,5 +159,19 @@ public class ProductQueryService {
                         .map(LowStockItemResponse::from)
                         .toList();
         return new LowStockResponse(threshold, variantRepository.countLowStock(threshold), items);
+    }
+
+    /**
+     * 삭제 대기 목록 (관리자 복구 화면, 2026-08-12 F-7).
+     *
+     * <p>⚠ <b>「언제 사라지나」를 서버가 계산해서 준다.</b> 화면이 {@code deletedAt + 7일} 을 직접
+     * 더하면 유예 설정을 바꿨을 때 <b>화면만 낡는다</b> — 재고 부족 대시보드가 임계값을 서버에서
+     * 받는 것과 같은 규칙이다.
+     */
+    public List<DeletedProductResponse> findDeleted() {
+        Duration grace = Duration.ofDays(catalogProperties.purgeGraceDays());
+        return productRepository.findDeleted().stream()
+                .map(p -> DeletedProductResponse.from(p, p.getDeletedAt().plus(grace)))
+                .toList();
     }
 }

@@ -2,6 +2,7 @@ package com.glassvue.domain.catalog.entity;
 
 import com.glassvue.global.common.BaseTimeEntity;
 import jakarta.persistence.Column;
+import java.time.Instant;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -88,6 +89,24 @@ public class Product extends BaseTimeEntity {
     @Column(name = "sold_count", nullable = false)
     private long soldCount;
 
+    /**
+     * 삭제 대기 시각 (2026-08-12, F-7). <b>NULL 이면 살아 있는 상품</b>이다.
+     *
+     * <p>🔴 <b>상태({@link ProductStatus})가 아니라 시각인 것이 요점이다.</b> 「숨김」은
+     * «계속 팔 생각이 있다» 이고 삭제 대기는 «시한이 있다» 인데, <b>시한은 상태로 표현할 수 없다</b> —
+     * 이 값 하나로 «지워졌나» 와 «언제까지 되돌릴 수 있나» 가 둘 다 나온다.
+     *
+     * <p>⚠ <b>이 필드를 직접 보지 말고 {@link #isDeleted()} 를 쓴다.</b> 조회 갈래마다
+     * {@code getDeletedAt() != null} 을 손으로 적으면 <b>한 곳이 빠졌을 때 조용하다</b>
+     * (2026-08-11 §13 ⓪ 이 그 모양을 일곱 번 보여줬다).
+     */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    /** 삭제한 관리자 이름(스냅샷) — 복구 화면이 «누가 지웠나» 에 답한다. 주문의 `cancelled_by_name` 과 같은 자리. */
+    @Column(name = "deleted_by_name", length = 50)
+    private String deletedByName;
+
     @Builder
     private Product(String name, String tagline, String description, long price, Long listPrice,
                     ProductStatus status, UUID imageGroupId, Category category) {
@@ -111,5 +130,40 @@ public class Product extends BaseTimeEntity {
         this.status = status;
         this.imageGroupId = imageGroupId;
         this.category = category;
+    }
+
+    // ── 삭제 유예 (2026-08-12, F-7) ────────────────────────────
+
+    /**
+     * 🔴 <b>「지워졌나」의 판정은 여기 하나다.</b> 조회 갈래가 여럿이라(목록·검색·상세·장바구니·
+     * 리뷰 목록·재고) 각자 {@code deletedAt != null} 을 적으면 <b>한 곳이 빠졌을 때 조용하다</b> —
+     * 빠진 화면은 <b>이미 지운 상품을 계속 판다.</b>
+     */
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    /**
+     * 삭제 대기로 표시한다. <b>행을 지우지 않는다</b> — 유예가 지나면 배치가 진짜로 지운다.
+     *
+     * <p>⚠ <b>이미 대기 중이면 시각을 다시 쓰지 않는다.</b> 다시 누를 때마다 갱신되면
+     * <b>유예가 영원히 안 끝난다</b>(누를 때마다 D-7 로 되돌아간다).
+     */
+    public void softDelete(String actorName) {
+        if (deletedAt != null) {
+            return;
+        }
+        this.deletedAt = Instant.now();
+        this.deletedByName = actorName;
+    }
+
+    /**
+     * 되살린다. ⚠ <b>{@code deletedByName} 도 함께 지운다</b> — 남겨 두면 살아 있는 상품에
+     * «누가 지웠다» 가 붙어 다음 사람이 «지금 삭제 대기인가?» 로 읽는다.
+     * (반품 재요청이 이전 거절 기록을 지우는 것과 같은 판단 — 2026-08-11 V47.)
+     */
+    public void restore() {
+        this.deletedAt = null;
+        this.deletedByName = null;
     }
 }

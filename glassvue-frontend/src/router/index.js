@@ -26,6 +26,7 @@ import MemberAdminView from '../views/MemberAdminView.vue';
 import MemberDetailAdminView from '../views/MemberDetailAdminView.vue';
 import AuditLogAdminView from '../views/AuditLogAdminView.vue';
 import ReviewAdminView from '../views/ReviewAdminView.vue';
+import ProductTrashAdminView from '../views/ProductTrashAdminView.vue';
 import InquiryAdminView from '../views/InquiryAdminView.vue';
 import CartView from '../views/CartView.vue';
 import WishlistView from '../views/WishlistView.vue';
@@ -76,6 +77,9 @@ const routes = [
   { path: '/admin/marketing', name: 'marketing-admin', component: MarketingAdminView, meta: { requiresAdmin: true } },
   // 리뷰 관리(B-18). 숨김은 되돌릴 수 있어 ADMIN 이면 된다 — 감사 이력처럼 SUPER 로 좁히지 않는다.
   { path: '/admin/reviews', name: 'review-admin', component: ReviewAdminView, meta: { requiresAdmin: true } },
+  // 삭제 대기 상품(F-7, 2026-08-12). ⚠ `/products/...` 아래가 아니라 `/admin/...` 인 이유는
+  // 서버 권한이 경로(`/api/admin/**`)로 걸리기 때문이다 — 화면 경로도 같은 모양으로 맞춘다.
+  { path: '/admin/products/trash', name: 'product-trash-admin', component: ProductTrashAdminView, meta: { requiresAdmin: true } },
   // 문의 관리(G-3 1단계). 답변은 기존 API 를 쓰고, 이 화면이 더한 것은 「무엇에 답할지 찾는 길」이다.
   { path: '/admin/inquiries', name: 'inquiry-admin', component: InquiryAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members', name: 'member-admin', component: MemberAdminView, meta: { requiresAdmin: true } },

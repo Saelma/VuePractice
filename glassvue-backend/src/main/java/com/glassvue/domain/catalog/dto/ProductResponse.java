@@ -41,6 +41,14 @@ public record ProductResponse(
         long reviewCount,
         // 누적 판매량(비정규화, V25). 홈 "인기순" 정렬 기준이자 "N개 판매" 표시에 쓴다.
         long soldCount,
+        /**
+         * 삭제 대기 여부 (2026-08-12, F-7). 🔴 <b>목록·상세에서는 항상 false</b> 다 —
+         * 그쪽은 대기 상품을 아예 안 돌려주기 때문이다. 이 값이 참으로 오는 자리는
+         * <b>«대기 중인 것도 함께 읽는» 호출부</b>뿐이다: 장바구니(줄을 남기려고)와
+         * 리뷰 관리 목록(유예 중에는 상품명이 살아 있어야 한다).
+         * ⚠ 그래서 이 플래그는 «화면에 보여줄 값» 이 아니라 <b>«구매를 막을 근거»</b> 다.
+         */
+        boolean deleted,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -61,6 +69,7 @@ public record ProductResponse(
                 variantResponses, totalStock, soldOut,
                 p.getStatus(), p.getCategory().getId(), p.getCategory().getName(),
                 images, p.getAvgRating(), p.getReviewCount(), p.getSoldCount(),
+                p.isDeleted(),
                 p.getCreatedAt(), p.getUpdatedAt());
     }
 }

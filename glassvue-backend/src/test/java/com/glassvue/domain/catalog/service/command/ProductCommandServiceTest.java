@@ -48,7 +48,7 @@ class ProductCommandServiceTest {
     @Mock ImageService imageService;
     @Mock ApplicationEventPublisher eventPublisher;
 
-    private final CatalogProperties catalogProperties = new CatalogProperties(5); // 임계치 5
+    private final CatalogProperties catalogProperties = new CatalogProperties(5, 7, true); // 임계치 5 · 삭제 유예 7일 · 배치 on
     private ProductCommandService service;
 
     private final UUID productId = UUID.randomUUID();
@@ -130,23 +130,60 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    @DisplayName("삭제: 없는 상품 → PRODUCT_NOT_FOUND, 삭제·이미지 정리 안 함")
+    @DisplayName("삭제: 없는 상품 → PRODUCT_NOT_FOUND, 아무것도 안 건드린다")
     void delete_notFound() {
         when(productRepository.findById(productId)).thenReturn(Optional.empty());
-        assertErrorCode(() -> service.delete(productId), ErrorCode.PRODUCT_NOT_FOUND);
+        assertErrorCode(() -> service.delete(productId, "ZZ관리자"), ErrorCode.PRODUCT_NOT_FOUND);
+        verify(productRepository, never()).delete(any());
+        verify(imageService, never()).deleteGroup(any());
+    }
+
+    /**
+     * 🔴 <b>2026-08-12 에 뜻이 바뀐 테스트다</b>(F-7). 전에는 *"상품과 함께 이미지 그룹도 정리한다"* 였는데
+     * 이제 삭제는 <b>표시만</b> 한다 — 지우는 것은 유예가 지난 뒤 배치({@code purge})가 한다.
+     *
+     * <p>⚠ <b>이미지를 여기서 안 지우는 것이 핵심이다.</b> 지우면 복구해도 <b>사진이 안 돌아온다</b> —
+     * 되돌릴 수 있게 만드는 것이 이 변경의 목적인데 그 절반을 스스로 깨는 셈이다.
+     */
+    @Test
+    @DisplayName("🔴 삭제: **표시만 한다** — 행도 이미지도 안 지운다(지우면 복구해도 사진이 안 돌아온다)")
+    void delete_marksOnly() {
+        UUID groupId = UUID.randomUUID();
+        Product product = productWithImageGroup(groupId);
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        service.delete(productId, "ZZ관리자");
+
+        assertThat(product.isDeleted()).isTrue();
+        assertThat(product.getDeletedByName()).isEqualTo("ZZ관리자");
         verify(productRepository, never()).delete(any());
         verify(imageService, never()).deleteGroup(any());
     }
 
     @Test
-    @DisplayName("삭제: 상품과 함께 이미지 그룹도 정리한다(옵션은 FK CASCADE)")
-    void delete_ok() {
+    @DisplayName("🔴 영구 삭제(배치): **그때** 행과 이미지 그룹을 지운다(옵션은 FK CASCADE)")
+    void purge_deletesEverything() {
         UUID groupId = UUID.randomUUID();
         Product product = productWithImageGroup(groupId);
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-        service.delete(productId);
+
+        service.purge(productId);
+
         verify(productRepository).delete(product);
         verify(imageService).deleteGroup(groupId);
+    }
+
+    @Test
+    @DisplayName("복구: 삭제 표시와 «누가 지웠나» 를 함께 지운다(남으면 살아 있는 상품에 삭제 흔적이 붙는다)")
+    void restore_clearsBoth() {
+        Product product = productWithImageGroup(UUID.randomUUID());
+        product.softDelete("ZZ관리자");
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        service.restore(productId);
+
+        assertThat(product.isDeleted()).isFalse();
+        assertThat(product.getDeletedByName()).isNull();
     }
 
     @Test
