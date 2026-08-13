@@ -131,6 +131,17 @@ public enum ErrorCode {
     COUPON_EXPIRED("COUPON-400E", HttpStatus.BAD_REQUEST, "사용 기간이 아닌 쿠폰입니다."),
     COUPON_MIN_ORDER_NOT_MET("COUPON-400M", HttpStatus.BAD_REQUEST, "쿠폰의 최소 주문금액을 채우지 못했습니다."),
 
+    // 이벤트 쿠폰 (G-8, V49 — 2026-08-13)
+    // ⚠ 「이미 받음」은 실패지만 **되돌릴 것이 없는 실패**다 — 화면은 이 코드를 보고 버튼을
+    //    「받음」으로 확정한다(에러 토스트가 아니라 상태 확정이다).
+    COUPON_ALREADY_ISSUED("COUPON-409I", HttpStatus.CONFLICT, "이미 받은 쿠폰입니다."),
+    COUPON_EVENT_CLOSED("COUPON-400C", HttpStatus.BAD_REQUEST, "지금은 받을 수 있는 이벤트 쿠폰이 없습니다."),
+    // 등록 시 검증 둘. 앱이 유일한 방어라(Oracle 유니크로는 기간 겹침을 못 막는다) 테스트로 못 박는다.
+    COUPON_EVENT_OVERLAP("COUPON-400O", HttpStatus.BAD_REQUEST,
+            "발급 기간이 겹치는 이벤트 쿠폰이 이미 있습니다."),
+    COUPON_ISSUE_WINDOW_INVALID("COUPON-400W", HttpStatus.BAD_REQUEST,
+            "발급 마감은 시작일 이후, 사용 마감 이전이어야 합니다."),
+
     // 적립금 · 회원 등급 (2026-07-24)
     POINT_NOT_ENOUGH("POINT-400N", HttpStatus.BAD_REQUEST, "적립금이 부족합니다."),
     POINT_INVALID_AMOUNT("POINT-400A", HttpStatus.BAD_REQUEST, "적립금 사용액이 올바르지 않습니다."),

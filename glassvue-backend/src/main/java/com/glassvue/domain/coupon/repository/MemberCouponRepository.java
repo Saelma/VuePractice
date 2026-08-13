@@ -21,4 +21,13 @@ public interface MemberCouponRepository extends JpaRepository<MemberCoupon, UUID
 
     /** 회원 삭제 정리용(F-1). 지우는 것은 <b>발급분</b>이고 쿠폰 정의({@code coupon})는 남는다. */
     long deleteByMemberId(UUID memberId);
+
+    /**
+     * 이미 받았나 — 「받기」 버튼을 「받음」으로 그릴지, 관리자 발급을 거절할지의 근거(G-8, V49).
+     *
+     * <p>⚠ <b>이 확인만으로는 중복이 안 막힌다.</b> 두 요청이 같은 순간 «없다» 를 읽으면 둘 다 발급된다 —
+     * 최종 방어는 유니크 인덱스 {@code ux_member_coupon_once}(V49)다. 여기서 미리 보는 이유는
+     * 흔한 경우에 <b>제약 위반 500 대신 뜻이 있는 4xx</b> 를 주기 위해서다.
+     */
+    boolean existsByMemberIdAndCouponId(UUID memberId, UUID couponId);
 }

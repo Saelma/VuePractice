@@ -2,6 +2,7 @@ package com.glassvue.domain.coupon.controller;
 
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
+import com.glassvue.domain.coupon.dto.EventCouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
@@ -29,6 +30,19 @@ public interface CouponController {
                     + "\"가입하면 쿠폰\" 문구를 띄울지 결정하는 근거다. 기능이 꺼져 있거나 설정된 쿠폰이 "
                     + "없으면 data 가 null 이고, 그때 화면은 문구를 감춘다(없는 혜택을 광고하지 않는다).")
     ResponseEntity<ApiResponse<CouponResponse>> welcome();
+
+    @Operation(summary = "이벤트 쿠폰 배너 (공개)",
+            description = "오늘 그릴 이벤트 배너(G-8). 오늘 진행 중이면 open=true(+ 로그인 시 claimed), "
+                    + "앞으로 있으면 daysUntil 로 예고한다. **줄 게 없으면 data 가 null 이고 화면은 "
+                    + "배너를 그리지 않는다.** 비로그인도 조회 가능하되 그 화면은 open=true 일 때만 쓴다 — "
+                    + "예고를 보고 가입해도 그 날 다시 와야 받으므로 어긋난 약속이 된다.")
+    ResponseEntity<ApiResponse<EventCouponResponse>> eventBanner(@Parameter(hidden = true) AuthUser user);
+
+    @Operation(summary = "이벤트 쿠폰 받기",
+            description = "발급 창이 열려 있는 이벤트 쿠폰을 한 장 발급받는다(G-8). **회원당 한 장** — "
+                    + "이미 받았으면 COUPON-409I, 발급 창이 닫혀 있으면 COUPON-400C. "
+                    + "동시에 두 번 눌러도 한 장만 나간다(유니크 인덱스 ux_member_coupon_once).")
+    ResponseEntity<ApiResponse<UUID>> claimEvent(@Parameter(hidden = true) AuthUser user);
 
     @Operation(summary = "쿠폰 정의 목록 (관리자)",
             description = "발급 가능한 쿠폰(정의) 목록. 정렬 미지정 시 최신 생성순. 회원별 발급분이 아니라 쿠폰 그 자체다.")

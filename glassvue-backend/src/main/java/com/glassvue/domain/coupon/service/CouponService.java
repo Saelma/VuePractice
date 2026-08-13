@@ -2,6 +2,7 @@ package com.glassvue.domain.coupon.service;
 
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
+import com.glassvue.domain.coupon.dto.EventCouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
 import com.glassvue.domain.coupon.entity.Coupon;
 import com.glassvue.domain.coupon.entity.MemberCoupon;
@@ -11,11 +12,16 @@ import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.response.PageResponse;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -33,12 +39,23 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CouponService {
 
+    /** D-day 는 «날짜의 차» 라 경계를 정해야 센다 — 매출 통계가 쓰는 것과 같은 KST 다. */
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
     private final CouponRepository couponRepository;
     private final MemberCouponRepository memberCouponRepository;
 
-    /** 쿠폰 생성(관리자). */
+    /**
+     * 쿠폰 생성(관리자).
+     *
+     * <p>{@code issueUntil} 이 오면 <b>이벤트 쿠폰</b>이다(G-8, V49) — 그때만 아래 검증 셋이 돈다.
+     * 비우고 만들면 지금까지와 똑같은 상시 쿠폰이다.
+     */
     @Transactional
     public UUID create(CouponCreateRequest req) {
+        if (req.issueUntil() != null) {
+            validateEventWindow(req.validFrom(), req.issueUntil(), req.validUntil());
+        }
         Coupon coupon = couponRepository.save(Coupon.builder()
                 .name(req.name())
                 .discountType(req.discountType())
@@ -47,9 +64,34 @@ public class CouponService {
                 .maxDiscountAmount(req.maxDiscountAmount())
                 .validFrom(req.validFrom())
                 .validUntil(req.validUntil())
+                .issueUntil(req.issueUntil())
                 .build());
-        log.info("Coupon created: {} ({})", coupon.getId(), coupon.getName());
+        log.info("Coupon created: {} ({}){}", coupon.getId(), coupon.getName(),
+                coupon.isEventCoupon() ? " [event, 발급마감 " + coupon.getIssueUntil() + "]" : "");
         return coupon.getId();
+    }
+
+    /**
+     * 이벤트 쿠폰 등록 검증 셋(G-8).
+     *
+     * <p>🔴 <b>앱이 유일한 방어다.</b> Oracle 유니크 인덱스로는 «기간 겹침» 을 못 막는다 —
+     * {@code welcome} 처럼 «행이 하나» 를 막는 것이면 함수기반 인덱스로 됐겠지만, 여기서 막아야 하는
+     * 것은 <b>미래 이벤트를 여러 개 등록해 두되 발급 창만 안 겹치게</b> 하는 것이다
+     * (달력 예고를 하려면 미래 행이 여러 개 있어야 한다).
+     * → DB 가 받쳐 주지 않으므로 «겹치는 둘을 등록» 을 <b>테스트로 못 박아 둔다.</b>
+     */
+    private void validateEventWindow(Instant validFrom, Instant issueUntil, Instant validUntil) {
+        // 발급 창이 뒤집히면(마감이 시작보다 앞) 아무도 못 받는 이벤트가 조용히 등록된다.
+        if (issueUntil.isBefore(validFrom)) {
+            throw new BusinessException(ErrorCode.COUPON_ISSUE_WINDOW_INVALID);
+        }
+        // 받자마자 만료된 쿠폰을 내보내지 않는다 — 발급 창이 사용 기간 안에 들어 있어야 한다.
+        if (validUntil.isBefore(issueUntil)) {
+            throw new BusinessException(ErrorCode.COUPON_ISSUE_WINDOW_INVALID);
+        }
+        if (!couponRepository.findEventsOverlapping(validFrom, issueUntil).isEmpty()) {
+            throw new BusinessException(ErrorCode.COUPON_EVENT_OVERLAP);
+        }
     }
 
     /** 쿠폰 정의 목록(관리자). 정렬 미지정 시 최신 생성순. */
@@ -96,14 +138,88 @@ public class CouponService {
         log.info("Welcome coupon {}: {} ({})", welcome ? "designated" : "cleared", couponId, coupon.getName());
     }
 
-    /** 회원에게 발급(관리자). 같은 쿠폰을 여러 장 주는 것도 허용한다(이벤트 재발급 등). */
+    /**
+     * 회원에게 발급(관리자).
+     *
+     * <p>⚠ <b>2026-08-13 에 규칙이 바뀌었다</b>(G-8, V49): 예전엔 *"같은 쿠폰을 여러 장 주는 것도
+     * 허용한다(이벤트 재발급 등)"* 였는데, 유니크 인덱스 {@code ux_member_coupon_once} 가 생기면서
+     * <b>회원당 같은 쿠폰 1장</b>이 전역 규칙이 됐다. 여기서 미리 확인하지 않으면 관리자에게
+     * <b>제약 위반 500</b> 이 나간다 — 뜻이 있는 4xx 로 답한다.
+     */
     @Transactional
     public UUID issue(UUID couponId, UUID memberId) {
         Coupon coupon = couponRepository.findById(couponId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+        if (memberCouponRepository.existsByMemberIdAndCouponId(memberId, couponId)) {
+            throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
+        }
         MemberCoupon issued = memberCouponRepository.save(MemberCoupon.issue(memberId, coupon));
         log.info("Coupon issued: {} to {}", couponId, memberId);
         return issued.getId();
+    }
+
+    /**
+     * 오늘 그릴 이벤트 배너 — <b>비로그인도 부를 수 있는 공개 정보</b>다(G-8).
+     *
+     * <p>답은 셋 중 하나다: 오늘 진행 중({@code open}) · 앞으로 있음(예고) · <b>비어 있음</b>.
+     * ⚠ 마지막이면 화면은 <b>배너를 안 그린다</b> — *"예정된 이벤트가 없습니다"* 는 자리만 먹는다.
+     *
+     * <p>⚠ {@code memberId} 가 null(비로그인)이면 «이미 받았나» 를 <b>묻지 않는다</b> — 쿼리 한 방이
+     * 줄기도 하지만, 그보다 비로그인 화면은 그 값을 쓰지 않기 때문이다(예고도 안 띄운다).
+     *
+     * <p>🔴 <b>D-day 는 KST 로 센다.</b> «며칠 남았나» 는 시각의 차가 아니라 <b>날짜의 차</b>다 —
+     * 오늘 23:00 에서 내일 09:00 은 10시간 뒤지만 D-1 이다. 초 단위로 나누면 D-0 이 되어 틀린다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<EventCouponResponse> eventBanner(UUID memberId) {
+        Instant now = Instant.now();
+        Optional<Coupon> openNow = couponRepository.findIssuableAt(now);
+        if (openNow.isPresent()) {
+            Coupon coupon = openNow.get();
+            boolean claimed = memberId != null
+                    && memberCouponRepository.existsByMemberIdAndCouponId(memberId, coupon.getId());
+            return Optional.of(EventCouponResponse.open(coupon, claimed));
+        }
+        return couponRepository.findUpcomingEvents(now, Limit.of(1)).stream()
+                .findFirst()
+                .map(coupon -> EventCouponResponse.upcoming(coupon, daysUntilKst(now, coupon.getValidFrom())));
+    }
+
+    private static int daysUntilKst(Instant now, Instant start) {
+        return (int) ChronoUnit.DAYS.between(LocalDate.ofInstant(now, KST), LocalDate.ofInstant(start, KST));
+    }
+
+    /**
+     * 이벤트 쿠폰 「받기」(G-8) — 이 기능의 본체.
+     *
+     * <p>🔴 <b>자동 발급이 아니라 버튼이다</b>(2026-08-12 결정). 누른 사람만 발급 로직을 타고,
+     * 누른 사람은 <b>자기가 받은 것을 안다</b> — «모르는 채 받는 것» 보다 «알고 받는 것» 이
+     * 쿠폰의 목적(다시 오게 하는 것)에 맞는다.
+     *
+     * <p>⚠ <b>중복 방어가 두 층이다.</b> 아래 {@code exists} 는 흔한 경우(이미 받은 사람이 다시 누름)에
+     * 뜻이 있는 답을 주기 위한 것이고, <b>동시에 누른 두 요청은 이게 못 막는다</b> — 둘 다 «없다» 를
+     * 읽기 때문이다. 그 자리는 유니크 인덱스가 막고, 여기서는 그 예외를 <b>같은 뜻의 4xx 로 번역</b>한다.
+     * 🔴 그래서 {@code saveAndFlush} 다 — 커밋까지 미루면 예외가 이 메서드 밖에서 터져
+     * <b>번역할 자리를 놓친다</b>(핸들러가 500 으로 답한다).
+     *
+     * @return 발급된 member_coupon id
+     */
+    @Transactional
+    public UUID claimEventCoupon(UUID memberId) {
+        Coupon coupon = couponRepository.findIssuableAt(Instant.now())
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_EVENT_CLOSED));
+        if (memberCouponRepository.existsByMemberIdAndCouponId(memberId, coupon.getId())) {
+            throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
+        }
+        try {
+            MemberCoupon issued = memberCouponRepository.saveAndFlush(MemberCoupon.issue(memberId, coupon));
+            log.info("Event coupon claimed: {} ({}) by {}", coupon.getId(), coupon.getName(), memberId);
+            return issued.getId();
+        } catch (DataIntegrityViolationException e) {
+            // 동시 요청 둘이 같은 순간 «없다» 를 읽은 경우. 한 장은 나갔으니 실패가 아니라 «이미 받음» 이다.
+            log.info("Event coupon claim raced — unique index held: {} by {}", coupon.getId(), memberId);
+            throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
+        }
     }
 
     /**

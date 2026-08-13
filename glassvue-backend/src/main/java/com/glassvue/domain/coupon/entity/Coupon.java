@@ -44,6 +44,18 @@ public class Coupon extends BaseTimeEntity {
     private Instant validUntil;
 
     /**
+     * 이벤트 쿠폰의 <b>발급 마감</b> 시각(G-8, V49). <b>null 이면 이벤트가 아닌 상시 쿠폰</b>이다 —
+     * 별도의 boolean 플래그를 두지 않는 이유가 여기 있다: 발급 마감일이 곧 «이벤트인가» 의 정의라
+     * 플래그를 따로 두면 «켜졌는데 날짜가 없다» 는 모순 상태가 생긴다({@code welcome} 과 다른 점).
+     *
+     * <p>🔴 <b>발급 창과 사용 기간은 다른 것이다.</b> 발급은 {@code validFrom} ~ {@code issueUntil}
+     * (보통 하루), 사용은 {@code validFrom} ~ {@code validUntil}(보통 한 달). 이 둘을 한 값으로 쓰면
+     * «그 날 하루» 이벤트 쿠폰이 <b>그 날 자정에 만료돼 받자마자 못 쓴다</b>(V49 주석).
+     */
+    @Column(name = "issue_until")
+    private Instant issueUntil;
+
+    /**
      * 가입 즉시 자동 발급되는 쿠폰인가(G-2 후속, V36). <b>전체에서 한 장만</b> true —
      * 함수기반 유니크 인덱스(`ux_coupon_welcome`)가 DB 에서 보장한다.
      *
@@ -55,7 +67,8 @@ public class Coupon extends BaseTimeEntity {
 
     @Builder
     private Coupon(String name, DiscountType discountType, long discountValue,
-                   long minOrderAmount, Long maxDiscountAmount, Instant validFrom, Instant validUntil) {
+                   long minOrderAmount, Long maxDiscountAmount, Instant validFrom, Instant validUntil,
+                   Instant issueUntil) {
         this.name = name;
         this.discountType = discountType;
         this.discountValue = discountValue;
@@ -63,6 +76,7 @@ public class Coupon extends BaseTimeEntity {
         this.maxDiscountAmount = maxDiscountAmount;
         this.validFrom = validFrom;
         this.validUntil = validUntil;
+        this.issueUntil = issueUntil;
     }
 
     /** 가입 쿠폰으로 지정/해제(관리자). "하나만" 규칙은 서비스가 기존 것을 해제해 지킨다. */
@@ -72,6 +86,21 @@ public class Coupon extends BaseTimeEntity {
 
     public boolean isValidAt(Instant at) {
         return !at.isBefore(validFrom) && !at.isAfter(validUntil);
+    }
+
+    /** 이벤트 쿠폰인가 — 발급 마감이 정해져 있으면 그렇다(G-8). */
+    public boolean isEventCoupon() {
+        return issueUntil != null;
+    }
+
+    /**
+     * 지금 「받기」로 발급받을 수 있는가.
+     *
+     * <p>⚠ {@link #isValidAt} 과 <b>다른 질문</b>이다 — 저건 «쓸 수 있나», 이건 «받을 수 있나».
+     * 발급 창이 닫혀도 이미 받은 쿠폰은 {@code validUntil} 까지 멀쩡히 쓸 수 있다.
+     */
+    public boolean isIssuableAt(Instant at) {
+        return isEventCoupon() && !at.isBefore(validFrom) && !at.isAfter(issueUntil);
     }
 
     public boolean meetsMinOrder(long itemsTotal) {

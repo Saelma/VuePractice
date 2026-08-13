@@ -33,6 +33,13 @@ public record CouponCreateRequest(
         Long maxDiscountAmount,
 
         @NotNull Instant validFrom,
-        @NotNull Instant validUntil
+        @NotNull Instant validUntil,
+
+        /*
+         * 이벤트 쿠폰의 발급 마감(G-8, V49). **비우면 상시 쿠폰**이다 — 지금까지 만들던 것과 같다.
+         * ⚠ @NotNull 을 붙이지 않는 것이 이 기능의 «지정 안 함 = 꺼짐» 이다(G-2 와 같은 방식).
+         */
+        @Schema(description = "이벤트 발급 마감 시각. 비우면 상시 쿠폰", example = "2026-08-15T14:59:59Z")
+        Instant issueUntil
 ) {
 }

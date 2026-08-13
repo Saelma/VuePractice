@@ -49,8 +49,9 @@ class WelcomeCouponHandlerTest {
     }
 
     private CouponResponse welcome() {
+        // issueUntil = null — 가입 쿠폰은 이벤트 쿠폰이 아니다(V49).
         return new CouponResponse(couponId, "가입 축하 5천원", DiscountType.FIXED, 5_000L, 10_000L, null,
-                Instant.now().minusSeconds(60), Instant.now().plusSeconds(60), true, Instant.now());
+                Instant.now().minusSeconds(60), Instant.now().plusSeconds(60), true, null, Instant.now());
     }
 
     @Test

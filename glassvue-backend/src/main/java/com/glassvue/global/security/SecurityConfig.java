@@ -52,6 +52,11 @@ public class SecurityConfig {
                         // 띄울지 판단하는 근거라 로그인 전에 읽혀야 한다. 쿠폰 **정의**(이름·할인액)만 나가고
                         // 회원별 발급분은 안 나간다. 아래 인증 규칙보다 **위에** 있어야 효력이 있다(먼저 매칭).
                         .requestMatchers(HttpMethod.GET, "/api/coupons/welcome").permitAll()
+                        // ⚠ 이벤트 배너도 **공개**다(G-8) — 비로그인 혜택 스트립이 «오늘 이벤트 중» 한 줄을
+                        // 띄울지 판단한다. 나가는 것은 쿠폰 **정의**와 «지금 열렸나» 뿐이고, 「이미 받았나」는
+                        // 로그인했을 때만 채워진다. 🔴 **받기(POST)는 아래 인증 규칙에 걸려야 한다** —
+                        // GET 만 뚫는 이유가 그것이다(경로로 뚫으면 발급이 공개된다).
+                        .requestMatchers(HttpMethod.GET, "/api/coupons/event").permitAll()
                         // 내 쿠폰 목록 — 기본이 permitAll이라 매처를 안 넣으면 남의 쿠폰까지 열린다.
                         // (관리자 쿠폰 API는 /api/admin/** 한 줄로 이미 막힌다.)
                         .requestMatchers("/api/coupons/**").authenticated()
