@@ -1,9 +1,11 @@
 package com.glassvue.domain.coupon;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.glassvue.domain.coupon.entity.Coupon;
 import com.glassvue.domain.coupon.entity.DiscountType;
+import com.glassvue.domain.coupon.entity.MemberCoupon;
 import com.glassvue.domain.coupon.repository.CouponRepository;
 import com.glassvue.domain.coupon.repository.MemberCouponRepository;
 import com.glassvue.domain.coupon.service.CouponService;
@@ -29,8 +31,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 「받기」를 <b>동시에</b> 눌러도 한 장만 나가는가 — G-8 의 본체.
@@ -57,6 +61,7 @@ class EventCouponConcurrencyTest {
     @Autowired MemberCouponRepository memberCouponRepository;
     @Autowired MemberRepository memberRepository;
     @Autowired PasswordEncoder passwordEncoder;
+    @Autowired TransactionTemplate transactionTemplate;
 
     private UUID memberId;
     private UUID couponId;
@@ -79,12 +84,22 @@ class EventCouponConcurrencyTest {
                 .build()).getId();
     }
 
-    /** ⚠ 순서가 있다 — 발급분을 먼저 지워야 쿠폰 정의를 지울 수 있다(참조가 남으면 FK 가 막는다). */
+    /**
+     * ⚠ 순서가 있다 — 발급분을 먼저 지워야 쿠폰 정의를 지울 수 있다(참조가 남으면 FK 가 막는다).
+     *
+     * <p>🔴 <b>{@code TransactionTemplate} 이 필요하다.</b> 이 클래스는 경합을 재현하려고
+     * {@code @Transactional} 을 뺐는데, 그러면 파생 삭제 쿼리({@code deleteByMemberId})가
+     * {@code TransactionRequiredException} 으로 죽는다. ⚠ 실제로 여기서 한 번 터졌고,
+     * <b>정리가 실패한 채 커밋된 이벤트 쿠폰이 남아 같은 클래스의 다른 테스트 여섯 개가
+     * 그걸 보고 깨졌다</b>(2026-08-13) — 정리 실패는 자기 자신만 망가뜨리지 않는다.
+     */
     @AfterEach
     void tearDown() {
-        memberCouponRepository.deleteByMemberId(memberId);
-        couponRepository.deleteById(couponId);
-        memberRepository.deleteById(memberId);
+        transactionTemplate.executeWithoutResult(status -> {
+            memberCouponRepository.deleteByMemberId(memberId);
+            couponRepository.deleteById(couponId);
+            memberRepository.deleteById(memberId);
+        });
     }
 
     @Test
@@ -119,9 +134,32 @@ class EventCouponConcurrencyTest {
             pool.shutdownNow();
         }
 
-        // 🔴 «둘 다 성공» 이 아니라 «한 장» 이라는 것이 유니크 인덱스가 서 있다는 증거다.
         assertThat(issued.get()).isEqualTo(1);
         assertThat(alreadyIssued.get()).isEqualTo(1);
         assertThat(memberCouponRepository.findUnusedByMember(memberId)).hasSize(1);
+    }
+
+    /**
+     * 🔴 <b>유니크 인덱스가 실제로 서 있는가</b> — 앱 가드를 <b>건너뛰고</b> 직접 밟는다.
+     *
+     * <p>⚠ 위 테스트는 «한 장» 을 확인하지만 <b>어느 층이 막았는지는 말해 주지 않는다.</b>
+     * 두 스레드가 실제로는 어긋나 돌아 뒤엣놈이 앞엣놈의 커밋을 읽었다면, 인덱스가 없어도
+     * 똑같이 통과한다 — «막았는데 0인지, 안 밟아서 0인지»(WA §3-3)가 갈리지 않는다.
+     * 그래서 여기서는 서비스를 거치지 않고 리포지토리로 같은 쌍을 두 번 넣는다.
+     *
+     * <p>⚠ 이것이 <b>V49 인덱스의 유일한 직접 증거</b>다. 인덱스가 사라지면(마이그레이션 누락·수동 DROP)
+     * 위 테스트는 계속 통과하고 <b>이 테스트만 깨진다.</b>
+     */
+    @Test
+    @DisplayName("앱 가드를 건너뛰고 같은 쌍을 두 번 넣으면 DB 가 막는다 — ux_member_coupon_once")
+    void uniqueIndexRejectsDuplicatePair() {
+        Coupon coupon = couponRepository.findById(couponId).orElseThrow();
+
+        transactionTemplate.executeWithoutResult(status ->
+                memberCouponRepository.saveAndFlush(MemberCoupon.issue(memberId, coupon)));
+
+        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status ->
+                memberCouponRepository.saveAndFlush(MemberCoupon.issue(memberId, coupon))))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 }
