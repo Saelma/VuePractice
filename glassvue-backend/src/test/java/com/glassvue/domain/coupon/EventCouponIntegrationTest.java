@@ -1,5 +1,6 @@
 package com.glassvue.domain.coupon;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -36,6 +37,13 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>동시 요청은 롤백 트랜잭션 안에서 못 만든다 → {@link EventCouponConcurrencyTest} 로 갈라 뒀다.
  *
  * <p>DB_HOST 있을 때만 실행, {@code @Transactional} 롤백으로 공유 DB 무오염.
+ *
+ * <p>🔴 <b>알려진 한계 — 운영에 이벤트가 「진행 중」이면 이 클래스의 일부가 못 돈다</b>(2026-08-13).
+ * 「지금 열린 이벤트」를 만드는 테스트들은 발급 창이 <b>전역에서 하나뿐</b>이라는 규칙에 걸려
+ * 등록 자체가 400(겹침)으로 거부된다. 롤백은 <b>내가 만든 것</b>만 되돌리지 <b>이미 커밋된 운영
+ * 데이터</b>는 어쩌지 못한다. ⚠ 이건 테스트를 고쳐서 없앨 수 있는 문제가 아니라 <b>설계(겹침 금지)와
+ * 공유 DB가 만나는 자리</b>다 — 테스트 전용 스키마가 생기기 전까지는 남는다.
+ * → 배너 관련 둘은 그래도 «기준선을 먼저 읽는» 방식으로 견디게 고쳤다(아래 각 테스트 주석).
  */
 @EnabledIfEnvironmentVariable(named = "DB_HOST", matches = ".+")
 @SpringBootTest
@@ -148,22 +156,46 @@ class EventCouponIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("COUPON-400C"));
     }
 
+    /**
+     * 예고 — 앞으로 있을 이벤트는 {@code open=false} 에 {@code daysUntil}(KST)이 실린다.
+     *
+     * <p>🔴 <b>이 테스트는 운영 데이터에 기대면 안 된다.</b> 배너는 «가장 가까운 것 하나» 를 돌려주므로,
+     * 운영에 이벤트 쿠폰이 <b>하나라도 커밋돼 있으면</b> 내가 만든 것이 안 돌아올 수 있다.
+     * ⚠ 처음엔 «내 쿠폰이 D-3 으로 온다» 로 썼다가 2026-08-13 검증 잔재(`ZZ-이벤트쿠폰3`, D-1)에
+     * <b>실제로 깨졌다</b> — 그때 테스트가 잡은 것은 버그가 아니라 <b>제 가정이 틀렸다는 사실</b>이었다.
+     *
+     * <p>→ 그래서 <b>기준선을 먼저 읽는다.</b> 비어 있었으면 내 것이 정확히 와야 하고(엄밀한 단언),
+     * 이미 무언가 있었으면 «더 가까운 것이 온다» 는 <b>불변식</b>을 단언한다. 뒤엣것도 진짜 계약이다 —
+     * 배너의 규칙이 «가장 가까운 이벤트» 이기 때문이다.
+     */
     @Test
     @DisplayName("예고 — 앞으로 있을 이벤트는 open=false 에 daysUntil(KST) 이 실린다")
     void upcomingEventBanner() throws Exception {
         String admin = login(adminLoginId);
         String user = login(userLoginId);
-        Instant start = Instant.now().plus(3, ChronoUnit.DAYS);
 
+        String baseline = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Object existing = JsonPath.read(baseline, "$.data");
+
+        Instant start = Instant.now().plus(3, ChronoUnit.DAYS);
         createCoupon(admin, "ZZ다음주 이벤트", start, start.plus(1, ChronoUnit.HOURS),
                 start.plus(30, ChronoUnit.DAYS)).andExpect(status().isOk());
 
-        // ⚠ D-day 는 «날짜의 차» 라 서버가 KST 로 센다. 3일 뒤 같은 시각이면 경계를 어떻게 넘든 3 이다.
-        mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.open").value(false))
-                .andExpect(jsonPath("$.data.claimed").value(false))
-                .andExpect(jsonPath("$.data.daysUntil").value(3));
+        String body = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        if (existing == null) {
+            // ⚠ D-day 는 «날짜의 차» 라 서버가 KST 로 센다. 3일 뒤 같은 시각이면 경계를 어떻게 넘든 3 이다.
+            assertThat((String) JsonPath.read(body, "$.data.name")).isEqualTo("ZZ다음주 이벤트");
+            assertThat((Boolean) JsonPath.read(body, "$.data.open")).isFalse();
+            assertThat((Boolean) JsonPath.read(body, "$.data.claimed")).isFalse();
+            assertThat((Integer) JsonPath.read(body, "$.data.daysUntil")).isEqualTo(3);
+        } else {
+            // 더 가까운 것이 이미 있었다 — 그렇다면 배너는 그것을 보여줘야 하고, 내 D-3 보다 가깝다.
+            boolean open = JsonPath.read(body, "$.data.open");
+            assertThat(open || (Integer) JsonPath.read(body, "$.data.daysUntil") <= 3).isTrue();
+        }
     }
 
     @Test
@@ -223,10 +255,14 @@ class EventCouponIntegrationTest {
         createCoupon(admin, "ZZ상시 쿠폰", now.minus(1, ChronoUnit.DAYS), null, now.plus(30, ChronoUnit.DAYS))
                 .andExpect(status().isOk());
 
-        // 줄 게 없으면 data:null — 화면은 «예정된 이벤트가 없습니다» 를 그리지 않고 배너 자체를 안 만든다.
-        mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data").doesNotExist());
+        // ⚠ «data 가 null 이다» 로 단언하지 않는다 — 운영에 이벤트 쿠폰이 하나라도 있으면 그게 실려 온다
+        //    (2026-08-13 검증 잔재에 실제로 깨졌다). 여기서 볼 것은 **상시 쿠폰이 배너에 안 온다**는 것뿐이다.
+        String body = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Object data = JsonPath.read(body, "$.data");
+        if (data != null) {
+            assertThat((String) JsonPath.read(body, "$.data.name")).isNotEqualTo("ZZ상시 쿠폰");
+        }
     }
 
     @Test

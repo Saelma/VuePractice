@@ -17,11 +17,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -45,6 +47,10 @@ public class CouponService {
 
     /** D-day 는 «날짜의 차» 라 경계를 정해야 센다 — 매출 통계가 쓰는 것과 같은 KST 다. */
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+    /** 관리자에게 보여줄 날짜 — UTC 로 적으면 «8/14 쿠폰» 이 8/13 으로 보여 더 헷갈린다. */
+    private static final DateTimeFormatter KST_DAY =
+            DateTimeFormatter.ofPattern("M월 d일").withZone(KST);
 
     private final CouponRepository couponRepository;
     private final MemberCouponRepository memberCouponRepository;
@@ -93,8 +99,17 @@ public class CouponService {
         if (validUntil.isBefore(issueUntil)) {
             throw new BusinessException(ErrorCode.COUPON_ISSUE_WINDOW_INVALID);
         }
-        if (!couponRepository.findEventsOverlapping(validFrom, issueUntil).isEmpty()) {
-            throw new BusinessException(ErrorCode.COUPON_EVENT_OVERLAP);
+        List<Coupon> conflicts = couponRepository.findEventsOverlapping(validFrom, issueUntil);
+        if (!conflicts.isEmpty()) {
+            // 🔴 «겹친다» 만 말하면 확인할 방법이 없다 — 관리자는 목록에서 발급 창을 눈으로 맞춰 봐야 하고,
+            //    상시 쿠폰까지 섞여 있어 «없는데 왜 겹치냐» 가 된다(2026-08-13 검증에서 실제로 그랬다).
+            //    → **무엇과 겹치는지 이름과 창을 함께** 준다. 화면은 서버 문구를 그대로 띄운다.
+            String detail = conflicts.stream()
+                    .map(c -> "%s (%s ~ %s)".formatted(c.getName(),
+                            KST_DAY.format(c.getValidFrom()), KST_DAY.format(c.getIssueUntil())))
+                    .collect(Collectors.joining(", "));
+            throw new BusinessException(ErrorCode.COUPON_EVENT_OVERLAP,
+                    "발급 기간이 겹칩니다 — " + detail);
         }
     }
 

@@ -92,6 +92,18 @@ function plusOneMonth(day) {
  * 배지도 안 뜨고 겹침 검사도 안 돌고 배너도 안 나온다 — **전부 「설계대로」인데 전부 틀려 보인다.**
  * → 폼이 **자기가 만들 것을 문장으로** 되읽어 준다. 값이 아니라 **결과**를 보여주는 것이 요점이다.
  */
+/**
+ * 이미 잡혀 있는 발급 창 — **겹칠 대상을 폼에서 미리 보여준다**.
+ *
+ * ⚠ 목록에는 상시 쿠폰이 섞여 있어 눈으로 맞추기 어렵다. «겹친다» 는 거부를 받고 나서
+ * *"겹치는 게 없는데?"* 가 됐던 자리다(2026-08-13). 서버 에러도 무엇과 겹치는지 말하지만,
+ * **누르기 전에 아는 편**이 낫다.
+ */
+const eventWindows = computed(() =>
+  coupons.value
+    .filter((c) => c.issueUntil)
+    .map((c) => `${c.name} (${fmtDate(c.validFrom)}~${fmtDate(c.issueUntil)})`));
+
 const plan = computed(() => {
   if (!form.issueUntil) {
     return { event: false, text: '상시 쿠폰 — 관리자가 직접 발급합니다. 홈 배너에는 안 뜹니다.' };
@@ -250,12 +262,22 @@ async function onIssue(member) {
           <label class="field">
             <span class="field-label">발급 마감일 — 비우면 상시 쿠폰</span>
             <input v-model="form.issueUntil" type="date" class="ipt" @change="onIssueUntilChange" />
-            <span class="muted">
-              넣으면 유효 시작일부터 이 날까지 <b>홈 배너의 「받기」</b>로만 발급되고
-              <b>회원당 한 장</b>입니다. 발급 창이 겹치는 이벤트는 등록되지 않습니다.
-              <b>사용 종료일은 한 달 뒤로 채워 드립니다</b>(비어 있을 때만 — 이미 넣은 값은 안 건드립니다).
-            </span>
           </label>
+          <!--
+            ⚠ 한 문단으로 붙여 놨더니 줄이 안 나뉘어 안 읽혔다(2026-08-13, 사용자 지적).
+            규칙이 넷이라 **넷으로 끊는다** — 설명은 문장 수가 아니라 항목 수대로 나눈다.
+          -->
+          <ul class="mt-2 flex flex-col gap-1 text-xs text-ink-500">
+            <li>· 유효 시작일부터 이 날까지 <b>홈 배너의 「받기」</b>로만 발급됩니다.</li>
+            <li>· <b>회원당 한 장</b>입니다.</li>
+            <li>· <b>발급 창이 겹치는 이벤트</b>는 등록되지 않습니다(사용 기간은 겹쳐도 됩니다).</li>
+            <li>· 사용 종료일이 비어 있으면 <b>한 달 뒤</b>로 채워 드립니다.</li>
+          </ul>
+
+          <!-- 이미 잡힌 발급 창 — 없으면 줄을 안 만든다(빈 「없음」은 자리만 먹는다) -->
+          <p v-if="eventWindows.length" class="mt-2 text-xs text-ink-700">
+            이미 잡힌 발급 창: <b>{{ eventWindows.join(' · ') }}</b>
+          </p>
 
           <!-- 값이 아니라 **결과**를 되읽어 준다 — 무엇을 만들고 있는지 누르기 전에 알게 한다. -->
           <p class="mt-3 text-sm" :class="plan.event ? 'text-ink-900' : 'text-ink-500'">
