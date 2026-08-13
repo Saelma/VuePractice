@@ -365,7 +365,13 @@ class EventCouponIntegrationTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/admin/coupons/calendar?month=" + month).header("Authorization", admin))
                 .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 상시' && @.kind == 'ISSUE')]").doesNotExist())
-                .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 상시' && @.kind == 'USE')]").exists());
+                .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 상시' && @.kind == 'USE')]").exists())
+                // 🔴 화면은 이 플래그로 «격자에 그릴지 위 스트립으로 뺄지» 를 가른다(2026-08-13).
+                //    ⚠ «ISSUE 막대가 있나» 로 유추하면 발급 창이 지난달인 이벤트를 상시로 잘못 분류한다.
+                .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 상시')].event")
+                        .value(org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.is(false))))
+                .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 이벤트')].event")
+                        .value(org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.is(true))));
     }
 
     /**

@@ -66,6 +66,27 @@ const monthLabel = computed(() => {
  * ⚠ 요일 계산은 화면이 해도 안전하다(순수 달력 산수라 시간대에 안 흔들린다).
  * **흔들리는 것은 막대의 날짜**라 그쪽만 서버가 잘라 준다.
  */
+/**
+ * 🔴 **상시 쿠폰은 격자 밖에 둔다** (2026-08-13, 사용자 지적).
+ *
+ * 상시 쿠폰의 사용 기간은 대개 한 달을 꽉 채워서 **격자를 가로줄로 덮는다.** 위치가 없는 값이라
+ * 격자에 있어 봐야 정보가 아니고, 정작 봐야 할 **이벤트 겹침만 묻힌다** — 백로그가 이 화면을
+ * 「지금은 이르다」로 미뤄 뒀던 이유(*"가로줄 다섯 개일 뿐"*)가 그대로 재현되는 자리다.
+ *
+ * ⚠ 다만 **종료일은 버리지 않는다** — 상시 쿠폰에서 유일하게 위치가 있는 값이라, 격자에서 빼면서
+ * 그것까지 없애면 «언제 끝나나» 를 어디서도 못 본다.
+ */
+const alwaysOn = computed(() => {
+  if (!data.value) return [];
+  return data.value.spans
+    .filter((s) => !s.event) // 이벤트가 아닌 것 = 상시 (서버가 판단해서 준다)
+    .map((s) => ({
+      ...s,
+      // 이 달 안에서 끝나면 그 날을 적는다. 다음 달로 이어지면 «계속»이라 적을 날이 없다.
+      endsThisMonth: !s.continuesAfter,
+    }));
+});
+
 const weeks = computed(() => {
   if (!data.value) return [];
   const { daysInMonth, firstDayOfWeek } = data.value; // 1=월 … 7=일
@@ -86,6 +107,8 @@ const weeks = computed(() => {
 /** 그 주에 걸치는 막대만, 주 안의 칸 번호(1~7)로 잘라서 돌려준다. */
 function barsIn(weekStart, weekEnd) {
   return data.value.spans
+    // 상시 쿠폰은 위 스트립이 맡는다 — 격자에는 «날짜가 뜻을 가지는 것» 만 남긴다.
+    .filter((s) => s.event)
     .filter((s) => s.endDay >= weekStart && s.startDay <= weekEnd)
     .map((s) => {
       const from = Math.max(s.startDay, weekStart);
@@ -133,9 +156,28 @@ function barsIn(weekStart, weekEnd) {
           <span class="inline-block h-2.5 w-6 rounded-sm border border-line bg-canvas"></span>
           사용 기간 — <b class="text-ink-700">겹치는 게 정상</b>이다
         </span>
+        <span>격자에는 <b class="text-ink-700">이벤트 쿠폰만</b> 그린다(상시는 위에).</span>
       </div>
 
       <p v-if="loadError" class="alert-error">{{ loadError }}</p>
+
+      <!--
+        상시 쿠폰 — 격자 위에 따로 둔다. 한 달을 꽉 채우는 막대라 격자 안에 있으면
+        가로줄이 되어 이벤트 겹침을 덮는다(위 alwaysOn 주석).
+        ⚠ 종료일은 함께 적는다 — 상시 쿠폰에서 유일하게 날짜가 뜻을 가지는 값이다.
+      -->
+      <div v-if="!loading && alwaysOn.length" class="mb-3 rounded-card border border-line bg-canvas px-4 py-3">
+        <p class="text-xs text-ink-500">이 달 내내 도는 상시 쿠폰</p>
+        <ul class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+          <li v-for="c in alwaysOn" :key="c.couponId" class="text-sm text-ink-700">
+            {{ c.name }}
+            <span class="text-xs text-ink-500">
+              · {{ couponDiscountText(c) }}
+              <template v-if="c.endsThisMonth">· <b class="text-ink-700">{{ c.endDay }}일 종료</b></template>
+            </span>
+          </li>
+        </ul>
+      </div>
 
       <div v-if="loading" class="space-y-2">
         <div v-for="n in 5" :key="n" class="skeleton h-16 w-full rounded-card"></div>
@@ -185,11 +227,15 @@ function barsIn(weekStart, weekEnd) {
           <div v-else class="h-4"></div>
         </div>
 
-        <!-- ⚠ 빈 달이 정상인 화면이다 — 프로모션이 매달 있지 않다. -->
+        <!--
+          ⚠ 빈 달이 정상인 화면이다 — 이벤트가 매달 있지 않다.
+          ⚠ 판정은 **격자에 그릴 것**(이벤트) 기준이다. 상시 쿠폰만 있는 달은 격자가 비는 게 맞고,
+             그때 「쿠폰이 없다」로 말하면 위 스트립과 어긋난다.
+        -->
         <EmptyState
-          v-if="!data.spans.length"
+          v-if="!data.spans.some((s) => s.event)"
           icon="🗓️"
-          message="이 달에는 진행 중인 쿠폰이 없어요. 쿠폰 관리에서 유효기간을 지정하면 여기 막대로 보입니다."
+          message="이 달에는 예정된 이벤트가 없어요. 쿠폰 관리에서 발급 마감일을 지정하면 여기 막대로 보입니다."
         />
       </template>
     </div>

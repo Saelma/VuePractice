@@ -39,7 +39,19 @@ public record PromotionSpanResponse(
         boolean continuesAfter,
 
         @Schema(description = "가입 쿠폰(V36)인가 — 상시라 달력에서는 배경처럼 다룬다")
-        boolean welcome
+        boolean welcome,
+
+        /*
+         * 🔴 **격자에 그릴지 위 스트립으로 뺄지를 가른다** (2026-08-13, 사용자 지적).
+         *
+         * 상시 쿠폰의 사용 기간은 대개 한 달을 꽉 채워서 **격자를 가로줄로 덮는다** — 위치가 없는
+         * 값이라 격자에 있어 봐야 정보가 아니고, 정작 봐야 할 이벤트 겹침만 묻는다.
+         *
+         * ⚠ **화면이 «ISSUE 막대가 있나» 로 유추하지 않는다.** 발급 창이 지난달인 이벤트는 이 달에
+         * USE 막대만 오므로 상시로 잘못 분류된다 — 서버가 아는 것을 서버가 말한다.
+         */
+        @Schema(description = "이벤트 쿠폰의 막대인가. false 면 상시 쿠폰이라 격자 밖에 둔다")
+        boolean event
 ) {
 
     /**
@@ -74,6 +86,6 @@ public record PromotionSpanResponse(
         return new PromotionSpanResponse(
                 c.getId(), c.getName(), c.getDiscountType(), c.getDiscountValue(), kind,
                 clampedStart.getDayOfMonth(), clampedEnd.getDayOfMonth(),
-                start.isBefore(first), end.isAfter(last), c.isWelcome());
+                start.isBefore(first), end.isAfter(last), c.isWelcome(), c.isEventCoupon());
     }
 }
