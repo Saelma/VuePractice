@@ -74,10 +74,39 @@ function toIsoEnd(d) { return d ? new Date(`${d}T23:59:59`).toISOString() : null
  */
 function onIssueUntilChange() {
   if (!form.issueUntil || form.validUntil) return;
-  const base = new Date(`${form.validFrom || form.issueUntil}T00:00:00`);
-  base.setMonth(base.getMonth() + 1);
-  form.validUntil = base.toISOString().slice(0, 10);
+  form.validUntil = plusOneMonth(form.validFrom || form.issueUntil);
 }
+
+function plusOneMonth(day) {
+  const base = new Date(`${day}T00:00:00`);
+  base.setMonth(base.getMonth() + 1);
+  // ⚠ toISOString() 은 UTC 라 KST 오전에 하루 앞선 날짜가 나온다 — 로컬 날짜를 직접 만든다.
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * 🔴 **지금 무엇을 만들고 있는지 화면이 말한다** (2026-08-13, 검증에서 드러난 자리).
+ *
+ * ⚠ **사고**: 발급 마감일을 필수 항목 아래 선택 칸으로만 둬서, 지나쳐도 아무 신호가 없었다.
+ * 첫 검증에서 이벤트 쿠폰을 만들려던 두 건이 **상시 쿠폰으로 조용히 만들어졌고**, 그러면
+ * 배지도 안 뜨고 겹침 검사도 안 돌고 배너도 안 나온다 — **전부 「설계대로」인데 전부 틀려 보인다.**
+ * → 폼이 **자기가 만들 것을 문장으로** 되읽어 준다. 값이 아니라 **결과**를 보여주는 것이 요점이다.
+ */
+const plan = computed(() => {
+  if (!form.issueUntil) {
+    return { event: false, text: '상시 쿠폰 — 관리자가 직접 발급합니다. 홈 배너에는 안 뜹니다.' };
+  }
+  if (!form.validFrom || !form.validUntil) {
+    return { event: true, text: '이벤트 쿠폰 — 유효 시작일·종료일을 마저 넣어 주세요.' };
+  }
+  const sameDay = form.issueUntil === form.validUntil;
+  return {
+    event: true,
+    sameDay,
+    text: `이벤트 쿠폰 — ${form.validFrom} ~ ${form.issueUntil} 동안 홈 배너의 「받기」로 발급되고, `
+        + `받은 사람은 ${form.validUntil}까지 씁니다.`,
+  };
+});
 
 async function onCreate() {
   createMsg.ok = ''; createMsg.err = '';
@@ -213,18 +242,37 @@ async function onIssue(member) {
           이벤트 쿠폰 (G-8). 🔴 **발급 창과 사용 기간은 다른 것이다** — 여기를 헷갈리면
           "그 날 하루" 쿠폰이 그 날 자정에 만료돼 받자마자 못 쓴다.
           비워 두면 지금까지와 같은 상시 쿠폰이라, 이 칸이 곧 기능의 on/off 다("지정 안 함 = 꺼짐").
+          ⚠ 그래서 **테두리로 묶어** 선택 칸이 아니라 갈림길로 보이게 한다 — 그냥 한 줄로 두었더니
+          지나쳐도 아무 신호가 없어 상시 쿠폰이 조용히 만들어졌다(2026-08-13 검증).
         -->
-        <label class="field">
-          <span class="field-label">발급 마감일 (비우면 상시 쿠폰)</span>
-          <input v-model="form.issueUntil" type="date" class="ipt" @change="onIssueUntilChange" />
-          <span class="muted">
-            넣으면 <b>이벤트 쿠폰</b>이 됩니다 — 유효 시작일부터 이 날까지 홈 배너의 「받기」로만
-            발급되고, <b>회원당 한 장</b>입니다. 발급 창이 겹치는 이벤트는 등록되지 않습니다.
-          </span>
-        </label>
+        <fieldset class="rounded-card border border-line p-4">
+          <legend class="px-1 text-xs text-ink-500">이벤트 쿠폰으로 만들기 (선택)</legend>
+          <label class="field">
+            <span class="field-label">발급 마감일 — 비우면 상시 쿠폰</span>
+            <input v-model="form.issueUntil" type="date" class="ipt" @change="onIssueUntilChange" />
+            <span class="muted">
+              넣으면 유효 시작일부터 이 날까지 <b>홈 배너의 「받기」</b>로만 발급되고
+              <b>회원당 한 장</b>입니다. 발급 창이 겹치는 이벤트는 등록되지 않습니다.
+              <b>사용 종료일은 한 달 뒤로 채워 드립니다</b>(비어 있을 때만 — 이미 넣은 값은 안 건드립니다).
+            </span>
+          </label>
 
+          <!-- 값이 아니라 **결과**를 되읽어 준다 — 무엇을 만들고 있는지 누르기 전에 알게 한다. -->
+          <p class="mt-3 text-sm" :class="plan.event ? 'text-ink-900' : 'text-ink-500'">
+            {{ plan.text }}
+          </p>
+          <!--
+            ⚠ 막지는 않는다 — 「그 날 하루만 쓰는 쿠폰」이 의도일 수도 있다.
+            다만 이게 이 기능이 애초에 막으려던 모양이라 **말은 해 준다.**
+          -->
+          <p v-if="plan.sameDay" class="mt-1 text-sm text-warning">
+            ⚠ 발급 마감과 사용 종료가 같은 날입니다 — 받은 사람은 <b>그 날 자정까지만</b> 쓸 수 있어요.
+          </p>
+        </fieldset>
+
+        <!-- 버튼도 무엇을 만드는지 말한다 — 마지막 순간까지 되돌릴 기회를 준다 -->
         <button type="submit" class="btn btn-primary self-start" :disabled="createMsg.loading">
-          {{ createMsg.loading ? '생성 중…' : '쿠폰 생성' }}
+          {{ createMsg.loading ? '생성 중…' : (plan.event ? '이벤트 쿠폰 생성' : '쿠폰 생성') }}
         </button>
       </form>
 
