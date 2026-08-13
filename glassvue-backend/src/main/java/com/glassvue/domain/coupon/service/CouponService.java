@@ -4,6 +4,8 @@ import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
+import com.glassvue.domain.coupon.dto.PromotionCalendarResponse;
+import com.glassvue.domain.coupon.dto.PromotionSpanResponse;
 import com.glassvue.domain.coupon.entity.Coupon;
 import com.glassvue.domain.coupon.entity.MemberCoupon;
 import com.glassvue.domain.coupon.repository.CouponRepository;
@@ -13,8 +15,10 @@ import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.response.PageResponse;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -187,6 +191,39 @@ public class CouponService {
 
     private static int daysUntilKst(Instant now, Instant start) {
         return (int) ChronoUnit.DAYS.between(LocalDate.ofInstant(now, KST), LocalDate.ofInstant(start, KST));
+    }
+
+    /**
+     * 프로모션 달력 한 달치(B-27, 관리자).
+     *
+     * <p>🔴 <b>착수 조건이 G-8 로 채워졌다</b> — 그전까지 쿠폰 5개가 <b>전부 상시</b>라 달력에 그려도
+     * 가로줄 다섯 개일 뿐 목록보다 나은 게 없었다. <b>겹침이 정보가 되려면 기간이 갈려야</b> 하고,
+     * 이벤트 쿠폰이 그 갈림을 만든다.
+     *
+     * <p>⚠ 이벤트 쿠폰은 막대를 <b>둘</b> 낸다(발급 창 · 사용 기간). 겹치면 안 되는 것은 앞엣것뿐이라
+     * 화면이 갈라 그린다 — 한 색으로 그리면 <b>정상인 사용 기간 겹침을 사고로 읽는다.</b>
+     *
+     * <p>⚠ 지금 규모(쿠폰 한 자리 수)에선 한 달치를 통째로 읽어 화면에 넘긴다. 페이징도 캐시도 두지
+     * 않는다 — <b>미리 만들지 않는다.</b>
+     */
+    @Transactional(readOnly = true)
+    public PromotionCalendarResponse promotionCalendar(YearMonth month) {
+        LocalDate first = month.atDay(1);
+        LocalDate last = month.atEndOfMonth();
+        // 경계는 KST 로 만든다 — 「8월」은 UTC 의 8월이 아니라 한국의 8월이다.
+        Instant from = first.atStartOfDay(KST).toInstant();
+        Instant to = last.plusDays(1).atStartOfDay(KST).toInstant().minusNanos(1);
+
+        List<PromotionSpanResponse> spans = new ArrayList<>();
+        for (Coupon c : couponRepository.findAliveBetween(from, to)) {
+            spans.add(PromotionSpanResponse.use(c, first, last, KST));
+            // 발급 창이 이 달에 안 걸치면(지난달에 끝난 이벤트 등) 막대를 만들지 않는다.
+            if (c.isEventCoupon() && !c.getIssueUntil().isBefore(from) && !c.getValidFrom().isAfter(to)) {
+                spans.add(PromotionSpanResponse.issue(c, first, last, KST));
+            }
+        }
+        return new PromotionCalendarResponse(
+                month.toString(), month.lengthOfMonth(), first.getDayOfWeek().getValue(), spans);
     }
 
     /**

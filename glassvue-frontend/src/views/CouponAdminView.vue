@@ -155,7 +155,11 @@ async function onIssue(member) {
 
 <template>
   <section class="page">
-    <h1 class="page-title mb-5">쿠폰 관리</h1>
+    <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <h1 class="page-title">쿠폰 관리</h1>
+      <!-- 달력은 조회 도구라 관리자 메뉴가 아니라 여기서 들어간다(B-27) -->
+      <RouterLink to="/admin/coupons/calendar" class="btn btn-secondary btn-sm">프로모션 달력</RouterLink>
+    </div>
 
     <div class="grid gap-6 lg:grid-cols-2">
       <!-- 쿠폰 생성 -->

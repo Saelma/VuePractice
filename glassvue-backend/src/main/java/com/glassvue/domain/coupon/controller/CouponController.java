@@ -4,6 +4,7 @@ import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
+import com.glassvue.domain.coupon.dto.PromotionCalendarResponse;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
@@ -47,6 +48,14 @@ public interface CouponController {
     @Operation(summary = "쿠폰 정의 목록 (관리자)",
             description = "발급 가능한 쿠폰(정의) 목록. 정렬 미지정 시 최신 생성순. 회원별 발급분이 아니라 쿠폰 그 자체다.")
     ResponseEntity<ApiResponse<PageResponse<CouponResponse>>> list(@ParameterObject Pageable pageable);
+
+    @Operation(summary = "프로모션 달력 (관리자)",
+            description = "그 달에 **살아 있는** 쿠폰의 기간 막대(B-27). 이벤트 쿠폰은 막대가 둘이다 — "
+                    + "발급 창(ISSUE)과 사용 기간(USE). **겹치면 안 되는 것은 발급 창뿐이고 사용 기간은 "
+                    + "겹치는 게 정상**이라 화면이 갈라 그린다. 날짜는 KST 로 잘라 「이 달의 며칠부터 "
+                    + "며칠까지」로 준다 — 화면이 시간대 계산을 하면 보는 사람마다 막대가 하루씩 밀린다. "
+                    + "month 를 비우면 이번 달(KST).")
+    ResponseEntity<ApiResponse<PromotionCalendarResponse>> promotionCalendar(String month);
 
     @Operation(summary = "쿠폰 생성 (관리자)")
     ResponseEntity<ApiResponse<UUID>> create(CouponCreateRequest request);

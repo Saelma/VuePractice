@@ -21,6 +21,7 @@ import MarketingAdminView from '../views/MarketingAdminView.vue';
 import OrderAdminView from '../views/OrderAdminView.vue';
 import CategoryAdminView from '../views/CategoryAdminView.vue';
 import CouponAdminView from '../views/CouponAdminView.vue';
+import PromotionCalendarAdminView from '../views/PromotionCalendarAdminView.vue';
 import StatsAdminView from '../views/StatsAdminView.vue';
 import MemberAdminView from '../views/MemberAdminView.vue';
 import MemberDetailAdminView from '../views/MemberDetailAdminView.vue';
@@ -73,6 +74,14 @@ const routes = [
   { path: '/admin/categories', name: 'category-admin', component: CategoryAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/stats', name: 'stats-admin', component: StatsAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/coupons', name: 'coupon-admin', component: CouponAdminView, meta: { requiresAdmin: true } },
+  // 프로모션 달력(B-27, 2026-08-13). ⚠ 관리자 메뉴에 넣지 않는다 — 메뉴는 「지금 처리할 것」을 여는
+  // 자리인데 달력은 답이 아니라 조회 도구다. 쿠폰 화면에서 링크로 들어온다.
+  {
+    path: '/admin/coupons/calendar',
+    name: 'promotion-calendar-admin',
+    component: PromotionCalendarAdminView,
+    meta: { requiresAdmin: true },
+  },
   // 마케팅 발송(B-21 후속). ⚠ 되돌릴 수 없는 조작이라 화면에서 확인 단계를 한 번 더 둔다.
   { path: '/admin/marketing', name: 'marketing-admin', component: MarketingAdminView, meta: { requiresAdmin: true } },
   // 리뷰 관리(B-18). 숨김은 되돌릴 수 있어 ADMIN 이면 된다 — 감사 이력처럼 SUPER 로 좁히지 않는다.

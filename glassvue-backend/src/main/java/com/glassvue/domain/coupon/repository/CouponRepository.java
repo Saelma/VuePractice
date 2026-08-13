@@ -53,4 +53,14 @@ public interface CouponRepository extends JpaRepository<Coupon, UUID> {
             + "and c.validFrom <= :issueUntil and c.issueUntil >= :validFrom")
     List<Coupon> findEventsOverlapping(@Param("validFrom") Instant validFrom,
                                        @Param("issueUntil") Instant issueUntil);
+
+    /**
+     * 그 기간에 <b>걸쳐 있는</b> 쿠폰 전부 — 프로모션 달력(B-27)이 한 달치를 그릴 재료다.
+     *
+     * <p>⚠ «그 달에 시작하는 것» 이 아니라 <b>«그 달에 살아 있는 것»</b> 이다. 지난달에 시작해 이번 달까지
+     * 이어지는 쿠폰을 빼면 달력이 <b>겹침을 놓친다</b> — 겹침을 보려고 만든 화면인데 그게 빠지면 뜻이 없다.
+     */
+    @Query("select c from Coupon c where c.validFrom <= :to and c.validUntil >= :from "
+            + "order by c.validFrom asc")
+    List<Coupon> findAliveBetween(@Param("from") Instant from, @Param("to") Instant to);
 }

@@ -79,6 +79,21 @@ export function fetchAdminCoupons({ page = 0, size = 50 } = {}) {
 
 export const DISCOUNT_TYPE_LABEL = { FIXED: '정액(원)', PERCENT: '정률(%)' };
 
+/**
+ * 프로모션 달력 한 달치(관리자, B-27).
+ *
+ * ⚠ 막대의 날짜(`startDay`·`endDay`)는 **서버가 KST 로 잘라 준 값**이다. 화면에서 `Date` 로 다시
+ * 계산하지 말 것 — 보는 사람의 시간대에 따라 막대가 하루씩 밀린다.
+ *
+ * ⚠ 이벤트 쿠폰은 막대가 **둘**이다(`kind: 'ISSUE'` 발급 창 · `'USE'` 사용 기간).
+ * 🔴 **겹치면 안 되는 것은 발급 창뿐이고 사용 기간은 겹치는 게 정상**이라 반드시 갈라 그린다.
+ *
+ * @param month 'YYYY-MM'. 비우면 이번 달(KST).
+ */
+export function fetchPromotionCalendar(month) {
+  return apiGet('/api/admin/coupons/calendar', { month });
+}
+
 /** 쿠폰 생성(관리자). */
 export function createCoupon(payload) {
   return apiPost('/api/admin/coupons', payload);

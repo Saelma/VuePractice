@@ -247,6 +247,40 @@ class EventCouponIntegrationTest {
         mockMvc.perform(post("/api/coupons/event/claim")).andExpect(status().isUnauthorized());
     }
 
+    /**
+     * 프로모션 달력(B-27) — 권한 + <b>막대가 둘로 갈리는지</b>.
+     *
+     * <p>🔴 갈라지지 않으면 이 화면은 <b>거짓말을 한다</b> — 관리자가 정상인 사용 기간 겹침을
+     * 「겹쳤다」로 읽는다. 그게 이 화면을 만든 이유의 정반대다.
+     */
+    @Test
+    @DisplayName("프로모션 달력 — 비로그인 401 / USER 403 / ADMIN 200, 이벤트 쿠폰은 막대가 둘(ISSUE·USE)")
+    void promotionCalendar() throws Exception {
+        mockMvc.perform(get("/api/admin/coupons/calendar")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/coupons/calendar").header("Authorization", login(userLoginId)))
+                .andExpect(status().isForbidden());
+
+        String admin = login(adminLoginId);
+        Instant now = Instant.now();
+        createCoupon(admin, "ZZ달력 이벤트", now.minus(1, ChronoUnit.HOURS),
+                now.plus(1, ChronoUnit.HOURS), now.plus(30, ChronoUnit.DAYS)).andExpect(status().isOk());
+
+        // month 를 비우면 이번 달(KST) — 방금 만든 이벤트가 이번 달에 걸린다.
+        mockMvc.perform(get("/api/admin/coupons/calendar").header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.daysInMonth").isNumber())
+                .andExpect(jsonPath("$.data.firstDayOfWeek").isNumber())
+                .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 이벤트' && @.kind == 'ISSUE')]").exists())
+                .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 이벤트' && @.kind == 'USE')]").exists());
+
+        // 상시 쿠폰은 사용 기간 하나뿐이다 — 발급 창이라는 개념이 없다.
+        createCoupon(admin, "ZZ달력 상시", now.minus(1, ChronoUnit.DAYS), null, now.plus(30, ChronoUnit.DAYS))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/admin/coupons/calendar").header("Authorization", admin))
+                .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 상시' && @.kind == 'ISSUE')]").doesNotExist())
+                .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 상시' && @.kind == 'USE')]").exists());
+    }
+
     @Test
     @DisplayName("관리자 발급도 회원당 한 장 — 두 번째는 500 이 아니라 409 로 답한다")
     void adminIssueTwice() throws Exception {

@@ -4,12 +4,15 @@ import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
+import com.glassvue.domain.coupon.dto.PromotionCalendarResponse;
 import com.glassvue.domain.coupon.service.CouponService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.security.LoginUser;
 import jakarta.validation.Valid;
+import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -73,6 +76,20 @@ public class CouponControllerImpl implements CouponController {
     @GetMapping("/admin/coupons")
     public ResponseEntity<ApiResponse<PageResponse<CouponResponse>>> list(Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.ok(couponService.listAll(pageable)));
+    }
+
+    /**
+     * ⚠ 「이번 달」의 기준은 <b>KST</b>다 — 서버 기본 시간대에 기대지 않는다. 월초·월말 자정 근처에
+     * UTC 로 세면 <b>달이 하나 밀린다</b>(B-26 과 같은 자리).
+     */
+    @Override
+    @GetMapping("/admin/coupons/calendar")
+    public ResponseEntity<ApiResponse<PromotionCalendarResponse>> promotionCalendar(
+            @RequestParam(required = false) String month) {
+        YearMonth target = (month == null || month.isBlank())
+                ? YearMonth.now(ZoneId.of("Asia/Seoul"))
+                : YearMonth.parse(month);
+        return ResponseEntity.ok(ApiResponse.ok(couponService.promotionCalendar(target)));
     }
 
     @Override
