@@ -120,6 +120,16 @@ const fmtTime = (iso) =>
             <template v-if="claimed">쿠폰함에 담겼어요. {{ fmtDay(banner.validUntil) }}까지 쓸 수 있어요.</template>
             <template v-else>오늘 {{ fmtTime(banner.issueUntil) }}까지 받을 수 있어요.</template>
           </p>
+          <!--
+            🔴 **받고 나서야 다음을 말한다** (2026-08-13, 사용자 요청).
+            아직 안 받았으면 「받기」에만 집중한다 — 행동 두 개를 동시에 요구하면 둘 다 흐려진다.
+            받고 나면 그 자리가 비고, 그때 「다시 오게 하는 것」이 이 기능의 목적이 된다.
+          -->
+          <p v-if="claimed && banner.nextDaysUntil !== null" class="mt-1 text-xs text-ink-700">
+            다음 이벤트는 <strong class="tabular-nums text-ink-900">D-{{ banner.nextDaysUntil }}</strong>
+            — 그때 또 받을 수 있어요.
+            <template v-if="banner.moreUpcoming > 1">(이후로 {{ banner.moreUpcoming - 1 }}개 더 예정)</template>
+          </p>
         </template>
 
         <!-- 예고 — 행동을 요구하지 않는다 -->
@@ -128,7 +138,13 @@ const fmtTime = (iso) =>
             다음 이벤트 <strong class="tabular-nums text-ink-900">D-{{ banner.daysUntil }}</strong>
             · <strong class="text-ink-900">{{ couponDiscountText(banner) }}</strong> 쿠폰
           </p>
-          <p class="mt-1 text-xs text-ink-500">{{ fmtDay(banner.validFrom) }}에 열려요.</p>
+          <p class="mt-1 text-xs text-ink-500">
+            {{ fmtDay(banner.validFrom) }}에 열려요.
+            <!-- 목록으로 늘어놓지 않는다 — 개수만 말한다(사용자가 못 박은 선) -->
+            <template v-if="banner.moreUpcoming">
+              이후로 <strong class="tabular-nums text-ink-700">{{ banner.moreUpcoming }}개</strong> 더 예정돼 있어요.
+            </template>
+          </p>
         </template>
       </div>
 

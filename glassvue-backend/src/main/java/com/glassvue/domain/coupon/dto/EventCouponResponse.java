@@ -39,23 +39,40 @@ public record EventCouponResponse(
         @Schema(description = "이미 받았나. 비로그인은 언제나 false") boolean claimed,
 
         @Schema(description = "예고일 때 남은 날(KST 기준). 오늘 진행 중이면 null", example = "3")
-        Integer daysUntil
+        Integer daysUntil,
+
+        /*
+         * 🔴 **「다음이 있다」를 함께 말한다** (2026-08-13, 사용자 요청 — 검증 중에 나왔다).
+         *
+         * 배너가 하나만 보여주면 «이번을 놓치면 끝» 처럼 읽힌다. 쿠폰의 목적이 **다시 오게 하는 것**인데
+         * 그 다음 약속이 화면에 없었다.
+         *
+         * ⚠ 그렇다고 이벤트를 줄줄이 늘어놓지 않는다(사용자도 그건 아니라고 못 박았다) — **개수와
+         * 가장 가까운 하나**만 말한다. 목록이 되는 순간 배너가 아니라 페이지가 된다.
+         */
+        @Schema(description = "이 배너가 가리키는 것 **말고** 앞으로 더 있는 이벤트 수", example = "2")
+        int moreUpcoming,
+
+        @Schema(description = "그중 가장 가까운 것까지 남은 날(KST). 더 없으면 null", example = "7")
+        Integer nextDaysUntil
 ) {
 
-    /** 오늘 진행 중인 이벤트. */
-    public static EventCouponResponse open(Coupon c, boolean claimed) {
-        return of(c, true, claimed, null);
+    /** 오늘 진행 중인 이벤트. {@code moreUpcoming} 은 오늘 것 말고 앞으로 예정된 전부다. */
+    public static EventCouponResponse open(Coupon c, boolean claimed, int moreUpcoming, Integer nextDaysUntil) {
+        return of(c, true, claimed, null, moreUpcoming, nextDaysUntil);
     }
 
-    /** 앞으로 있을 이벤트(예고). */
-    public static EventCouponResponse upcoming(Coupon c, int daysUntil) {
-        return of(c, false, false, daysUntil);
+    /** 앞으로 있을 이벤트(예고). {@code moreUpcoming} 은 <b>이 배너가 가리키는 것을 뺀</b> 나머지다. */
+    public static EventCouponResponse upcoming(Coupon c, int daysUntil, int moreUpcoming, Integer nextDaysUntil) {
+        return of(c, false, false, daysUntil, moreUpcoming, nextDaysUntil);
     }
 
-    private static EventCouponResponse of(Coupon c, boolean open, boolean claimed, Integer daysUntil) {
+    private static EventCouponResponse of(Coupon c, boolean open, boolean claimed, Integer daysUntil,
+                                          int moreUpcoming, Integer nextDaysUntil) {
         return new EventCouponResponse(
                 c.getId(), c.getName(), c.getDiscountType(), c.getDiscountValue(),
                 c.getMinOrderAmount(), c.getMaxDiscountAmount(),
-                c.getIssueUntil(), c.getValidUntil(), open, claimed, daysUntil);
+                c.getIssueUntil(), c.getValidUntil(), open, claimed, daysUntil,
+                moreUpcoming, nextDaysUntil);
     }
 }

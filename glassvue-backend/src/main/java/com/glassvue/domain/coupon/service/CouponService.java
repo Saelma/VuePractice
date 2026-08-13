@@ -192,16 +192,49 @@ public class CouponService {
     @Transactional(readOnly = true)
     public Optional<EventCouponResponse> eventBanner(UUID memberId) {
         Instant now = Instant.now();
-        Optional<Coupon> openNow = couponRepository.findIssuableAt(now);
+        // ⚠ 하나만 읽지 않는다 — «다음이 또 있다» 를 말하려면 개수를 알아야 한다(2026-08-13).
+        //    쿠폰 테이블이 한 자리 수라 통째로 읽는다. 커지면 count 쿼리로 가른다.
+        List<Coupon> upcoming = couponRepository.findUpcomingEvents(now, Limit.unlimited());
+
+        Optional<Coupon> openNow = issuableNow(now);
         if (openNow.isPresent()) {
             Coupon coupon = openNow.get();
             boolean claimed = memberId != null
                     && memberCouponRepository.existsByMemberIdAndCouponId(memberId, coupon.getId());
-            return Optional.of(EventCouponResponse.open(coupon, claimed));
+            // 오늘 것 말고 앞으로 예정된 전부가 «더 있는 것» 이다.
+            return Optional.of(EventCouponResponse.open(
+                    coupon, claimed, upcoming.size(), nearestDays(now, upcoming, 0)));
         }
-        return couponRepository.findUpcomingEvents(now, Limit.of(1)).stream()
-                .findFirst()
-                .map(coupon -> EventCouponResponse.upcoming(coupon, daysUntilKst(now, coupon.getValidFrom())));
+        if (upcoming.isEmpty()) {
+            return Optional.empty();
+        }
+        // 예고 중이면 «더 있는 것» 은 지금 가리키는 하나를 뺀 나머지다.
+        Coupon next = upcoming.get(0);
+        return Optional.of(EventCouponResponse.upcoming(
+                next, daysUntilKst(now, next.getValidFrom()),
+                upcoming.size() - 1, nearestDays(now, upcoming, 1)));
+    }
+
+    /**
+     * 지금 열린 이벤트 하나 — 여럿이면 <b>가장 먼저 시작한 것</b>.
+     *
+     * <p>⚠ 여럿일 수 있는 이유는 겹침 금지가 <b>앱 검사뿐</b>이기 때문이다(DB 는 기간 겹침을 못 막는다).
+     * 두 관리자가 같은 순간 등록하면 둘 다 통과한다. 🔴 <b>그때 조용히 하나를 고르지 않는다</b> —
+     * 데이터가 규칙을 어긴 상태이고, 그건 사람이 고쳐야 한다.
+     */
+    private Optional<Coupon> issuableNow(Instant now) {
+        List<Coupon> open = couponRepository.findIssuableAt(now);
+        if (open.size() > 1) {
+            log.warn("Overlapping event coupons are open at once ({}) — 겹침 금지가 앱 검사뿐이라 "
+                    + "동시 등록에 뚫릴 수 있다. 가장 먼저 시작한 것을 쓴다: {}",
+                    open.size(), open.stream().map(Coupon::getName).toList());
+        }
+        return open.stream().findFirst();
+    }
+
+    /** {@code from} 번째 예정 이벤트까지 남은 날. 그 자리가 없으면 null(«더 없음»). */
+    private static Integer nearestDays(Instant now, List<Coupon> upcoming, int from) {
+        return upcoming.size() > from ? daysUntilKst(now, upcoming.get(from).getValidFrom()) : null;
     }
 
     private static int daysUntilKst(Instant now, Instant start) {
@@ -258,7 +291,7 @@ public class CouponService {
      */
     @Transactional
     public UUID claimEventCoupon(UUID memberId) {
-        Coupon coupon = couponRepository.findIssuableAt(Instant.now())
+        Coupon coupon = issuableNow(Instant.now())
                 .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_EVENT_CLOSED));
         if (memberCouponRepository.existsByMemberIdAndCouponId(memberId, coupon.getId())) {
             throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);

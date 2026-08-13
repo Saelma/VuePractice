@@ -11,7 +11,10 @@ import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -92,21 +95,43 @@ class EventCouponIntegrationTest {
                         + "\"validFrom\":\"" + validFrom + "\",\"validUntil\":\"" + validUntil + "\"" + issue + "}"));
     }
 
+    /**
+     * 🔴 <b>지금 열려 있는 이벤트를 「확보」한다 — 없으면 만들고, 있으면 그걸 쓴다.</b>
+     *
+     * <p>⚠ 무조건 만들면 <b>운영에 이벤트가 진행 중일 때 겹침 금지에 걸려 400</b> 이 난다.
+     * 2026-08-13 검증 중 실제로 그랬다 — 첫 이벤트를 띄운 순간 이 클래스의 절반이 빨개졌다.
+     * 롤백은 내가 만든 것만 되돌리지 <b>이미 커밋된 운영 데이터</b>는 못 없앤다.
+     *
+     * <p>⚠ 그래서 «내가 만든 쿠폰이 온다» 를 단언하지 않고 <b>«열린 이벤트가 하나 있고, 그것을
+     * 받으면 이렇게 된다»</b> 를 단언한다. 계약은 그쪽이고, 이름은 계약이 아니다.
+     *
+     * @return 지금 열려 있는 이벤트의 쿠폰명
+     */
+    private String openEventName(String admin, String user) throws Exception {
+        String body = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Object data = JsonPath.read(body, "$.data");
+        if (data != null && (Boolean) JsonPath.read(body, "$.data.open")) {
+            return JsonPath.read(body, "$.data.name");
+        }
+        Instant now = Instant.now();
+        // 발급 창은 오늘 하루(±1h), 사용 기간은 한 달 — 이 «다름» 이 이 기능의 요점이다.
+        String name = "ZZ이벤트 " + UUID.randomUUID().toString().substring(0, 8);
+        createCoupon(admin, name, now.minus(1, ChronoUnit.HOURS),
+                now.plus(1, ChronoUnit.HOURS), now.plus(30, ChronoUnit.DAYS)).andExpect(status().isOk());
+        return name;
+    }
+
     @Test
     @DisplayName("오늘 열린 이벤트 — 배너가 open 으로 오고, 받으면 claimed 로 바뀌며 쿠폰함에 들어온다")
     void claimOpenEvent() throws Exception {
         String admin = login(adminLoginId);
         String user = login(userLoginId);
-        Instant now = Instant.now();
-
-        // 발급 창은 오늘 하루(±1h), 사용 기간은 한 달 — 이 «다름» 이 이 기능의 요점이다.
-        createCoupon(admin, "ZZ이벤트 3천원", now.minus(1, ChronoUnit.HOURS),
-                now.plus(1, ChronoUnit.HOURS), now.plus(30, ChronoUnit.DAYS))
-                .andExpect(status().isOk());
+        String name = openEventName(admin, user);
 
         mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.name").value("ZZ이벤트 3천원"))
+                .andExpect(jsonPath("$.data.name").value(name))
                 .andExpect(jsonPath("$.data.open").value(true))
                 .andExpect(jsonPath("$.data.claimed").value(false))
                 .andExpect(jsonPath("$.data.daysUntil").doesNotExist());
@@ -119,10 +144,10 @@ class EventCouponIntegrationTest {
                 .andExpect(jsonPath("$.data.claimed").value(true));
 
         // 받은 쿠폰은 발급 창이 닫힌 뒤에도 쓸 수 있어야 한다 — 쿠폰함에 실제로 들어와 있다.
+        // ⚠ 이 사용자는 오늘 만들어졌으므로 쿠폰함에 이것 하나뿐이다.
         mockMvc.perform(get("/api/coupons/me?itemsTotal=10000").header("Authorization", user))
-                .andExpect(jsonPath("$.data[0].name").value("ZZ이벤트 3천원"))
-                .andExpect(jsonPath("$.data[0].usable").value(true))
-                .andExpect(jsonPath("$.data[0].discountPreview").value(3000));
+                .andExpect(jsonPath("$.data[0].name").value(name))
+                .andExpect(jsonPath("$.data[0].usable").value(true));
     }
 
     @Test
@@ -130,9 +155,7 @@ class EventCouponIntegrationTest {
     void claimTwice() throws Exception {
         String admin = login(adminLoginId);
         String user = login(userLoginId);
-        Instant now = Instant.now();
-        createCoupon(admin, "ZZ이벤트 중복", now.minus(1, ChronoUnit.HOURS),
-                now.plus(1, ChronoUnit.HOURS), now.plus(30, ChronoUnit.DAYS)).andExpect(status().isOk());
+        openEventName(admin, user);
 
         mockMvc.perform(post("/api/coupons/event/claim").header("Authorization", user)).andExpect(status().isOk());
         mockMvc.perform(post("/api/coupons/event/claim").header("Authorization", user))
@@ -140,20 +163,43 @@ class EventCouponIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("COUPON-409I"));
     }
 
+    /**
+     * 발급 창이 닫힌 이벤트의 쿠폰은 뒤늦게 못 받는다.
+     *
+     * <p>⚠ «claim 이 400 이다» 로 단언하지 않는다 — <b>다른 이벤트가 열려 있으면 그건 200</b> 이고,
+     * 그래도 이 테스트가 볼 것(닫힌 쿠폰이 안 나갔다)은 참이다. 그래서 <b>쿠폰함에 그것이 없다</b>로
+     * 단언한다. 열린 것이 하나도 없을 때만 400 까지 확인한다.
+     */
     @Test
-    @DisplayName("발급 창이 닫혀 있으면 400 — 이미 지난 이벤트의 쿠폰은 뒤늦게 못 받는다")
+    @DisplayName("발급 창이 닫혀 있으면 그 쿠폰은 안 나간다 — 열린 게 없으면 400")
     void claimClosedEvent() throws Exception {
         String admin = login(adminLoginId);
         String user = login(userLoginId);
         Instant now = Instant.now();
 
         // 어제 하루짜리 이벤트. ⚠ 사용 기간은 아직 살아 있다 — «발급은 끝났지만 쓸 수는 있다» 가 정상이다.
-        createCoupon(admin, "ZZ어제 이벤트", now.minus(2, ChronoUnit.DAYS),
+        String closed = "ZZ어제 이벤트 " + UUID.randomUUID().toString().substring(0, 8);
+        createCoupon(admin, closed, now.minus(2, ChronoUnit.DAYS),
                 now.minus(1, ChronoUnit.DAYS), now.plus(20, ChronoUnit.DAYS)).andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/coupons/event/claim").header("Authorization", user))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("COUPON-400C"));
+        String banner = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Object data = JsonPath.read(banner, "$.data");
+        boolean somethingOpen = data != null && (Boolean) JsonPath.read(banner, "$.data.open");
+
+        if (somethingOpen) {
+            mockMvc.perform(post("/api/coupons/event/claim").header("Authorization", user))
+                    .andExpect(status().isOk());
+        } else {
+            mockMvc.perform(post("/api/coupons/event/claim").header("Authorization", user))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("COUPON-400C"));
+        }
+
+        // 어느 쪽이든 **닫힌 이벤트의 쿠폰은 쿠폰함에 없어야** 한다.
+        String box = mockMvc.perform(get("/api/coupons/me").header("Authorization", user))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(box, "$.data[*].name")).doesNotContain(closed);
     }
 
     /**
@@ -269,9 +315,8 @@ class EventCouponIntegrationTest {
     @DisplayName("권한 — 배너 GET 은 비로그인도 200(claimed=false) / 받기 POST 는 401")
     void permissions() throws Exception {
         String admin = login(adminLoginId);
-        Instant now = Instant.now();
-        createCoupon(admin, "ZZ공개확인", now.minus(1, ChronoUnit.HOURS),
-                now.plus(1, ChronoUnit.HOURS), now.plus(30, ChronoUnit.DAYS)).andExpect(status().isOk());
+        // ⚠ 열린 이벤트가 이미 있으면 그걸 쓴다 — 무조건 만들면 겹침 금지에 걸린다(openEventName 주석).
+        openEventName(admin, login(userLoginId));
 
         // 비로그인 혜택 스트립이 «오늘 이벤트 중» 을 띄우려면 로그인 전에 읽혀야 한다.
         mockMvc.perform(get("/api/coupons/event"))
@@ -297,12 +342,18 @@ class EventCouponIntegrationTest {
                 .andExpect(status().isForbidden());
 
         String admin = login(adminLoginId);
-        Instant now = Instant.now();
-        createCoupon(admin, "ZZ달력 이벤트", now.minus(1, ChronoUnit.HOURS),
-                now.plus(1, ChronoUnit.HOURS), now.plus(30, ChronoUnit.DAYS)).andExpect(status().isOk());
 
-        // month 를 비우면 이번 달(KST) — 방금 만든 이벤트가 이번 달에 걸린다.
-        mockMvc.perform(get("/api/admin/coupons/calendar").header("Authorization", admin))
+        // ⚠ **먼 미래의 달**에 만들고 그 달을 조회한다 — 이번 달에 만들면 운영에서 도는 이벤트와
+        //    발급 창이 겹쳐 등록부터 막힌다(2026-08-13에 실제로 그랬다). 달을 비켜 가면 충돌이 없다.
+        Instant far = Instant.now().plus(400, ChronoUnit.DAYS);
+        String month = LocalDate.ofInstant(far, ZoneId.of("Asia/Seoul")).withDayOfMonth(15).toString().substring(0, 7);
+        Instant start = LocalDate.ofInstant(far, ZoneId.of("Asia/Seoul")).withDayOfMonth(15)
+                .atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant();
+
+        createCoupon(admin, "ZZ달력 이벤트", start, start.plus(1, ChronoUnit.DAYS), start.plus(30, ChronoUnit.DAYS))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/coupons/calendar?month=" + month).header("Authorization", admin))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.daysInMonth").isNumber())
                 .andExpect(jsonPath("$.data.firstDayOfWeek").isNumber())
@@ -310,11 +361,39 @@ class EventCouponIntegrationTest {
                 .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 이벤트' && @.kind == 'USE')]").exists());
 
         // 상시 쿠폰은 사용 기간 하나뿐이다 — 발급 창이라는 개념이 없다.
-        createCoupon(admin, "ZZ달력 상시", now.minus(1, ChronoUnit.DAYS), null, now.plus(30, ChronoUnit.DAYS))
+        createCoupon(admin, "ZZ달력 상시", start, null, start.plus(30, ChronoUnit.DAYS))
                 .andExpect(status().isOk());
-        mockMvc.perform(get("/api/admin/coupons/calendar").header("Authorization", admin))
+        mockMvc.perform(get("/api/admin/coupons/calendar?month=" + month).header("Authorization", admin))
                 .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 상시' && @.kind == 'ISSUE')]").doesNotExist())
                 .andExpect(jsonPath("$.data.spans[?(@.name == 'ZZ달력 상시' && @.kind == 'USE')]").exists());
+    }
+
+    /**
+     * 「다음이 또 있다」 (2026-08-13, 사용자 요청).
+     *
+     * <p>배너가 하나만 보여주면 «이번을 놓치면 끝» 처럼 읽힌다. 쿠폰의 목적이 <b>다시 오게 하는 것</b>이라
+     * 다음 약속이 화면에 있어야 한다. ⚠ 목록으로 늘어놓지는 않는다 — <b>개수와 가장 가까운 하나</b>만.
+     */
+    @Test
+    @DisplayName("앞으로 더 있으면 moreUpcoming 과 nextDaysUntil 이 실린다")
+    void bannerTellsAboutTheNextOne() throws Exception {
+        String admin = login(adminLoginId);
+        String user = login(userLoginId);
+
+        // ⚠ 운영 이벤트와 안 겹치게 멀찍이 둘을 만든다. 배너가 무엇을 가리키든 «더 있다» 는 참이어야 한다.
+        Instant first = Instant.now().plus(200, ChronoUnit.DAYS);
+        createCoupon(admin, "ZZ먼이벤트1", first, first.plus(1, ChronoUnit.HOURS),
+                first.plus(30, ChronoUnit.DAYS)).andExpect(status().isOk());
+        Instant second = first.plus(10, ChronoUnit.DAYS);
+        createCoupon(admin, "ZZ먼이벤트2", second, second.plus(1, ChronoUnit.HOURS),
+                second.plus(30, ChronoUnit.DAYS)).andExpect(status().isOk());
+
+        String body = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        // 배너가 가리키는 것 말고 최소 둘(방금 만든 둘)이 더 있거나, 그중 하나를 가리키고 하나가 남는다.
+        assertThat((Integer) JsonPath.read(body, "$.data.moreUpcoming")).isGreaterThanOrEqualTo(1);
+        assertThat((Integer) JsonPath.read(body, "$.data.nextDaysUntil")).isNotNull().isPositive();
     }
 
     @Test

@@ -23,14 +23,16 @@ public interface CouponRepository extends JpaRepository<Coupon, UUID> {
     /**
      * 지금 발급 창이 열려 있는 이벤트 쿠폰(G-8, V49).
      *
-     * <p>{@code Optional} 인 근거는 <b>등록 시 겹침 검사</b>다 — 발급 창이 겹치는 이벤트는 아예 등록되지
-     * 않으므로(`CouponService.create`) 어느 순간에도 열린 것은 많아야 하나다.
-     * ⚠ 이 보장은 <b>DB 제약이 아니라 앱 검사</b>다(Oracle 유니크 인덱스로는 기간 겹침을 못 막는다).
-     * 그래서 «겹치는 둘을 동시에 등록» 을 테스트로 못 박아 둔다.
+     * <p>🔴 <b>{@code Optional} 이 아니라 {@code List} 인 이유가 있다.</b> «열린 것은 많아야 하나» 는
+     * 등록 시 겹침 검사가 만드는 보장인데, 그 검사는 <b>DB 제약이 아니라 앱 검사</b>다
+     * (Oracle 유니크로는 기간 겹침을 못 막는다). 즉 <b>두 관리자가 같은 순간 등록하면 둘 다 통과</b>할
+     * 수 있고, 그러면 {@code Optional} 조회는 {@code NonUniqueResultException} 을 던진다 —
+     * <b>홈에 들어오는 모든 사람이 500</b> 을 받는다. 배너 하나 때문에 첫 화면이 죽는 건 과하다.
+     * → 여러 개면 <b>가장 먼저 시작한 것</b>을 쓰고 서비스가 경고를 남긴다(조용히 고르지 않는다).
      */
     @Query("select c from Coupon c where c.issueUntil is not null "
-            + "and c.validFrom <= :at and c.issueUntil >= :at")
-    Optional<Coupon> findIssuableAt(@Param("at") Instant at);
+            + "and c.validFrom <= :at and c.issueUntil >= :at order by c.validFrom asc")
+    List<Coupon> findIssuableAt(@Param("at") Instant at);
 
     /**
      * 아직 시작하지 않은 이벤트 중 <b>가장 가까운 것</b> — 배너의 «다음 이벤트 D-3» 예고에 쓴다.
