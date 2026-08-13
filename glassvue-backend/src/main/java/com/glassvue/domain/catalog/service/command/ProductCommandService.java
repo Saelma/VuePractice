@@ -59,8 +59,26 @@ public class ProductCommandService {
     private final CatalogProperties catalogProperties;
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * 정가는 <b>할인 전 가격</b>이라 판매가보다 커야 뜻이 있다 — 비우면 «할인 없음» 이다.
+     *
+     * <p>🔴 <b>2026-08-13 까지 이 규칙은 화면에만 있었다.</b> DTO 는 {@code @PositiveOrZero} 뿐이라
+     * API 로 부르면 <b>정가 0원·정가 &lt; 판매가</b> 가 그대로 저장됐고, 그러면 상세 화면이
+     * <b>할인이 아닌데 취소선을 그린다</b>(뜻 없는 «할인» 표시).
+     *
+     * <p>⚠ 발견 경위는 화면 쪽이었다 — 정가 칸이 «지울 수 없는 0» 에 갇히는 버그를 보다가,
+     * 그 0 을 <b>서버는 아무 말 없이 받는다</b> 는 걸 알았다.
+     * ⚠ {@code null} 은 통과시킨다(그게 «할인 없음» 의 표현이다).
+     */
+    private static void validateListPrice(Long listPrice, long price) {
+        if (listPrice != null && listPrice <= price) {
+            throw new BusinessException(ErrorCode.PRODUCT_LIST_PRICE_NOT_HIGHER);
+        }
+    }
+
     @CacheEvict(cacheNames = "products:list", allEntries = true)
     public UUID create(ProductCreateRequest req, AuthUser actor) {
+        validateListPrice(req.listPrice(), req.price());
         Category category = findCategory(req.categoryId());
         UUID imageGroupId = imageService.createGroup(req.imageIds());
         Product product = Product.builder()
@@ -87,6 +105,8 @@ public class ProductCommandService {
 
     @CacheEvict(cacheNames = "products:list", allEntries = true)
     public void update(UUID id, ProductUpdateRequest req, AuthUser actor) {
+        // ⚠ 등록에만 걸면 «만들 때는 막히고 고칠 때는 통과» 가 된다 — 규칙이 반쪽이면 없느니만 못하다.
+        validateListPrice(req.listPrice(), req.price());
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         Category category = findCategory(req.categoryId());

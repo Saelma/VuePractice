@@ -98,6 +98,10 @@ public enum ErrorCode {
     OUT_OF_STOCK("PRODUCT-400S", HttpStatus.BAD_REQUEST, "재고가 부족합니다."),
     PRODUCT_NO_VARIANT("PRODUCT-400V", HttpStatus.BAD_REQUEST, "상품은 옵션이 최소 1개 있어야 합니다."),
     VARIANT_NOT_FOUND("PRODUCT-404V", HttpStatus.NOT_FOUND, "상품 옵션을 찾을 수 없습니다."),
+    // ⚠ 이 규칙은 2026-08-13 까지 **화면에만** 있었다 — API 로 부르면 정가 0원·정가 < 판매가가
+    //    그대로 저장됐고, 그러면 상세 화면이 뜻 없는 취소선을 그린다(할인이 아닌데 할인처럼 보인다).
+    PRODUCT_LIST_PRICE_NOT_HIGHER("PRODUCT-400L", HttpStatus.BAD_REQUEST,
+            "정가는 판매가보다 커야 합니다. 할인이 없으면 정가를 비워 두세요."),
 
     // 주문
     CART_EMPTY("ORDER-400E", HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),

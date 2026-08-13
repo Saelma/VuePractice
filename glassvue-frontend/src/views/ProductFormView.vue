@@ -59,7 +59,14 @@ async function onSave() {
     if (v.stock == null) { error.value = `'${v.name || '옵션'}'의 재고를 입력하세요.`; return; }
   }
   if (!form.categoryId) { error.value = '카테고리를 선택하세요.'; return; }
+  // ⚠ **0 은 「없음」으로 읽는다** (2026-08-13). 정가 0원은 어떤 판매가에도 유효할 수 없고,
+  //    DevExtreme 이 빈 칸을 min(0) 으로 되돌리는 경로가 있어 **사용자가 원한 「비움」이 0으로 온다.**
+  //    여기서 되돌리지 않으면 아래 검증에 걸려 **저장할 수도, 비울 수도 없는 상태**가 된다.
+  if (form.listPrice === 0) {
+    form.listPrice = null;
+  }
   // 정가가 판매가보다 작거나 같으면 할인이 아니다 — 화면에 취소선이 이상하게 뜨는 걸 미리 막는다.
+  // ⚠ 서버도 같은 것을 막는다(PRODUCT-400L, 2026-08-13). 여기서 먼저 보는 건 왕복을 아끼려는 것뿐이다.
   if (form.listPrice != null && form.listPrice <= form.price) {
     error.value = '정가는 판매가보다 커야 합니다. 할인이 없으면 정가를 비워 두세요.';
     return;
@@ -123,9 +130,23 @@ async function onSave() {
           <span class="field-label">판매가(원)</span>
           <DxNumberBox v-model:value="form.price" :min="0" format="#,##0" />
         </label>
+        <!--
+          🔴 **선택 입력 숫자 칸은 반드시 지울 수 있어야 한다** (2026-08-13, 사용자 신고).
+          `:min="0"` 만 두면 텍스트를 다 지웠을 때 DevExtreme 이 **최솟값 0으로 되돌린다.**
+          그러면 저장이 「정가는 판매가보다 커야 합니다」로 막히는데 **비울 방법이 없어 빠져나갈 수가
+          없다** — 한 번 숫자를 넣으면 상품을 영영 저장 못 하는 상태가 됐다.
+          ⚠ 같은 상황(선택 가격 필터)에서 `ProductListView` 는 이미 이걸 쓰고 있었다.
+        -->
         <label class="field flex-1">
           <span class="field-label">정가(원, 선택)</span>
-          <DxNumberBox v-model:value="form.listPrice" :min="0" format="#,##0" placeholder="할인 없으면 비움" />
+          <DxNumberBox
+            v-model:value="form.listPrice"
+            :min="0"
+            :show-clear-button="true"
+            format="#,##0"
+            placeholder="할인 없으면 비움"
+          />
+          <span class="muted">비우면 할인 없음 · 넣으려면 판매가보다 커야 합니다</span>
         </label>
       </div>
 
