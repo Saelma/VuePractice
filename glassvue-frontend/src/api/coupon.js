@@ -38,6 +38,35 @@ export function setWelcomeCoupon(couponId, welcome) {
     : apiDelete(`/api/admin/coupons/${couponId}/welcome`);
 }
 
+/**
+ * 오늘 그릴 이벤트 쿠폰 배너(G-8). **비로그인도 부를 수 있다.**
+ *
+ * ⚠ 배너를 그릴지는 **이 응답이 정한다** — 오늘 진행 중도 아니고 예정도 없으면 `null` 이 오고,
+ * 그러면 자리를 아예 만들지 않는다("예정된 이벤트가 없습니다"는 자리만 먹는다).
+ *
+ * 응답이 말하는 것은 둘 중 하나다:
+ * - `open: true`  — 오늘이 이벤트 날. `claimed` 로 「받기 / 받음」이 갈린다.
+ * - `open: false` — 예고. `daysUntil`(D-n)만 알리고 **행동을 요구하지 않는다.**
+ *
+ * ⚠ `daysUntil` 은 **서버가 KST 로 센 값**이다. 화면에서 날짜를 다시 계산하지 말 것 —
+ * 브라우저 시간대로 세면 어떤 사람에게만 D-1 이 D-2 로 보인다.
+ */
+export function fetchEventCoupon() {
+  return apiGet('/api/coupons/event');
+}
+
+/**
+ * 이벤트 쿠폰 「받기」. **회원당 한 장**이고 동시에 눌러도 한 장만 나간다(V49 유니크 인덱스).
+ *
+ * ⚠ 실패 코드 둘은 **성격이 다르다**:
+ * - `COUPON-409I`(이미 받음) — 실패지만 **되돌릴 것이 없다.** 화면은 버튼을 「받음」으로 **확정**한다
+ *   (에러 토스트가 아니다 — 다른 탭에서 이미 받았을 때 정확히 이 답이 온다).
+ * - `COUPON-400C`(발급 창 닫힘) — 이벤트가 그 사이 끝났다. 배너를 다시 읽어 상태를 맞춘다.
+ */
+export function claimEventCoupon() {
+  return apiPost('/api/coupons/event/claim');
+}
+
 /** 쿠폰 할인 표기 — 정액(FIXED)은 금액, 정률(PERCENT)은 %. */
 export function couponDiscountText(c) {
   return c.discountType === 'PERCENT' ? `${c.discountValue}% 할인` : `${priceText(c.discountValue)} 할인`;

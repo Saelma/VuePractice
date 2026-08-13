@@ -19,13 +19,14 @@ import { fetchNotices } from '../api/notice';
 import { fetchOrders, orderStatusText, orderStatusClass } from '../api/order';
 import { fetchPointAccount, fetchGrades, maxEarnPercent, gradeText } from '../api/point';
 import { fetchShippingPolicy } from '../api/policy';
-import { fetchWelcomeCoupon, couponDiscountText } from '../api/coupon';
+import { fetchWelcomeCoupon, fetchEventCoupon, couponDiscountText } from '../api/coupon';
 import { addToCart } from '../api/cart';
 import { loadCartCount } from '../stores/cart';
 import { isLoggedIn } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
 import { recentlyViewed } from '../stores/recentlyViewed';
 import ProductCard from '../components/ProductCard.vue';
+import EventCouponBanner from '../components/EventCouponBanner.vue';
 
 const SECTION_SIZE = 8;
 
@@ -60,6 +61,18 @@ const freeThreshold = ref(null);
 const topEarnPercent = ref(null);
 const welcomeCoupon = ref(null);
 
+/*
+ * 비로그인 스트립의 **이벤트 줄** (2026-08-13, G-8).
+ *
+ * ⚠ 로그인 배너(EventCouponBanner)와 **데이터만 같고 다른 화면**이다 — 여기 CTA 는 「받기」가 아니라
+ * 「회원가입」이라 "누르면 로그인으로 튕긴다"에 걸리지 않는다.
+ *
+ * 🔴 **예고(D-3)는 여기 안 적는다.** "곧 나온다"를 보고 가입해도 그 날 다시 와야 받는다 — 안 오면
+ * 못 받고, 그러면 "가입해서 혜택을 누려라"가 **어긋난 약속**이 된다. 그래서 `open === true`,
+ * 즉 **오늘 진행 중일 때만** 띄운다(가입하면 그 자리에서 받으므로 참이다).
+ */
+const openEventCoupon = ref(null);
+
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
 
 onMounted(async () => {
@@ -87,15 +100,18 @@ onMounted(async () => {
   // 혜택 안내는 비로그인에게만 — 로그인 회원은 바로 아래 적립금·등급 카드가 같은 자리를 쓴다.
   // 정책 조회가 실패하면 해당 항목만 안 뜬다(값이 null 이면 v-if 가 감춘다). 홈 본문에는 영향 없다.
   if (!isLoggedIn.value) {
-    const [ship, grades, welcome] = await Promise.allSettled([
+    const [ship, grades, welcome, event] = await Promise.allSettled([
       fetchShippingPolicy(),
       fetchGrades(),
       fetchWelcomeCoupon(),
+      fetchEventCoupon(),
     ]);
     if (ship.status === 'fulfilled') freeThreshold.value = ship.value.freeThreshold || null;
     if (grades.status === 'fulfilled') topEarnPercent.value = maxEarnPercent(grades.value);
     // null 이면 가입 쿠폰 기능이 꺼진 것 — 문구를 아예 만들지 않는다(없는 혜택을 광고하지 않는다).
     if (welcome.status === 'fulfilled') welcomeCoupon.value = welcome.value || null;
+    // ⚠ open 일 때만. 예고는 비로그인에게 어긋난 약속이 된다(위 주석).
+    if (event.status === 'fulfilled' && event.value?.open) openEventCoupon.value = event.value;
   }
 
   // 개인화는 로그인 시에만. 위 섹션 로딩을 막지 않게 뒤에서 따로 받는다(실패해도 홈은 그대로).
@@ -164,11 +180,19 @@ async function reorder() {
       정책 조회가 둘 다 실패하면 스트립 자체가 안 뜬다(빈 껍데기를 남기지 않는다).
     -->
     <section
-      v-if="!isLoggedIn && (freeThreshold || topEarnPercent || welcomeCoupon)"
-      class="rounded-card border border-ink-200 bg-canvas px-5 py-4"
+      v-if="!isLoggedIn && (freeThreshold || topEarnPercent || welcomeCoupon || openEventCoupon)"
+      class="rounded-card border border-line bg-canvas px-5 py-4"
     >
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <ul class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-8">
+          <!--
+            오늘 진행 중인 이벤트만 (G-8). 예고를 여기 적으면 "가입해서 혜택을 누려라"가
+            어긋난 약속이 된다 — 그 날 다시 와야 받기 때문이다.
+          -->
+          <li v-if="openEventCoupon" class="text-sm text-ink-700">
+            오늘 <strong class="text-ink-900">{{ couponDiscountText(openEventCoupon) }}</strong>
+            이벤트 쿠폰
+          </li>
           <li v-if="welcomeCoupon" class="text-sm text-ink-700">
             가입 즉시 <strong class="text-ink-900">{{ couponDiscountText(welcomeCoupon) }}</strong> 쿠폰
           </li>
@@ -185,6 +209,13 @@ async function reorder() {
         </RouterLink>
       </div>
     </section>
+
+    <!--
+      이벤트 쿠폰 배너 (G-8) — **로그인한 사람에게만**. 비로그인에게는 위 혜택 스트립이
+      「오늘 이벤트 쿠폰」 한 줄로 따로 말한다(대상·문구·CTA 가 전부 다른 별개 배너다).
+      줄 게 없으면 컴포넌트가 스스로 아무것도 안 그린다.
+    -->
+    <EventCouponBanner v-if="isLoggedIn" />
 
     <!-- 로그인 개인화 — 적립금·등급 + 최근 주문 다시 담기 (있을 때만) -->
     <section v-if="isLoggedIn && (pointAccount || recentOrder)" class="grid gap-4 sm:grid-cols-2">

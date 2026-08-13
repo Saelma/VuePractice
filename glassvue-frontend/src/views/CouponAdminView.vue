@@ -55,6 +55,8 @@ async function toggleWelcome(c) {
 const form = reactive({
   name: '', discountType: 'FIXED', discountValue: null,
   minOrderAmount: 0, maxDiscountAmount: null, validFrom: '', validUntil: '',
+  // 비우면 상시 쿠폰. 넣으면 그 날까지만 「받기」로 발급되는 **이벤트 쿠폰**이다(G-8, V49).
+  issueUntil: '',
 });
 const createMsg = reactive({ ok: '', err: '', loading: false });
 
@@ -63,6 +65,20 @@ const isPercent = computed(() => form.discountType === 'PERCENT');
 function toIsoStart(d) { return d ? new Date(`${d}T00:00:00`).toISOString() : null; }
 function toIsoEnd(d) { return d ? new Date(`${d}T23:59:59`).toISOString() : null; }
 
+/**
+ * 이벤트 쿠폰의 **사용 기한 한 달**은 코드가 아니라 **기본값**에 있다 (2026-08-13, G-8).
+ *
+ * ⚠ 정책을 서버에 박으면 이벤트마다 다르게 갈 수 없고 컬럼도 는다. `validUntil` 은 이미 관리자가
+ * 입력하는 칸이니 **화면이 채워 주고, 다른 이벤트는 관리자가 고친다.**
+ * ⚠ 이미 입력해 둔 값은 **덮어쓰지 않는다** — 관리자가 정한 것을 화면이 되돌리면 안 된다.
+ */
+function onIssueUntilChange() {
+  if (!form.issueUntil || form.validUntil) return;
+  const base = new Date(`${form.validFrom || form.issueUntil}T00:00:00`);
+  base.setMonth(base.getMonth() + 1);
+  form.validUntil = base.toISOString().slice(0, 10);
+}
+
 async function onCreate() {
   createMsg.ok = ''; createMsg.err = '';
   if (!form.name.trim()) { createMsg.err = '쿠폰명을 입력하세요.'; return; }
@@ -70,6 +86,12 @@ async function onCreate() {
   if (isPercent.value && form.discountValue > 100) { createMsg.err = '정률 할인은 100%를 넘을 수 없습니다.'; return; }
   if (!form.validFrom || !form.validUntil) { createMsg.err = '유효기간을 지정하세요.'; return; }
   if (form.validFrom > form.validUntil) { createMsg.err = '시작일이 종료일보다 늦습니다.'; return; }
+  // ⚠ 서버도 같은 것을 막는다(COUPON-400W). 여기서 먼저 보는 건 왕복 없이 알려주기 위해서다 —
+  //    「겹치는 이벤트가 이미 있다」는 화면이 알 수 없어 서버 답을 그대로 띄운다.
+  if (form.issueUntil) {
+    if (form.issueUntil < form.validFrom) { createMsg.err = '발급 마감일이 시작일보다 빠릅니다.'; return; }
+    if (form.issueUntil > form.validUntil) { createMsg.err = '발급 마감일이 사용 종료일보다 늦습니다 — 받자마자 만료됩니다.'; return; }
+  }
 
   createMsg.loading = true;
   try {
@@ -81,9 +103,15 @@ async function onCreate() {
       maxDiscountAmount: isPercent.value && form.maxDiscountAmount ? Number(form.maxDiscountAmount) : null,
       validFrom: toIsoStart(form.validFrom),
       validUntil: toIsoEnd(form.validUntil),
+      issueUntil: toIsoEnd(form.issueUntil), // 비었으면 null → 상시 쿠폰
     });
-    createMsg.ok = `'${form.name.trim()}' 쿠폰을 만들었어요.`;
-    Object.assign(form, { name: '', discountValue: null, minOrderAmount: 0, maxDiscountAmount: null, validFrom: '', validUntil: '' });
+    createMsg.ok = form.issueUntil
+      ? `'${form.name.trim()}' 이벤트 쿠폰을 만들었어요. ${form.validFrom}에 홈 배너가 열립니다.`
+      : `'${form.name.trim()}' 쿠폰을 만들었어요.`;
+    Object.assign(form, {
+      name: '', discountValue: null, minOrderAmount: 0, maxDiscountAmount: null,
+      validFrom: '', validUntil: '', issueUntil: '',
+    });
     await loadCoupons();
   } catch (e) {
     createMsg.err = e.message;
@@ -177,6 +205,20 @@ async function onIssue(member) {
           </label>
         </div>
 
+        <!--
+          이벤트 쿠폰 (G-8). 🔴 **발급 창과 사용 기간은 다른 것이다** — 여기를 헷갈리면
+          "그 날 하루" 쿠폰이 그 날 자정에 만료돼 받자마자 못 쓴다.
+          비워 두면 지금까지와 같은 상시 쿠폰이라, 이 칸이 곧 기능의 on/off 다("지정 안 함 = 꺼짐").
+        -->
+        <label class="field">
+          <span class="field-label">발급 마감일 (비우면 상시 쿠폰)</span>
+          <input v-model="form.issueUntil" type="date" class="ipt" @change="onIssueUntilChange" />
+          <span class="muted">
+            넣으면 <b>이벤트 쿠폰</b>이 됩니다 — 유효 시작일부터 이 날까지 홈 배너의 「받기」로만
+            발급되고, <b>회원당 한 장</b>입니다. 발급 창이 겹치는 이벤트는 등록되지 않습니다.
+          </span>
+        </label>
+
         <button type="submit" class="btn btn-primary self-start" :disabled="createMsg.loading">
           {{ createMsg.loading ? '생성 중…' : '쿠폰 생성' }}
         </button>
@@ -228,12 +270,17 @@ async function onIssue(member) {
               <span v-if="c.welcome" class="ml-1 rounded-full border border-ink-900 px-2 py-0.5 text-[11px] text-ink-900">
                 가입 쿠폰
               </span>
+              <span v-if="c.issueUntil" class="ml-1 rounded-full border border-ink-900 px-2 py-0.5 text-[11px] text-ink-900">
+                이벤트
+              </span>
             </p>
             <p class="muted tabular-nums">
               {{ couponDiscountText(c) }}
               · {{ c.minOrderAmount ? priceText(c.minOrderAmount) + ' 이상' : '금액 조건 없음' }}
               <span v-if="c.maxDiscountAmount">· 최대 {{ priceText(c.maxDiscountAmount) }}</span>
-              · {{ fmtDate(c.validFrom) }}~{{ fmtDate(c.validUntil) }}
+              · 사용 {{ fmtDate(c.validFrom) }}~{{ fmtDate(c.validUntil) }}
+              <!-- 발급 창을 따로 적는다 — 사용 기간과 같은 줄에 섞으면 둘이 같은 값처럼 읽힌다. -->
+              <span v-if="c.issueUntil">· 발급 {{ fmtDate(c.validFrom) }}~{{ fmtDate(c.issueUntil) }}</span>
             </p>
           </div>
           <div class="flex shrink-0 items-center gap-2">
