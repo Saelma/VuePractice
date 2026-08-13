@@ -131,17 +131,21 @@ async function onSave() {
           <DxNumberBox v-model:value="form.price" :min="0" format="#,##0" />
         </label>
         <!--
-          🔴 **선택 입력 숫자 칸은 반드시 지울 수 있어야 한다** (2026-08-13, 사용자 신고).
-          `:min="0"` 만 두면 텍스트를 다 지웠을 때 DevExtreme 이 **최솟값 0으로 되돌린다.**
-          그러면 저장이 「정가는 판매가보다 커야 합니다」로 막히는데 **비울 방법이 없어 빠져나갈 수가
-          없다** — 한 번 숫자를 넣으면 상품을 영영 저장 못 하는 상태가 됐다.
-          ⚠ 같은 상황(선택 가격 필터)에서 `ProductListView` 는 이미 이걸 쓰고 있었다.
+          🔴 **선택 입력 숫자 칸은 반드시 「빈 값」으로 돌아갈 수 있어야 한다** (2026-08-13, 사용자 신고).
+
+          ⚠ **숫자 필드라서 못 비우는 게 아니다** — `list_price` 는 nullable 이고 「할인 없음」이 곧
+          `null` 이다. 갇힌 건 **입력기 설정** 때문이었다: `:min="0"` 이 붙어 있으면 텍스트를 다 지웠을 때
+          최솟값 0 으로 되돌아가고, 그러면 저장이 「정가는 판매가보다 커야 합니다」로 막히는데
+          **비울 방법이 없어** 한 번 숫자를 넣으면 그 상품을 영영 저장 못 하는 상태가 됐다.
+
+          → **`min` 을 떼고** 클리어 버튼을 붙였다. 음수는 화면이 막지 않아도 **서버가 막는다**
+          (`@PositiveOrZero` + `PRODUCT-400L`) — 규칙을 화면에 두면 또 이런 덫이 생긴다.
+          ⚠ 같은 상황(선택 가격 필터)에서 `ProductListView` 는 이미 클리어 버튼을 쓰고 있었다.
         -->
         <label class="field flex-1">
           <span class="field-label">정가(원, 선택)</span>
           <DxNumberBox
             v-model:value="form.listPrice"
-            :min="0"
             :show-clear-button="true"
             format="#,##0"
             placeholder="할인 없으면 비움"
