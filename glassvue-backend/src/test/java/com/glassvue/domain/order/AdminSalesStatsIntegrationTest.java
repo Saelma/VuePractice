@@ -368,6 +368,149 @@ class AdminSalesStatsIntegrationTest {
                 .andExpect(jsonPath("$.data.allTime.shippingSales").value(((Number) expected[2]).longValue()));
     }
 
+    // ---------------------------------------------------------------- 기간 선택 (B-26, 2026-08-13)
+
+    /**
+     * 🔴 <b>종료일은 포함이다</b> — 사람이 «7월 1~15일» 이라고 말할 때의 뜻.
+     *
+     * <p>⚠ 이걸 틀리면 <b>마지막 날 매출이 통째로 빠지고 아무도 눈치채지 못한다</b>(그 날 매출이
+     * 0이면 표시가 안 나고, 0이 아니어도 «원래 그런가 보다» 로 읽힌다). 그래서 <b>마지막 날 23시</b>에
+     * 결제를 박아 넣어 경계를 직접 밟는다.
+     */
+    @Test
+    @DisplayName("종료일은 포함된다 — 마지막 날 23시 결제가 기간 안에 들어온다")
+    void endDateIsInclusive() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        LocalDate todayKst = LocalDate.now(KST);
+
+        String orderId = order(buyer, 1);
+        pay(buyer, orderId);
+        forcePaidAt(orderId, todayKst.atStartOfDay(KST).plusHours(23).toInstant());
+
+        String range = "?from=" + todayKst.format(DAY) + "&to=" + todayKst.format(DAY);
+        String body = mockMvc.perform(get(URL + range).header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions
+                .assertThat(((Number) JsonPath.read(body, "$.data.period.orderCount")).longValue())
+                .as("마지막 날 23시 결제가 빠졌다면 종료일이 배타 경계로 처리된 것이다")
+                .isGreaterThanOrEqualTo(1L);
+    }
+
+    /**
+     * 기간 밖 주문은 안 잡힌다 — 위 테스트의 <b>대조군</b>.
+     *
+     * <p>⚠ 대조군이 없으면 «기간을 무시하고 전부 세는» 구현으로 고쳐도 위 테스트가 통과한다.
+     */
+    @Test
+    @DisplayName("대조군: 기간 밖 주문은 요약·일별·TOP 어디에도 안 잡힌다")
+    void outsidePeriodIsExcluded() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        LocalDate todayKst = LocalDate.now(KST);
+
+        String orderId = order(buyer, 2);
+        pay(buyer, orderId);
+        // 20일 전으로 밀어 둔다.
+        forcePaidAt(orderId, todayKst.minusDays(20).atStartOfDay(KST).plusHours(12).toInstant());
+
+        // 최근 3일만 본다 — 위 주문은 밖이다.
+        String range = "?from=" + todayKst.minusDays(2).format(DAY) + "&to=" + todayKst.format(DAY);
+        String body = mockMvc.perform(get(URL + range).header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        java.util.List<Object> qty = JsonPath.read(body,
+                "$.data.topProducts[?(@.productId == '" + productId + "')].quantity");
+        org.assertj.core.api.Assertions.assertThat(qty)
+                .as("기간 밖 주문의 상품이 TOP 에 올라왔다 — topProducts 가 to 를 안 보는 것이다")
+                .isEmpty();
+
+        // 대조군의 대조군 — 그 날을 포함하면 잡혀야 한다(«아무것도 안 잡는» 구현이면 여기서 걸린다).
+        String wide = "?from=" + todayKst.minusDays(25).format(DAY) + "&to=" + todayKst.format(DAY);
+        String wideBody = mockMvc.perform(get(URL + wide).header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        java.util.List<Object> wideQty = JsonPath.read(wideBody,
+                "$.data.topProducts[?(@.productId == '" + productId + "')].quantity");
+        org.assertj.core.api.Assertions.assertThat(wideQty).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("일별 칸 수가 고른 기간을 따라간다 — 「최근 30일」 상수가 더 이상 답이 아니다")
+    void dailyFollowsPeriodLength() throws Exception {
+        String admin = login(adminLoginId);
+        LocalDate todayKst = LocalDate.now(KST);
+        String from = todayKst.minusDays(6).format(DAY);
+        String to = todayKst.format(DAY);
+
+        mockMvc.perform(get(URL + "?from=" + from + "&to=" + to).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.daily.length()").value(7))
+                .andExpect(jsonPath("$.data.daily[0].date").value(from))
+                .andExpect(jsonPath("$.data.daily[6].date").value(to))
+                // 서버가 **실제로 집계한 구간**을 되돌려 준다 — 화면 제목이 이 값을 쓴다.
+                .andExpect(jsonPath("$.data.from").value(from))
+                .andExpect(jsonPath("$.data.to").value(to));
+
+        // 하루짜리도 한 칸이어야 한다(경계에서 0칸·2칸이 되기 쉬운 자리다).
+        mockMvc.perform(get(URL + "?from=" + to + "&to=" + to).header("Authorization", admin))
+                .andExpect(jsonPath("$.data.daily.length()").value(1));
+    }
+
+    /**
+     * 🔴 <b>{@code today}·{@code thisMonth}·{@code allTime} 은 기간을 따라가면 안 된다.</b>
+     *
+     * <p>⚠ 「지난 달」을 골라 놓고 「오늘」 카드가 지난달 어느 날을 가리키면 <b>화면이 거짓말</b>을 한다.
+     * ⚠ {@code thisMonth} 는 매출 화면이 안 그리지만 <b>관리자 홈이 읽는다</b> — B-26 에서 지우려다
+     * 발견했다. 지웠으면 관리자 홈의 「이번 달」이 조용히 빈칸이 됐다.
+     */
+    @Test
+    @DisplayName("today·thisMonth·allTime 은 기간과 무관하다 — 기간을 바꿔도 그대로다")
+    void fixedSummariesIgnorePeriod() throws Exception {
+        String admin = login(adminLoginId);
+        LocalDate todayKst = LocalDate.now(KST);
+
+        String wide = mockMvc.perform(get(URL).header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        // 아주 오래된 하루만 고른다 — 기간을 따라간다면 이 값들이 0 으로 떨어질 것이다.
+        String narrow = mockMvc.perform(get(URL
+                        + "?from=" + todayKst.minusDays(300).format(DAY)
+                        + "&to=" + todayKst.minusDays(300).format(DAY)).header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        for (String field : java.util.List.of("today", "thisMonth", "allTime")) {
+            org.assertj.core.api.Assertions
+                    .assertThat(((Number) JsonPath.read(narrow, "$.data." + field + ".itemSales")).longValue())
+                    .as(field + " 이 기간을 따라갔다 — 화면이 「기간과 무관」이라고 적고 있다")
+                    .isEqualTo(((Number) JsonPath.read(wide, "$.data." + field + ".itemSales")).longValue());
+        }
+    }
+
+    @Test
+    @DisplayName("잘못된 기간은 거절한다 — 시작>종료(400P) · 366일 초과(400L)")
+    void invalidPeriodRejected() throws Exception {
+        String admin = login(adminLoginId);
+        LocalDate todayKst = LocalDate.now(KST);
+
+        mockMvc.perform(get(URL + "?from=" + todayKst.format(DAY)
+                        + "&to=" + todayKst.minusDays(1).format(DAY)).header("Authorization", admin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("STATS-400P"));
+
+        // ⚠ 상한을 두는 이유는 성능이 아니라 **읽을 수 있는가**다 — 빈 날을 채우므로 막대가 그만큼 는다.
+        //    🔴 조용히 자르지 않는다(잘린 줄 모르면 「그 기간 매출이 이만큼」으로 잘못 읽는다).
+        mockMvc.perform(get(URL + "?from=" + todayKst.minusDays(400).format(DAY)
+                        + "&to=" + todayKst.format(DAY)).header("Authorization", admin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("STATS-400L"));
+
+        // 경계 — 정확히 366일은 통과해야 한다(상한을 하나 어긋나게 두기 쉬운 자리).
+        mockMvc.perform(get(URL + "?from=" + todayKst.minusDays(365).format(DAY)
+                        + "&to=" + todayKst.format(DAY)).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.daily.length()").value(366));
+    }
+
     @Test
     @DisplayName("매출은 관리자만 본다 — 미인증 401, 일반 회원 403")
     void requiresAdmin() throws Exception {

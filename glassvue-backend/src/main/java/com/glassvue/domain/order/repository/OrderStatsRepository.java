@@ -75,6 +75,9 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
      * <p>매출이 0인 날은 <b>행 자체가 없다.</b> 화면이 빈 날을 0으로 채워야 차트에 구멍이 안 생긴다
      * (호출부에서 채운다 — SQL 로 날짜를 생성하면 쿼리가 훨씬 복잡해진다).
      *
+     * <p>⚠ <b>{@code to} 는 배타적</b>이다({@code < :to}) — 세 쿼리가 <b>같은 경계 규약</b>을 쓴다.
+     * 한쪽만 포함으로 두면 마지막 날 매출이 요약과 추이에서 갈린다(B-26, 2026-08-13).
+     *
      * @return {@code [yyyy-MM-dd, 주문수, 상품매출, 배송비]} 여러 행, 날짜 오름차순
      */
     @Query(value = """
@@ -85,11 +88,13 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
               FROM orders o
              WHERE o.status IN (:statuses)
                AND o.paid_at >= :from
+               AND o.paid_at <  :to
              GROUP BY TO_CHAR(o.paid_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
              ORDER BY 1
             """, nativeQuery = true)
     List<Object[]> daily(@Param("statuses") Collection<String> statuses,
-                         @Param("from") Instant from);
+                         @Param("from") Instant from,
+                         @Param("to") Instant to);
 
     /**
      * 상품별 판매량 TOP N.
@@ -114,11 +119,13 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
               JOIN orders o ON o.id = oi.order_id
              WHERE o.status IN (:statuses)
                AND o.paid_at >= :from
+               AND o.paid_at <  :to
              GROUP BY oi.product_id
              ORDER BY SUM(oi.quantity) DESC, SUM(oi.line_total) DESC
              FETCH FIRST :limit ROWS ONLY
             """, nativeQuery = true)
     List<Object[]> topProducts(@Param("statuses") Collection<String> statuses,
                                @Param("from") Instant from,
+                               @Param("to") Instant to,
                                @Param("limit") int limit);
 }

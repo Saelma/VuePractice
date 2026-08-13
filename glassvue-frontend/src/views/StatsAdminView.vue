@@ -9,7 +9,9 @@
  * 상품매출에 섞으면 장사가 잘되는지 알 수 없어진다(서버도 같은 이유로 나눠서 준다).
  */
 import { ref, computed, onMounted } from 'vue';
-import { fetchSalesOverview, barHeight, shortDate } from '../api/stats';
+import {
+  fetchSalesOverview, barHeight, shortDate, PRESETS, presetRange, matchedPreset,
+} from '../api/stats';
 import { priceText } from '../api/product';
 import EmptyState from '../components/EmptyState.vue';
 
@@ -25,15 +27,53 @@ const maxDaily = computed(() => {
 });
 const hasAnySales = computed(() => (data.value?.allTime?.orderCount ?? 0) > 0);
 
-onMounted(async () => {
+/*
+ * 기간 선택 (B-26, 2026-08-13).
+ *
+ * 🔴 **화면은 날짜만 보내고 경계는 서버가 만든다.** 「그 날의 00:00 이 언제인가」를 여기서 계산하면
+ * KST 경계가 두 곳에 생기고, **하루가 어긋나도 화면은 멀쩡해 보인다.**
+ *
+ * 🔴 **「오늘」의 기준도 브라우저 시계가 아니다.** 첫 조회는 파라미터 없이 부르고, 서버가 돌려준
+ * `to`(= KST 오늘)를 프리셋 계산의 기준으로 삼는다 — 장부는 KST 인데 `new Date()` 는 보는 사람의
+ * 시간대를 따르기 때문이다.
+ */
+const from = ref('');
+const to = ref('');
+/** 서버가 알려 준 KST 오늘. 프리셋 계산의 유일한 기준점이다. */
+const todayKst = ref('');
+const activePreset = computed(() => matchedPreset(from.value, to.value, todayKst.value));
+
+onMounted(() => load());
+
+async function load(params) {
+  loading.value = true;
+  error.value = '';
   try {
-    data.value = await fetchSalesOverview();
+    const res = await fetchSalesOverview(params);
+    data.value = res;
+    // 서버가 **실제로 집계한 구간**을 화면 상태로 받아 온다(내가 보낸 값이 아니라).
+    from.value = res.from;
+    to.value = res.to;
+    // 파라미터 없이 부른 첫 응답의 `to` 가 곧 KST 오늘이다.
+    if (!todayKst.value && !params) todayKst.value = res.to;
   } catch (e) {
+    // ⚠ 기간이 틀렸다는 답(STATS-400P·400L)도 여기로 온다 — 화면은 서버 문구를 그대로 띄운다.
+    //    ⚠ data 는 지우지 않는다: 직전에 보던 숫자를 남겨 둬야 «무엇을 고쳤다 실패했는지» 가 보인다.
     error.value = e.message;
   } finally {
     loading.value = false;
   }
-});
+}
+
+function applyPreset(key) {
+  const range = presetRange(key, todayKst.value);
+  load(range);
+}
+
+/** 날짜 칸을 직접 고쳤을 때. ⚠ 둘 다 채워졌을 때만 부른다(한쪽만 바뀐 중간 상태로 조회하지 않는다). */
+function applyManual() {
+  if (from.value && to.value) load({ from: from.value, to: to.value });
+}
 </script>
 
 <template>
@@ -44,6 +84,33 @@ onMounted(async () => {
         결제 완료된 주문(결제·발송·배송완료) 기준이며, 날짜는 한국 시간입니다.
         취소된 주문은 제외됩니다.
       </p>
+    </div>
+
+    <!--
+      기간 선택 (B-26). 🔴 **관리자 기간 선택은 네이티브 date 2칸 + 프리셋**으로 통일한다(DESIGN §7)
+      — 이 화면에는 DevExtreme 이 하나도 안 쓰였고, DX 컨트롤을 넣으면 그 테마까지 따라 들어온다.
+      ⚠ 프리셋이 먼저다: 실무에서 묻는 것 대부분이 「지난 달」·「30일」이고, 달력을 두 번 찍는 것보다 빠르다.
+    -->
+    <div class="card mb-5 flex flex-wrap items-end gap-x-4 gap-y-3 p-4">
+      <label class="field">
+        <span class="field-label">시작일</span>
+        <input v-model="from" type="date" class="ipt" :max="to || undefined" @change="applyManual" />
+      </label>
+      <label class="field">
+        <span class="field-label">종료일 (포함)</span>
+        <input v-model="to" type="date" class="ipt" :min="from || undefined" @change="applyManual" />
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-for="p in PRESETS"
+          :key="p.key"
+          type="button"
+          class="btn btn-secondary btn-sm"
+          :class="activePreset === p.key ? 'border-ink-900 text-ink-900' : ''"
+          :disabled="!todayKst"
+          @click="applyPreset(p.key)"
+        >{{ p.label }}</button>
+      </div>
     </div>
 
     <p v-if="error" class="alert-error mb-5">{{ error }}</p>
@@ -58,12 +125,20 @@ onMounted(async () => {
     <template v-else-if="data">
       <!-- ① 요약 -->
       <div class="grid gap-4 sm:grid-cols-3">
+        <!--
+          🔴 **기간을 따르는 카드와 안 따르는 카드를 갈라 적는다**(B-26).
+          「지난 달」을 골라 놓고 「오늘」 카드가 지난달 어느 날을 가리키면 거짓말이 된다 —
+          그래서 뒤 둘에는 «기간과 무관» 을 화면에 쓴다.
+        -->
         <div v-for="card in [
-              { label: '오늘', value: data.today },
-              { label: '이번 달', value: data.thisMonth },
-              { label: '전체', value: data.allTime },
+              { label: `${data.from} ~ ${data.to}`, value: data.period, scoped: true },
+              { label: '오늘', value: data.today, scoped: false },
+              { label: '전체 누적', value: data.allTime, scoped: false },
             ]" :key="card.label" class="card p-5">
-          <p class="muted">{{ card.label }} 상품매출</p>
+          <p class="muted">
+            {{ card.label }} 상품매출
+            <span v-if="!card.scoped" class="text-ink-400">· 기간과 무관</span>
+          </p>
           <p class="mt-1 text-2xl font-bold tabular-nums text-ink-900">
             {{ priceText(card.value.itemSales) }}
           </p>
@@ -100,7 +175,9 @@ onMounted(async () => {
         <!-- ② 일별 추이 -->
         <div class="card mt-8 p-5">
           <div class="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 class="section-title">최근 30일 상품매출</h2>
+            <!-- ⚠ 「최근 30일」이 아니라 **고른 기간**이다. 제목이 안 따라가면 지난달을 보면서
+                 「최근 30일」이라고 읽게 된다 — 숫자보다 제목이 거짓말하기 쉽다. -->
+            <h2 class="section-title">{{ data.from }} ~ {{ data.to }} 상품매출</h2>
             <!--
               hover 값을 **막대 옆이 아니라 여기** 보여준다.
               막대 30칸이면 한 칸이 20px 남짓이라, 툴팁을 막대에 붙이면 양끝 칸에서 가로로 잘린다.
@@ -115,6 +192,8 @@ onMounted(async () => {
                 (배송비 {{ priceText(hovered.shippingSales) }})
               </span>
             </span>
+            <!-- ⚠ 이 기간에 매출이 0이면 막대가 전부 바닥이라 «고장» 처럼 보인다 — 그렇다고 말해 준다. -->
+            <span v-else-if="!data.period.orderCount" class="muted">이 기간에는 결제된 주문이 없습니다.</span>
             <span v-else class="muted">막대에 커서를 올리면 그날 매출이 보입니다 · 최대 {{ priceText(maxDaily) }}</span>
           </div>
 
@@ -164,7 +243,17 @@ onMounted(async () => {
           <p class="muted mt-1">
             판매액은 <strong>쿠폰 할인 전</strong> 금액입니다 — 쿠폰은 주문 단위라 상품별로 나눌 수 없어요.
           </p>
-          <ul class="mt-4 divide-y divide-line">
+          <!--
+            ⚠ 기간을 열면서 **빈 목록이 흔해졌다**. 「팔린 게 없다」와 「이 기간에 안 팔렸다」는 다른 말이라
+            문구를 가른다(DESIGN §5 빈 상태 · 7/20 교훈). 전체 매출이 0인 경우는 위 EmptyState 가 맡는다.
+          -->
+          <EmptyState
+            v-if="!data.topProducts.length"
+            icon="🗓️"
+            message="이 기간에는 팔린 상품이 없어요."
+            hint="기간을 넓히거나 다른 달을 골라 보세요."
+          />
+          <ul v-else class="mt-4 divide-y divide-line">
             <li v-for="(p, i) in data.topProducts" :key="p.productId" class="flex items-center gap-3 py-3">
               <span class="w-6 shrink-0 text-center text-sm font-semibold tabular-nums text-ink-400">
                 {{ i + 1 }}

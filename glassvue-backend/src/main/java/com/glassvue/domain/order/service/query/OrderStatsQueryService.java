@@ -6,12 +6,15 @@ import com.glassvue.domain.order.dto.SalesOverviewResponse;
 import com.glassvue.domain.order.dto.SalesSummaryResponse;
 import com.glassvue.domain.order.entity.OrderStatus;
 import com.glassvue.domain.order.repository.OrderStatsRepository;
+import com.glassvue.global.exception.BusinessException;
+import com.glassvue.global.exception.ErrorCode;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,27 +56,68 @@ public class OrderStatsQueryService {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    private static final int DAILY_DAYS = 30;
+    /** 기간을 안 주면 보는 구간. 그전까지 «최근 30일» 이 고정값이었고, 이제 **기본값**이다(B-26). */
+    private static final int DEFAULT_DAYS = 30;
+
+    /**
+     * 🔴 <b>기간에 상한을 둔다.</b> 일별 추이는 «빈 날을 채워서» 주므로 구간이 길면 그만큼 막대가 는다 —
+     * 2년을 고르면 730개가 오고 차트는 읽을 수 없는 띠가 된다.
+     * ⚠ <b>조용히 자르지 않는다</b>(잘린 줄 모르면 «그 기간 매출이 이만큼» 이라고 잘못 읽는다).
+     * 넘으면 거절하고 화면이 이유를 보여준다.
+     */
+    private static final int MAX_DAYS = 366;
+
     private static final int TOP_PRODUCTS = 10;
 
     private final OrderStatsRepository statsRepository;
 
-    public SalesOverviewResponse overview() {
+    /**
+     * 매출 대시보드 (B-26 에서 기간을 열었다).
+     *
+     * <p>🔴 <b>API 는 날짜({@link LocalDate})만 받고 경계는 여기서 만든다.</b> 화면이 {@code Instant} 를
+     * 보내기 시작하면 <b>KST 경계가 두 곳에서 계산되고</b>, 하루가 어긋나도 화면은 멀쩡해 보인다.
+     * F-4(「시간대 하드코딩」)가 *"지금은 정상"* 인 이유가 <b>경계가 한 곳이라서</b>인데 그걸 깨지 않는다.
+     *
+     * <p>⚠ {@code to} 는 <b>포함</b>이다(사람이 «7월 1~15일» 이라고 말할 때의 뜻). 쿼리에 넘길 때만
+     * 다음 날 00:00 으로 바꿔 배타 경계로 쓴다 — <b>세 쿼리가 같은 규약을 쓴다.</b>
+     *
+     * @param from null 이면 {@code to} 기준 {@value #DEFAULT_DAYS}일 전
+     * @param to   null 이면 오늘(KST)
+     */
+    public SalesOverviewResponse overview(LocalDate from, LocalDate to) {
         LocalDate todayKst = LocalDate.now(KST);
-        Instant now = Instant.now();
+        LocalDate end = (to == null) ? todayKst : to;
+        LocalDate start = (from == null) ? end.minusDays(DEFAULT_DAYS - 1L) : from;
 
+        if (start.isAfter(end)) {
+            throw new BusinessException(ErrorCode.STATS_PERIOD_INVALID);
+        }
+        long days = ChronoUnit.DAYS.between(start, end) + 1;
+        if (days > MAX_DAYS) {
+            throw new BusinessException(ErrorCode.STATS_PERIOD_TOO_LONG,
+                    "기간은 최대 %d일까지 볼 수 있어요 (고른 기간 %d일).".formatted(MAX_DAYS, days));
+        }
+
+        Instant periodFrom = start.atStartOfDay(KST).toInstant();
+        // ⚠ 종료일을 **포함**하려면 다음 날 00:00 이 배타 경계다. end.atTime(23:59:59) 로 하면
+        //    그 날 23:59:59.5 에 결제된 주문이 빠진다(초 미만은 눈에 안 보여서 더 나쁘다).
+        Instant periodTo = end.plusDays(1).atStartOfDay(KST).toInstant();
+
+        Instant now = Instant.now();
         Instant todayStart = todayKst.atStartOfDay(KST).toInstant();
         Instant monthStart = todayKst.withDayOfMonth(1).atStartOfDay(KST).toInstant();
         // 전체 기간의 시작은 "충분히 과거"면 된다. Instant.EPOCH 는 1970년이라 어떤 주문보다 앞선다.
         Instant epoch = Instant.EPOCH;
-        Instant dailyFrom = todayKst.minusDays(DAILY_DAYS - 1L).atStartOfDay(KST).toInstant();
 
         return new SalesOverviewResponse(
+                start, end,
+                summarize(periodFrom, periodTo),
                 summarize(todayStart, now),
+                // ⚠ 매출 화면은 이걸 안 그린다(프리셋 「이번 달」이 그 자리다). **관리자 홈**이 읽는다.
                 summarize(monthStart, now),
                 summarize(epoch, now),
-                daily(dailyFrom, todayKst),
-                topProducts(epoch));
+                daily(periodFrom, periodTo, start, end),
+                topProducts(periodFrom, periodTo));
     }
 
     private SalesSummaryResponse summarize(Instant from, Instant to) {
@@ -91,24 +135,26 @@ public class OrderStatsQueryService {
      * <p>SQL 은 매출이 있는 날만 준다. 그대로 화면에 보내면 차트에 구멍이 생기고,
      * "0원인 날"과 "데이터가 없는 날"을 구분할 수 없다. 날짜 생성은 SQL 보다 여기가 훨씬 싸다.
      */
-    private List<DailySalesResponse> daily(Instant from, LocalDate todayKst) {
+    private List<DailySalesResponse> daily(Instant from, Instant to, LocalDate start, LocalDate end) {
         Map<String, DailySalesResponse> found = new LinkedHashMap<>();
-        for (Object[] row : statsRepository.daily(REVENUE_STATUSES, from)) {
+        for (Object[] row : statsRepository.daily(REVENUE_STATUSES, from, to)) {
             String date = String.valueOf(row[0]);
             found.put(date, new DailySalesResponse(date, toLong(row[1]), toLong(row[2]), toLong(row[3])));
         }
 
-        List<DailySalesResponse> filled = new ArrayList<>(DAILY_DAYS);
-        for (int i = DAILY_DAYS - 1; i >= 0; i--) {
-            String date = todayKst.minusDays(i).format(DAY);
+        // ⚠ 채우는 범위가 **고른 기간**이다. 그전에는 `DAILY_DAYS`(30) 라는 상수로 채웠는데,
+        //    기간이 가변이 되면 그 상수가 «며칠치인가» 를 더 이상 답하지 못한다(B-26 착수 전 메모).
+        List<DailySalesResponse> filled = new ArrayList<>();
+        for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
+            String date = day.format(DAY);
             filled.add(found.getOrDefault(date, DailySalesResponse.empty(date)));
         }
         return filled;
     }
 
-    private List<ProductSalesResponse> topProducts(Instant from) {
+    private List<ProductSalesResponse> topProducts(Instant from, Instant to) {
         List<ProductSalesResponse> items = new ArrayList<>();
-        for (Object[] row : statsRepository.topProducts(REVENUE_STATUSES, from, TOP_PRODUCTS)) {
+        for (Object[] row : statsRepository.topProducts(REVENUE_STATUSES, from, to, TOP_PRODUCTS)) {
             items.add(new ProductSalesResponse(
                     toUuid(row[0]), String.valueOf(row[1]), toLong(row[2]), toLong(row[3])));
         }

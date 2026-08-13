@@ -147,7 +147,13 @@ public enum ErrorCode {
     POINT_INVALID_AMOUNT("POINT-400A", HttpStatus.BAD_REQUEST, "적립금 사용액이 올바르지 않습니다."),
     POINT_EXCEEDS_ORDER("POINT-400E", HttpStatus.BAD_REQUEST, "적립금은 상품 금액을 넘을 수 없습니다."),
 
-    NOTIFICATION_NOT_FOUND("NOTIFICATION-404", HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다.");
+    NOTIFICATION_NOT_FOUND("NOTIFICATION-404", HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
+
+    // 관리자 통계 기간 (B-26, 2026-08-13)
+    STATS_PERIOD_INVALID("STATS-400P", HttpStatus.BAD_REQUEST, "시작일이 종료일보다 늦습니다."),
+    // ⚠ 상한을 두는 이유는 성능이 아니라 **읽을 수 있는가**다 — 일별 추이는 빈 날을 채워서 주므로
+    //    2년을 고르면 막대 730개가 와서 차트가 띠가 된다. 조용히 자르지 않고 거절한다.
+    STATS_PERIOD_TOO_LONG("STATS-400L", HttpStatus.BAD_REQUEST, "조회 기간이 너무 깁니다.");
 
     private final String code;
     private final HttpStatus status;
