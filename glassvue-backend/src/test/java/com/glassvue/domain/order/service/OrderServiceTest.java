@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -23,6 +25,8 @@ import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.entity.OrderStatus;
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
@@ -72,6 +76,8 @@ class OrderServiceTest {
 
     private final UUID memberId = UUID.randomUUID();
     private final AuthUser buyer = new AuthUser(memberId, Role.USER, "구매자닉");
+    // 관리자 주문 조작 넷에 행위자가 붙었다 (2026-08-14, V51) — 원장에 «누가» 를 남기기 위해서다.
+    private final AuthUser admin = new AuthUser(UUID.randomUUID(), Role.ADMIN, "ZZ관리자");
     private final UUID orderId = UUID.randomUUID();
 
     private static final OrderCreateRequest SHIP = new OrderCreateRequest(
@@ -83,6 +89,27 @@ class OrderServiceTest {
     private Order sampleOrder() {
         return orderWith(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, "지바", "/uploads/z_t.webp", 10_000, null, 2));
     }
+    /**
+     * 발행된 이벤트 중 <b>그 타입인 것 하나</b>를 집는다.
+     *
+     * <p>⚠ 왜 필요한가: 한 조작이 <b>이벤트를 둘 이상</b> 발행하게 되면서(알림 + 감사 원장, 2026-08-14)
+     * {@code verify(publisher).publishEvent(captor.capture())} 가 깨진다 — 캡터는 타입을 안 가리므로
+     * 그 문장은 «publishEvent 가 정확히 한 번» 을 요구한다. <b>테스트가 발행 개수에 묶여 있었던 것</b>이고,
+     * 그건 검증하려던 바가 아니다(«그 알림이 나갔나» 이지 «그것 말고 아무것도 안 나갔나» 가 아니다).
+     */
+    private <T> T capturePublished(Class<T> type) {
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture());
+        return captor.getAllValues().stream()
+                .filter(type::isInstance).map(type::cast).findFirst()
+                .orElseThrow(() -> new AssertionError(type.getSimpleName() + " 가 발행되지 않았다"));
+    }
+
+    /** 원장에 실린 줄. 없으면 실패한다. */
+    private AdminActionEvent captureAudit() {
+        return capturePublished(AdminActionEvent.class);
+    }
+
     private static void assertErrorCode(Runnable r, ErrorCode expected) {
         assertThatThrownBy(r::run)
                 .isInstanceOf(BusinessException.class)
@@ -121,7 +148,7 @@ class OrderServiceTest {
         Order order = sampleOrder();
         order.pay();
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        orderService.ship(orderId, DeliveryCarrier.CJ, "123456789012");
+        orderService.ship(orderId, admin, DeliveryCarrier.CJ, "123456789012");
         assertThat(order.getStatus()).isEqualTo(OrderStatus.SHIPPED);
         // 운송장은 발송과 한 트랜잭션이다 — "발송됐는데 추적 정보가 없는" 중간 상태를 만들지 않는다.
         assertThat(order.getShipCarrier()).isEqualTo(DeliveryCarrier.CJ);
@@ -133,8 +160,10 @@ class OrderServiceTest {
     void ship_notShippable() {
         Order order = sampleOrder();
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        assertErrorCode(() -> orderService.ship(orderId, DeliveryCarrier.CJ, "123"),
+        assertErrorCode(() -> orderService.ship(orderId, admin, DeliveryCarrier.CJ, "123"),
                 ErrorCode.ORDER_NOT_SHIPPABLE);
+        // 🔴 거부됐으면 원장에도 없어야 한다 — «조작 없이 감사 없다».
+        verify(eventPublisher, never()).publishEvent(any(AdminActionEvent.class));
     }
 
     @Test
@@ -144,7 +173,7 @@ class OrderServiceTest {
         order.pay();
         order.ship(DeliveryCarrier.CJ, "123456789012");
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        orderService.deliver(orderId);
+        orderService.deliver(orderId, admin);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
         assertThat(order.getDeliveredAt()).isNotNull();
     }
@@ -155,7 +184,8 @@ class OrderServiceTest {
         Order order = sampleOrder();
         order.pay();
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        assertErrorCode(() -> orderService.deliver(orderId), ErrorCode.ORDER_NOT_DELIVERABLE);
+        assertErrorCode(() -> orderService.deliver(orderId, admin), ErrorCode.ORDER_NOT_DELIVERABLE);
+        verify(eventPublisher, never()).publishEvent(any(AdminActionEvent.class));
     }
 
     @Test
@@ -269,7 +299,7 @@ class OrderServiceTest {
         order.requestReturn("ZZ-반품사유");
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
 
-        orderService.approveReturn(order.getId());
+        orderService.approveReturn(order.getId(), admin);
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURNED);
         // 재고 이력은 취소와 **구분**된다(B-19) — 원장에서 «왜 돌아왔는지» 가 보여야 값이 있다.
@@ -280,11 +310,12 @@ class OrderServiceTest {
         verify(couponService).restore(memberCouponId);
         // 🔴 알림 (2026-08-11) — 이벤트 발행까지 봐야 한다. 2026-08-11 변형 M14 에서 «발행을 지워도
         //    아무도 안 잡는» 자리가 드러났다: 「되돌리는 것들」만 보고 **알리는 것**은 안 봤다.
-        ArgumentCaptor<OrderReturnedEvent> returned = ArgumentCaptor.forClass(OrderReturnedEvent.class);
-        verify(eventPublisher).publishEvent(returned.capture());
-        assertThat(returned.getValue().memberId()).isEqualTo(memberId);
+        // ⚠ 발행이 **둘**이 됐다(알림 + 원장, 2026-08-14) — 캡터는 타입을 안 가리므로
+        //    verify(...).publishEvent(capture()) 는 «정확히 한 번» 을 요구해 깨진다. 타입으로 고른다.
+        OrderReturnedEvent returnedEvent = capturePublished(OrderReturnedEvent.class);
+        assertThat(returnedEvent.memberId()).isEqualTo(memberId);
         // 환불액이 실려야 알림 문구가 «○○원이 환불되었습니다» 를 말할 수 있다(핸들러는 주문을 못 본다).
-        assertThat(returned.getValue().refundedPoint()).isEqualTo(order.refundableAmount());
+        assertThat(returnedEvent.refundedPoint()).isEqualTo(order.refundableAmount());
     }
 
     /**
@@ -311,7 +342,7 @@ class OrderServiceTest {
         order.requestReturn("ZZ-반품사유");
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
 
-        orderService.rejectReturn(order.getId(), "ZZ-거절사유");
+        orderService.rejectReturn(order.getId(), admin, "ZZ-거절사유");
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
 
@@ -324,15 +355,121 @@ class OrderServiceTest {
                 .as("요청 시각이 남아야 «언제 요청해서 언제 거절됐나» 가 읽힌다")
                 .isNotNull();
 
-        ArgumentCaptor<OrderReturnRejectedEvent> rejected =
-                ArgumentCaptor.forClass(OrderReturnRejectedEvent.class);
-        verify(eventPublisher).publishEvent(rejected.capture());
+        OrderReturnRejectedEvent rejectedEvent = capturePublished(OrderReturnRejectedEvent.class);
         // 사유가 이벤트에 실려야 알림 문구가 «왜 거절됐는지» 를 말할 수 있다.
-        assertThat(rejected.getValue().reason()).isEqualTo("ZZ-거절사유");
+        assertThat(rejectedEvent.reason()).isEqualTo("ZZ-거절사유");
 
         // 승인 안 했으니 되돌리는 것은 하나도 없어야 한다.
         verify(productCommandService, never()).increaseStock(any(), anyInt(), any(), any());
         verify(couponService, never()).restore(any());
+    }
+
+    // ── 관리자 주문 조작을 원장에 남긴다 (2026-08-14, V51) ──────────────────────────
+    //
+    // 🔴 **넷 다 「언제」는 주문에 남고 「누가」는 아무 데도 안 남았다.** 행위자 컬럼을 가진 것은
+    //    취소(cancelledBy) 하나뿐이었고 — 그게 감사도 함께 붙어 있던 자리다.
+    //    돈이 나가는 조작(배송완료 적립 · 반품 환불)인데도 «누가 승인했나» 를 물을 방법이 없었다.
+    //
+    // ⚠ **대상은 «주문» 이 아니라 «주문자» 다** — 감사 테이블의 target 은 회원이다(V43 과 같은 모양).
+    //    상품(V50)이 부딪힌 «대상에 회원이 없다» 가 여기서는 안 생긴다.
+
+    @Test
+    @DisplayName("발송: 원장에 **누가 · 어느 주문 · 어느 택배사/송장** 이 남는다")
+    void ship_recordsAudit() {
+        Order order = sampleOrder();
+        order.pay();
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(memberService.loginIdOf(memberId)).thenReturn("zzbuyer");
+
+        orderService.ship(orderId, admin, DeliveryCarrier.CJ, "123456789012");
+
+        AdminActionEvent e = captureAudit();
+        assertThat(e.action()).isEqualTo(AuditAction.ORDER_SHIP);
+        assertThat(e.actorId()).isEqualTo(admin.id());
+        assertThat(e.actorName()).isEqualTo("ZZ관리자");
+        // 대상은 주문자다 — 주문 자체는 detail 의 주문번호가 가리킨다.
+        assertThat(e.targetId()).isEqualTo(memberId);
+        assertThat(e.targetLogin()).isEqualTo("zzbuyer");
+        assertThat(e.detail())
+                .as("원장만 보고 «어느 주문을 어디로 보냈나» 가 읽혀야 한다")
+                .isEqualTo(order.getOrderNo() + " / CJ대한통운 123456789012");
+    }
+
+    /**
+     * 🔴 배송완료는 <b>적립금이 나간다</b>({@code earnOnDelivery}) — 그래서 원장에 <b>나간 액수</b>를 적는다.
+     *
+     * <p>⚠ 뱃지는 neutral 이다(모든 주문이 거치는 정상 진행이라 danger 로 칠하면 원장 절반이 빨개진다).
+     * <b>색이 아니라 값으로 읽게 했다</b> — 그 값이 여기 detail 이다.
+     */
+    @Test
+    @DisplayName("배송완료: 원장에 **나간 적립금**이 남는다 (색이 아니라 값으로 읽는다)")
+    void deliver_recordsEarnedPoint() {
+        Order order = sampleOrder();
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(memberService.loginIdOf(memberId)).thenReturn("zzbuyer");
+        when(pointService.earnOnDelivery(eq(memberId), anyLong(), eq(orderId))).thenReturn(420L);
+
+        orderService.deliver(orderId, admin);
+
+        AdminActionEvent e = captureAudit();
+        assertThat(e.action()).isEqualTo(AuditAction.ORDER_DELIVER);
+        assertThat(e.detail()).isEqualTo(order.getOrderNo() + " / 적립 420P");
+    }
+
+    @Test
+    @DisplayName("반품 승인: 원장에 **환불액**이 남는다 — 돈이 나간 조작이다")
+    void approveReturn_recordsRefund() {
+        Order order = returnRequestedOrder("20260101-0020");
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(memberService.loginIdOf(memberId)).thenReturn("zzbuyer");
+
+        orderService.approveReturn(order.getId(), admin);
+
+        AdminActionEvent e = captureAudit();
+        assertThat(e.action()).isEqualTo(AuditAction.ORDER_RETURN_APPROVE);
+        assertThat(e.detail()).isEqualTo("20260101-0020 / 환불 " + order.refundableAmount() + "원");
+    }
+
+    /**
+     * 🔴 거절 사유는 {@code return_rejected_reason} 에도 남지만 <b>그건 현재 상태</b>다 —
+     * 고객이 다시 반품을 요청하면 {@code requestReturn} 이 그 칸을 null 로 지운다
+     * ({@code requestReturn_clearsPreviousRejection} 이 그 동작을 못 박고 있다).
+     * 즉 «거절이 있었다» 는 사실이 화면에서 사라지고, <b>그때 남는 곳이 원장뿐</b>이다.
+     * 같은 정보의 중복이 아니라 <b>상태와 이력</b>이다.
+     */
+    @Test
+    @DisplayName("반품 거절: 원장에 **사유**가 남는다 — 재요청이 오면 주문의 사유 칸은 지워진다")
+    void rejectReturn_recordsReasonThatOrderWillLose() {
+        Order order = returnRequestedOrder("20260101-0021");
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(memberService.loginIdOf(memberId)).thenReturn("zzbuyer");
+
+        orderService.rejectReturn(order.getId(), admin, "ZZ-사용 흔적이 있습니다");
+
+        AdminActionEvent e = captureAudit();
+        assertThat(e.action()).isEqualTo(AuditAction.ORDER_RETURN_REJECT);
+        assertThat(e.detail()).isEqualTo("20260101-0021 / ZZ-사용 흔적이 있습니다");
+
+        // 🔴 여기가 요점이다: 재요청이 주문의 사유를 지워도 **원장의 줄은 그대로다**.
+        order.requestReturn("ZZ-그래도 반품해 주세요");
+        assertThat(order.getReturnRejectedReason()).isNull();
+        assertThat(e.detail()).contains("ZZ-사용 흔적이 있습니다");
+    }
+
+    /** 반품 요청까지 온 주문 하나. */
+    private Order returnRequestedOrder(String orderNo) {
+        UUID p1 = UUID.randomUUID();
+        Order order = Order.create(memberId, "구매자닉",
+                List.of(OrderItem.of(p1, p1, null, "지바", null, 10_000, null, 2)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
+                3_000, orderNo, null, 0L, null, 0L);
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        order.deliver();
+        order.requestReturn("ZZ-반품사유");
+        return order;
     }
 
     /**

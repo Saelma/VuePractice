@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.glassvue.domain.audit.entity.AdminAuditLog;
+import com.glassvue.domain.audit.entity.AuditAction;
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
 import com.glassvue.domain.catalog.entity.ProductStatus;
@@ -21,6 +23,7 @@ import com.glassvue.domain.point.repository.PointHistoryRepository;
 import com.glassvue.domain.point.service.PointService;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -239,6 +242,80 @@ class OrderReturnIntegrationTest {
         // 거절이 안 됐으니 여전히 승인 대기여야 한다 — 400 이 «막았다» 를 뜻하는지 확인한다.
         mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
                 .andExpect(jsonPath("$.data.status").value("RETURN_REQUESTED"));
+    }
+
+    // ── 감사 원장 (2026-08-14, V51) ────────────────────────────
+    //
+    // 🔴 **여기는 단위 테스트로 대신할 수 없다.** 새 enum 값이 실제로 들어가려면 Oracle 의 CHECK 제약이
+    //    그 값을 알아야 하는데 **목(mock)은 제약을 모른다** — 안 넓혔으면 여기서만 ORA-02290 으로 터진다
+    //    (Oracle enum CHECK 트랩). ⚠ 그래서 **flush 를 명시한다** — @Transactional 롤백만 하고 끝나면
+    //    INSERT 가 DB 에 안 닿아 제약이 **한 번도 실행되지 않는다**(WA §2-4-2 와 같은 함정).
+    //
+    // ⚠ 공유 DB 라 **이 테스트가 만든 구매자**로 좁힌다(대상은 주문자다).
+
+    @Test
+    @DisplayName("🔴 발송 · 배송완료 · 반품 승인이 **원장에 남는다** — 셋 다 「누가」가 아무 데도 없었다")
+    void adminOrderActions_areAudited() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+        requestReturn(buyer, orderId, "변심");
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-approve")
+                .header("Authorization", admin)).andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+
+        List<AdminAuditLog> logs = auditOfBuyer();
+        assertThat(logs).extracting(AdminAuditLog::getAction)
+                .containsExactly(AuditAction.ORDER_SHIP, AuditAction.ORDER_DELIVER,
+                        AuditAction.ORDER_RETURN_APPROVE);
+        // 원장만 보고 «어느 주문을 어디로 보냈나» 가 읽혀야 한다.
+        assertThat(logs.get(0).getDetail()).contains("CJ대한통운 ZZ123");
+        // 배송완료는 **적립금이 나간다** — 뱃지가 neutral 인 대신 값으로 읽게 했다(audit.js).
+        assertThat(logs.get(1).getDetail()).contains("적립");
+        assertThat(logs.get(2).getDetail()).contains("환불");
+        // 대상은 «주문» 이 아니라 «주문자» 다 — V43 과 같은 모양이라 target_type 논의가 안 생긴다.
+        assertThat(logs).allSatisfy(l -> {
+            assertThat(l.getTargetId()).isEqualTo(buyerId);
+            assertThat(l.getTargetLogin()).isEqualTo(buyerLoginId);
+            assertThat(l.getActorName()).isNotBlank();
+        });
+    }
+
+    /**
+     * 🔴 거절 사유는 {@code return_rejected_reason} 에도 남지만 <b>그건 현재 상태</b>다 —
+     * 고객이 다시 요청하면 그 칸이 지워지고, <b>그때 남는 곳이 원장뿐</b>이다.
+     * 같은 정보의 중복이 아니라 <b>상태와 이력</b>이라는 것을 여기서 실제로 밟는다.
+     */
+    @Test
+    @DisplayName("🔴 반품 거절도 남고, **재요청이 주문의 사유를 지워도 원장은 그대로다**")
+    void rejectReturn_auditSurvivesReRequest() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+        requestReturn(buyer, orderId, "변심");
+        rejectReturn(admin, orderId, "ZZ-사용 흔적이 있습니다");
+        requestReturn(buyer, orderId, "ZZ-그래도 반품해 주세요"); // 재요청 — 주문의 사유 칸이 지워진다
+        entityManager.flush();
+        entityManager.clear();
+
+        // 주문 쪽에서는 «거절이 있었다» 가 사라졌다.
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.returnRejectedReason").doesNotExist());
+
+        // 🔴 원장에는 남는다 — 이것이 원장을 따로 두는 이유다.
+        AdminAuditLog reject = auditOfBuyer().stream()
+                .filter(l -> l.getAction() == AuditAction.ORDER_RETURN_REJECT).findFirst().orElseThrow();
+        assertThat(reject.getDetail()).contains("ZZ-사용 흔적이 있습니다");
+    }
+
+    /** 이 테스트가 만든 구매자를 대상으로 한 감사 이력(오래된 것부터). */
+    private List<AdminAuditLog> auditOfBuyer() {
+        return entityManager.createQuery(
+                        "select a from AdminAuditLog a where a.targetId = :id order by a.createdAt",
+                        AdminAuditLog.class)
+                .setParameter("id", buyerId)
+                .getResultList();
     }
 
     private void rejectReturn(String admin, String orderId, String reason) throws Exception {

@@ -63,16 +63,16 @@ public class OrderControllerImpl implements OrderController {
 
     @Override
     @PostMapping("/{id}/ship")
-    public ResponseEntity<ApiResponse<Void>> ship(@PathVariable UUID id,
+    public ResponseEntity<ApiResponse<Void>> ship(@LoginUser AuthUser admin, @PathVariable UUID id,
                                                   @Valid @RequestBody OrderShipRequest request) {
-        orderService.ship(id, request.carrier(), request.trackingNo());
+        orderService.ship(id, admin, request.carrier(), request.trackingNo());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
     @Override
     @PostMapping("/{id}/deliver")
-    public ResponseEntity<ApiResponse<Void>> deliver(@PathVariable UUID id) {
-        orderService.deliver(id);
+    public ResponseEntity<ApiResponse<Void>> deliver(@LoginUser AuthUser admin, @PathVariable UUID id) {
+        orderService.deliver(id, admin);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
@@ -108,16 +108,16 @@ public class OrderControllerImpl implements OrderController {
     // 반품 승인·거절은 관리자만 — SecurityConfig 의 /return-approve·/return-reject 매처가 막는다(ship·deliver 와 같은 방식).
     @Override
     @PostMapping("/{id}/return-approve")
-    public ResponseEntity<ApiResponse<Void>> approveReturn(@PathVariable UUID id) {
-        orderService.approveReturn(id);
+    public ResponseEntity<ApiResponse<Void>> approveReturn(@LoginUser AuthUser admin, @PathVariable UUID id) {
+        orderService.approveReturn(id, admin);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
     @Override
     @PostMapping("/{id}/return-reject")
-    public ResponseEntity<ApiResponse<Void>> rejectReturn(@PathVariable UUID id,
+    public ResponseEntity<ApiResponse<Void>> rejectReturn(@LoginUser AuthUser admin, @PathVariable UUID id,
                                                           @Valid @RequestBody ReturnRejectRequest request) {
-        orderService.rejectReturn(id, request.reason());
+        orderService.rejectReturn(id, admin, request.reason());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 }

@@ -41,11 +41,12 @@ public interface OrderController {
 
     @Operation(summary = "발송 처리 (관리자, PAID→SHIPPED)",
             description = "택배사·송장번호를 함께 등록한다. 운송장 없이 발송 상태로 넘기면 고객이 추적할 수 없어 필수로 받는다.")
-    ResponseEntity<ApiResponse<Void>> ship(UUID id, OrderShipRequest request);
+    ResponseEntity<ApiResponse<Void>> ship(@Parameter(hidden = true) AuthUser admin, UUID id,
+            OrderShipRequest request);
 
     @Operation(summary = "배송완료 처리 (관리자, SHIPPED→DELIVERED)",
             description = "지금은 관리자 수동 전이. 택배사 웹훅 연동은 이후 단계.")
-    ResponseEntity<ApiResponse<Void>> deliver(UUID id);
+    ResponseEntity<ApiResponse<Void>> deliver(@Parameter(hidden = true) AuthUser admin, UUID id);
 
     @Operation(summary = "주문 취소 (본인, ORDERED·PAID만)",
             description = """
@@ -79,7 +80,7 @@ public interface OrderController {
             @Parameter(hidden = true) AuthUser user, UUID id, ReturnRequest request);
 
     @Operation(summary = "반품 승인 (관리자, RETURN_REQUESTED→RETURNED)")
-    ResponseEntity<ApiResponse<Void>> approveReturn(UUID id);
+    ResponseEntity<ApiResponse<Void>> approveReturn(@Parameter(hidden = true) AuthUser admin, UUID id);
 
     @Operation(summary = "반품 거절 (관리자, RETURN_REQUESTED→DELIVERED)",
             description = """
@@ -88,5 +89,6 @@ public interface OrderController {
                     고객 화면의 반품 카드도 이 값으로 뜬다. 사유는 고객 알림 문구에도 그대로 들어간다.
                     ⚠ 승인에 본문이 없는 것과 다른 이유: 거절은 **고객의 요청을 뒤집는 결정**이라 근거가 따라와야 한다.
                     """)
-    ResponseEntity<ApiResponse<Void>> rejectReturn(UUID id, ReturnRejectRequest request);
+    ResponseEntity<ApiResponse<Void>> rejectReturn(@Parameter(hidden = true) AuthUser admin, UUID id,
+            ReturnRejectRequest request);
 }

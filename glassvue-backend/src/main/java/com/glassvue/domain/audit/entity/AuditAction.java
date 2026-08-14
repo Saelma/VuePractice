@@ -76,5 +76,38 @@ public enum AuditAction {
      * <p>⚠ {@code V50} 으로 CHECK 제약을 함께 넓혔다. 넓히는 방향이라 구 jar 는 영향받지 않는다.
      */
     PRODUCT_DELETE,
-    PRODUCT_RESTORE
+    PRODUCT_RESTORE,
+    /**
+     * 관리자가 누르는 <b>주문 진행·판정</b> 넷 (2026-08-14). {@link #ORDER_CANCEL} 과 같은 자리를 메운다.
+     *
+     * <p>🔴 <b>넷 다 「언제」는 주문에 남고 「누가」는 아무 데도 안 남았다.</b> {@code shippedAt} ·
+     * {@code deliveredAt} · {@code returnedAt} · {@code returnRejectedReason} 은 다 있는데
+     * 행위자 컬럼을 가진 것은 취소({@code cancelledBy}) 하나뿐이고, 그건 감사도 함께 붙은 자리다.
+     * 즉 <b>«누가 승인했나» 를 물을 방법이 없었다</b> — 돈이 나가는 조작인데도.
+     *
+     * <p>대상은 {@link #ORDER_CANCEL} 과 같이 <b>주문자(회원)</b> 이고 주문번호는 {@code detail} 에 넣는다.
+     * 상품과 달리 «대상에 회원이 있느냐» 를 넘으므로 {@code target_type} 논의가 여기서는 안 생긴다.
+     *
+     * <p><b>detail 에 무엇을 적나</b> — 그 조작이 <b>무엇을 움직였는지</b>를 적는다.
+     * 발송은 택배사·송장, 배송완료는 <b>나간 적립금</b>, 반품 승인은 <b>환불액</b>, 거절은 <b>사유</b>다.
+     * ⚠ 거절 사유는 {@code return_rejected_reason} 에도 남지만 <b>그건 현재 상태</b>다 —
+     * 재요청이 오면 지워진다({@code requestReturn} 이 null 로 되돌린다). 원장 쪽이 이력이다.
+     *
+     * <p>⚠ <b>빈도가 높은 것을 알고 넣었다</b>(2026-08-14 사용자와 확정). 발송·배송완료는 <b>모든 주문</b>이
+     * 거치므로 원장이 주문 수에 비례해 큰다(63주문 → 최대 126행). F-2 와 같은 압력이고,
+     * 그때 정리 대상은 <b>알림이지 원장이 아니다</b> — 원장은 append-only 가 존재 이유다.
+     *
+     * <p>⚠ <b>멱등 논의가 여기서는 안 생긴다</b>({@link #PRODUCT_DELETE} 와 다른 점). 넷 다 상태 가드가
+     * <b>예외를 던진다</b>({@code isShippable}·{@code isDeliverable}·{@code isReturnPending}) —
+     * 조용히 통과하는 경로가 없으므로 «호출됐지만 아무 일도 안 일어난» 줄이 생길 수 없다.
+     *
+     * <p>🔴 <b>과거 조작은 백필하지 않는다</b> — 시각은 있어도 <b>행위자를 모른다</b>.
+     * 원장은 오늘부터 시작한다(V44·V50 과 같은 판단 — 모르는 값은 지어내지 않는다).
+     *
+     * <p>⚠ {@code V51} 로 CHECK 제약을 함께 넓혔다.
+     */
+    ORDER_SHIP,
+    ORDER_DELIVER,
+    ORDER_RETURN_APPROVE,
+    ORDER_RETURN_REJECT
 }

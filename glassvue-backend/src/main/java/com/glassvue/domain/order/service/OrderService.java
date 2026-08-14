@@ -250,14 +250,16 @@ public class OrderService {
      * "발송됐는데 추적 정보가 없는" 중간 상태가 생기지 않는다.
      */
     @Transactional
-    public void ship(UUID id, DeliveryCarrier carrier, String trackingNo) {
+    public void ship(UUID id, AuthUser actor, DeliveryCarrier carrier, String trackingNo) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!order.isShippable()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_SHIPPABLE);
         }
         order.ship(carrier, trackingNo);
-        log.info("Order shipped: {} via {} ({})", id, carrier, trackingNo);
+        publishAudit(AuditAction.ORDER_SHIP, actor, order,
+                carrier.getDisplayName() + " " + trackingNo);
+        log.info("Order shipped: {} via {} ({}) admin={}", id, carrier, trackingNo, actor.id());
     }
 
     /**
@@ -267,7 +269,7 @@ public class OrderService {
      * (PG 연동과 같은 자리 — 나중에 자동화하더라도 이 상태 전이 자체는 그대로 쓰인다).
      */
     @Transactional
-    public void deliver(UUID id) {
+    public void deliver(UUID id, AuthUser actor) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!order.isDeliverable()) {
@@ -284,7 +286,9 @@ public class OrderService {
 
         // 이벤트는 **알림용**이다 — 적립을 시키는 게 아니라 결과를 알린다.
         eventPublisher.publishEvent(OrderDeliveredEvent.from(order, earned));
-        log.info("Order delivered: {} earned={}", id, earned);
+        // ⚠ 원장에는 **나간 적립금**을 적는다 — 이 조작이 실제로 움직인 것이 그것이다(2026-08-14).
+        publishAudit(AuditAction.ORDER_DELIVER, actor, order, "적립 " + earned + "P");
+        log.info("Order delivered: {} earned={} admin={}", id, earned, actor.id());
     }
 
     /**
@@ -338,14 +342,28 @@ public class OrderService {
         requireCancellable(order);
         order.cancelByAdmin(reason, actor.id(), actor.nickname());
         applyCancellation(order);
-        // ⚠ 대상은 «주문» 이 아니라 «주문자» 다 — 감사 테이블의 target 은 회원이라 모양이 맞는다.
-        //   주문 자체는 detail 에 주문번호로 남긴다(B-18 에서 리뷰에 감사를 못 붙인 이유가 여기엔 없다).
-        eventPublisher.publishEvent(new AdminActionEvent(
-                AuditAction.ORDER_CANCEL, actor.id(), actor.nickname(),
-                order.getMemberId(), memberService.loginIdOf(order.getMemberId()),
-                order.getOrderNo() + " / " + reason));
+        publishAudit(AuditAction.ORDER_CANCEL, actor, order, reason);
         log.info("Order cancelled by admin: {} admin={} refundedPoint={}",
                 id, actor.id(), order.getUsedPoint());
+    }
+
+    /**
+     * 관리자 주문 조작을 원장에 남긴다 (2026-08-14, V51 — 취소 하나였던 자리를 다섯으로 넓히며 뽑았다).
+     *
+     * <p>⚠ <b>대상은 «주문» 이 아니라 «주문자» 다</b> — 감사 테이블의 target 은 회원이라 모양이 맞는다.
+     * 주문 자체는 {@code detail} 에 주문번호로 남긴다(B-18 에서 리뷰에 감사를 못 붙인 이유가 여기엔 없다).
+     *
+     * <p>⚠ <b>order 가 audit 을 직접 부르지 않는다</b> — 이벤트로만 낸다(도메인 간 직접 참조 금지).
+     * 같은 트랜잭션이라 <b>감사가 실패하면 조작도 롤백</b>된다.
+     *
+     * <p>⚠ {@code what} 은 «이 조작이 무엇을 움직였는가» 다 — 택배사·송장 · 나간 적립금 · 환불액 · 사유.
+     * 주문번호는 여기서 붙이므로 <b>호출자가 또 적지 않는다</b>(V43 때는 호출자가 직접 이어 붙였다).
+     */
+    private void publishAudit(AuditAction action, AuthUser actor, Order order, String what) {
+        eventPublisher.publishEvent(new AdminActionEvent(
+                action, actor.id(), actor.nickname(),
+                order.getMemberId(), memberService.loginIdOf(order.getMemberId()),
+                order.getOrderNo() + " / " + what));
     }
 
     private void requireCancellable(Order order) {
@@ -401,7 +419,7 @@ public class OrderService {
      * 한 트랜잭션이라 재고·환불·상태가 함께 커밋되거나 함께 롤백된다.
      */
     @Transactional
-    public void approveReturn(UUID id) {
+    public void approveReturn(UUID id, AuthUser actor) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!order.isReturnPending()) {
@@ -421,7 +439,10 @@ public class OrderService {
         couponService.restore(order.getMemberCouponId());
         // 판매량 되돌림은 catalog 가 구독한다 — 환불(동기)이 끝난 뒤 결과 알림(주문 취소와 같은 규약).
         eventPublisher.publishEvent(OrderReturnedEvent.from(order));
-        log.info("Return approved: {}", id);
+        // ⚠ 원장에는 **환불액**을 적는다 — 「상품합계−쿠폰」이고, 적립 회수는 그 뒤에 따라오는 정산이다.
+        publishAudit(AuditAction.ORDER_RETURN_APPROVE, actor, order,
+                "환불 " + order.refundableAmount() + "원");
+        log.info("Return approved: {} admin={}", id, actor.id());
     }
 
     /**
@@ -432,7 +453,7 @@ public class OrderService {
      * 그게 없으면 고객 화면에서 반품 이야기가 통째로 사라진다.
      */
     @Transactional
-    public void rejectReturn(UUID id, String reason) {
+    public void rejectReturn(UUID id, AuthUser actor, String reason) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!order.isReturnPending()) {
@@ -445,6 +466,10 @@ public class OrderService {
         // ⚠ 사유를 이벤트에 싣는다 — 알림 문구가 **왜 거절됐는지**를 말해야 한다.
         //    처음(같은 날 오전)엔 «주문 상세에서 확인해 주세요» 로 보냈는데 **그 상세에 아무것도 없었다.**
         eventPublisher.publishEvent(OrderReturnRejectedEvent.from(order));
-        log.info("Return rejected: {} reason={}", id, reason);
+        // 🔴 원장에 사유를 적는다 (2026-08-14). ⚠ return_rejected_reason 에도 있지만 **그건 현재 상태**다 —
+        //    고객이 다시 반품을 요청하면 requestReturn 이 그 칸을 null 로 지운다.
+        //    즉 «거절이 있었다» 는 사실이 화면에서 사라지고, 그때 남는 곳이 여기뿐이다.
+        publishAudit(AuditAction.ORDER_RETURN_REJECT, actor, order, reason);
+        log.info("Return rejected: {} reason={} admin={}", id, reason, actor.id());
     }
 }

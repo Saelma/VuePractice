@@ -29,6 +29,10 @@ export const AUDIT_ACTION_LABEL = {
   MEMBER_ROLE_CHANGE: '역할 변경',
   MEMBER_DELETE: '회원 강제 삭제',
   ORDER_CANCEL: '주문 취소(대행)',
+  ORDER_SHIP: '발송 처리',
+  ORDER_DELIVER: '배송완료 처리',
+  ORDER_RETURN_APPROVE: '반품 승인',
+  ORDER_RETURN_REJECT: '반품 거절',
   REVIEW_HIDE: '리뷰 숨김',
   REVIEW_UNHIDE: '리뷰 숨김 해제',
   INQUIRY_HIDE: '문의 숨김',
@@ -43,10 +47,16 @@ export function auditActionText(action) {
 /**
  * 조작 종류별 뱃지 색 — **되돌릴 수 있느냐로 가른다.**
  *
- * - `danger` **되돌릴 수 없다** — 회원 강제 삭제 · 주문 취소(대행)
- * - `warning` **막거나 내린다**(되돌릴 수 있다) — 회원 정지 · 리뷰/문의 숨김
- * - `success` **되돌리는 조작** — 정지 해제 · 숨김 해제
- * - `neutral` 그 밖 — 역할 변경
+ * - `danger` **되돌릴 수 없다** — 회원 강제 삭제 · 주문 취소(대행) · 반품 승인
+ * - `warning` **막거나 내린다 · 뒤집는다**(되돌릴 수 있다) — 회원 정지 · 리뷰/문의 숨김 · 반품 거절
+ * - `success` **되돌리는 조작** — 정지 해제 · 숨김 해제 · 상품 복구
+ * - `neutral` 그 밖 — 역할 변경 · **정상 흐름의 진행**(발송 · 배송완료)
+ *
+ * 🔴 **발송·배송완료를 neutral 로 둔 것은 판단이다**(2026-08-14). 배송완료는 **적립금이 나가므로**
+ * 「되돌릴 수 없다」에 걸릴 여지가 있다. 그래도 neutral 인 이유: 이 색의 쓸모는 **목록에서 멈칫하게
+ * 만드는 것**인데, 발송·배송완료는 **모든 주문이 거치는 정상 진행**이라 danger 로 칠하면
+ * 원장의 절반이 빨개진다 — 그러면 **진짜 위험한 줄이 묻힌다.**
+ * ⚠ 대신 나간 적립금은 「내용」에 숫자로 적힌다(V51) — 색이 아니라 값으로 읽게 했다.
  *
  * ⚠ **`MEMBER_SUSPEND` 를 danger 에서 warning 으로 내렸다**(2026-08-10). 종류가 3개일 땐
  * 「정지=가장 위험」이 맞았지만 9개가 되면서 **되돌릴 수 없는 것**(삭제·취소)과 같은 색을 쓸 수 없다.
@@ -61,6 +71,12 @@ export const AUDIT_ACTION_BADGE = {
   MEMBER_ROLE_CHANGE: 'badge-neutral',
   MEMBER_DELETE: 'badge-danger',
   ORDER_CANCEL: 'badge-danger',
+  ORDER_SHIP: 'badge-neutral',
+  ORDER_DELIVER: 'badge-neutral',
+  // 반품 승인은 **환불이 나간다** — 취소와 같은 무게다.
+  ORDER_RETURN_APPROVE: 'badge-danger',
+  // 거절은 **고객의 요청을 뒤집는** 것이지 끝내는 것이 아니다 — 다시 요청할 수 있다.
+  ORDER_RETURN_REJECT: 'badge-warning',
   REVIEW_HIDE: 'badge-warning',
   REVIEW_UNHIDE: 'badge-success',
   INQUIRY_HIDE: 'badge-warning',
