@@ -94,7 +94,13 @@ const actionBadge = auditActionBadge;
       <DxColumn data-field="createdAt" caption="일시" :width="180" :calculate-display-value="(r) => fmt(r.createdAt)" />
       <DxColumn data-field="action" caption="조작" :width="110" alignment="center" cell-template="actionCell" />
       <DxColumn data-field="actorName" caption="관리자" :width="140" />
-      <DxColumn data-field="targetLogin" caption="대상 아이디" :width="160" />
+      <!--
+        ⚠ 빈칸이 아니라 '—' 로 그린다(2026-08-14). 대상이 **회원이 아닌** 조작이 생기면서
+        (상품 삭제·복구 — 그때 targetLogin 은 null 이다) 이 칸이 정상적으로 비는 줄이 섞인다.
+        그냥 두면 «데이터가 빠졌다» 로 읽힌다 — 옆 「내용」 열이 같은 이유로 이미 이렇게 한다.
+      -->
+      <DxColumn data-field="targetLogin" caption="대상 아이디" :width="160"
+                :calculate-display-value="(r) => r.targetLogin || '—'" />
       <DxColumn data-field="detail" caption="내용" :calculate-display-value="(r) => r.detail || '—'" />
 
       <DxPaging :page-size="20" />

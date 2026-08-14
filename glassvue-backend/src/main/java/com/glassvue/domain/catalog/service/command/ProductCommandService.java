@@ -1,5 +1,7 @@
 package com.glassvue.domain.catalog.service.command;
 
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.catalog.config.CatalogProperties;
 import com.glassvue.domain.catalog.dto.ProductCreateRequest;
 import com.glassvue.domain.catalog.dto.ProductUpdateRequest;
@@ -154,11 +156,14 @@ public class ProductCommandService {
      * ({@link Product#softDelete}). 갱신되면 <b>누를 때마다 유예가 처음으로 되돌아가</b> 영영 안 지워진다.
      */
     @CacheEvict(cacheNames = "products:list", allEntries = true)
-    public void delete(UUID id, String actorName) {
+    public void delete(UUID id, AuthUser actor) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
-        product.softDelete(actorName);
-        log.info("[상품] 삭제 대기 — id={} name={} by={}", id, product.getName(), actorName);
+        if (!product.softDelete(actor.nickname())) {
+            return; // 이미 대기 중 — 조작이 없었으므로 감사도 남기지 않는다
+        }
+        log.info("[상품] 삭제 대기 — id={} name={} by={}", id, product.getName(), actor.nickname());
+        publishAudit(AuditAction.PRODUCT_DELETE, actor, product);
     }
 
     /**
@@ -169,11 +174,32 @@ public class ProductCommandService {
      * 이미 이뤄져 있다(반품 숨김 해제가 멱등인 것과 같은 판단).
      */
     @CacheEvict(cacheNames = "products:list", allEntries = true)
-    public void restore(UUID id) {
+    public void restore(UUID id, AuthUser actor) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
-        product.restore();
-        log.info("[상품] 삭제 대기 해제 — id={} name={}", id, product.getName());
+        if (!product.restore()) {
+            return; // 대기 중이 아니었다 — 두 번 눌러도 감사는 한 줄이다
+        }
+        log.info("[상품] 삭제 대기 해제 — id={} name={} by={}", id, product.getName(), actor.nickname());
+        publishAudit(AuditAction.PRODUCT_RESTORE, actor, product);
+    }
+
+    /**
+     * 상품 조작을 감사 원장에 잇는다 (2026-08-14).
+     *
+     * <p>🔴 <b>대상이 회원이 아닌 첫 자리다</b> — {@code targetId} 에 <b>상품 id</b> 를 넣고
+     * {@code targetLogin} 은 {@code null} 로 둔다. «없는 회원» 을 가리키는 것이 아니라
+     * <b>애초에 회원이 대상이 아니다</b>(뜻은 {@link AuditAction#PRODUCT_DELETE} 주석에 적었다).
+     *
+     * <p>⚠ 상품명은 <b>스냅샷</b>이라 {@code detail} 에 넣는다 — 상품은 유예가 지나면 진짜로 사라지고,
+     * 그러면 id 만으로는 «무엇을 지웠는지» 를 영영 못 읽는다(감사는 대상보다 오래 산다).
+     *
+     * <p>⚠ audit 의 내부를 직접 부르지 않고 이벤트만 발행한다(도메인 간 직접 참조 금지 — CLAUDE.md).
+     * 기본 {@code @EventListener} 라 <b>같은 트랜잭션</b>이다 — 감사가 실패하면 삭제도 롤백된다.
+     */
+    private void publishAudit(AuditAction action, AuthUser actor, Product product) {
+        eventPublisher.publishEvent(new AdminActionEvent(
+                action, actor.id(), actor.nickname(), product.getId(), null, product.getName()));
     }
 
     /**

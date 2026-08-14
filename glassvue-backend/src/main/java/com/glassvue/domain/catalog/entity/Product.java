@@ -148,22 +148,35 @@ public class Product extends BaseTimeEntity {
      *
      * <p>⚠ <b>이미 대기 중이면 시각을 다시 쓰지 않는다.</b> 다시 누를 때마다 갱신되면
      * <b>유예가 영원히 안 끝난다</b>(누를 때마다 D-7 로 되돌아간다).
+     *
+     * @return 이번 호출로 <b>실제로 바뀌었나</b>. 2026-08-14 에 붙였다 — 감사 기록(PRODUCT_DELETE)이
+     *         «조작이 있었을 때만» 남아야 하는데, 멱등이라 <b>호출 여부로는 그걸 알 수 없다.</b>
+     *         (같은 이유로 {@code MemberCoupon.restore()} 도 boolean 이다.)
      */
-    public void softDelete(String actorName) {
+    public boolean softDelete(String actorName) {
         if (deletedAt != null) {
-            return;
+            return false;
         }
         this.deletedAt = Instant.now();
         this.deletedByName = actorName;
+        return true;
     }
 
     /**
      * 되살린다. ⚠ <b>{@code deletedByName} 도 함께 지운다</b> — 남겨 두면 살아 있는 상품에
      * «누가 지웠다» 가 붙어 다음 사람이 «지금 삭제 대기인가?» 로 읽는다.
      * (반품 재요청이 이전 거절 기록을 지우는 것과 같은 판단 — 2026-08-11 V47.)
+     *
+     * @return 이번 호출로 <b>실제로 되살아났나</b>. 대기 중이 아니었으면 {@code false} 다 —
+     *         복구 화면에서 <b>두 번 누르면</b> 감사에 두 줄이 남는 것을 막는 자리다
+     *         (멱등을 «에러로 만들지 않는다» 는 판단은 그대로 두고, <b>기록만</b> 가른다).
      */
-    public void restore() {
+    public boolean restore() {
+        if (deletedAt == null) {
+            return false;
+        }
         this.deletedAt = null;
         this.deletedByName = null;
+        return true;
     }
 }

@@ -65,8 +65,9 @@ public class ProductControllerImpl implements ProductController {
     @Override
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@LoginUser AuthUser user, @PathVariable UUID id) {
-        // 이름을 넘기는 이유: 복구 화면이 «누가 지웠나» 를 보여준다(주문의 cancelled_by_name 과 같은 자리).
-        commandService.delete(id, user.nickname());
+        // 행위자를 통째로 넘긴다: 복구 화면이 «누가 지웠나» 를 보여주고(deleted_by_name),
+        // 2026-08-14 부터 감사 원장에도 남는다(actor_id 가 필요해 닉네임만으로는 부족하다).
+        commandService.delete(id, user);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 }

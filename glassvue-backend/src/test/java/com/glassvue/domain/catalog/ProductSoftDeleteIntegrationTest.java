@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.glassvue.domain.audit.entity.AdminAuditLog;
+import com.glassvue.domain.audit.entity.AuditAction;
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
@@ -276,6 +278,62 @@ class ProductSoftDeleteIntegrationTest {
         mockMvc.perform(post("/api/admin/products/" + productId + "/restore")
                         .header("Authorization", admin))
                 .andExpect(status().isOk());
+    }
+
+    // ── ⑤ 감사 원장 (2026-08-14) ──────────────────────────────
+    //
+    // 🔴 **여기는 단위 테스트로 대신할 수 없다.** 새 enum 값이 실제로 들어가려면 Oracle 의
+    //    CHECK 제약(V50)이 그 값을 알아야 하는데, 목(mock)은 제약을 모른다 —
+    //    제약을 안 넓혔으면 **여기서만** ORA-02290 으로 터진다(Oracle enum CHECK 트랩).
+
+    @Test
+    @DisplayName("🔴 삭제가 **감사 원장에 남는다** — 대상은 상품 id, 이름은 detail 에 스냅샷")
+    void delete_isAudited() throws Exception {
+        deleteProduct();
+
+        List<AdminAuditLog> logs = auditOf(productId);
+        assertThat(logs).hasSize(1);
+        AdminAuditLog log = logs.get(0);
+        assertThat(log.getAction()).isEqualTo(AuditAction.PRODUCT_DELETE);
+        assertThat(log.getActorName()).isNotBlank();
+        assertThat(log.getDetail())
+                .as("상품은 유예가 지나면 진짜로 사라진다 — 이름이 없으면 «무엇을 지웠는지» 를 영영 못 읽는다")
+                .isEqualTo(productName);
+        assertThat(log.getTargetLogin())
+                .as("대상이 회원이 아니다 — '(탈퇴)' 같은 것으로 메우면 없는 계정을 찾게 된다(V45 의 판단)")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("⚠ 두 번 지워도 감사는 **한 줄**이다 — 조작이 없었으면 기록도 없다")
+    void delete_idempotent_isAuditedOnce() throws Exception {
+        deleteProduct();
+        deleteProduct();
+
+        assertThat(auditOf(productId)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("복구도 남는다 — 삭제와 **짝**이라야 «지웠다 되살렸다» 가 읽힌다")
+    void restore_isAudited() throws Exception {
+        deleteProduct();
+        mockMvc.perform(post("/api/admin/products/" + productId + "/restore")
+                        .header("Authorization", admin))
+                .andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(auditOf(productId)).extracting(AdminAuditLog::getAction)
+                .containsExactly(AuditAction.PRODUCT_DELETE, AuditAction.PRODUCT_RESTORE);
+    }
+
+    /** 이 상품을 대상으로 한 감사 이력(오래된 것부터). ⚠ 공유 DB 라 대상 id 로 좁힌다 — 상품은 매번 새로 만든다. */
+    private List<AdminAuditLog> auditOf(UUID targetId) {
+        return entityManager.createQuery(
+                        "select a from AdminAuditLog a where a.targetId = :id order by a.createdAt",
+                        AdminAuditLog.class)
+                .setParameter("id", targetId)
+                .getResultList();
     }
 
     // ── 권한 ─────────────────────────────────────────────────

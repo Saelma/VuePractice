@@ -53,5 +53,28 @@ public enum AuditAction {
     REVIEW_HIDE,
     REVIEW_UNHIDE,
     INQUIRY_HIDE,
-    INQUIRY_UNHIDE
+    INQUIRY_UNHIDE,
+    /**
+     * 상품 삭제 대기(F-7 의 soft delete) / 되돌리기 (2026-08-14).
+     *
+     * <p>🔴 <b>«대상에 회원이 있느냐» 를 처음으로 못 넘는 값이다.</b> {@link #ORDER_CANCEL} 은 주문자를,
+     * {@link #REVIEW_HIDE} 는 작성자를 대상으로 잡아 통과했는데 <b>상품에는 회원이 없다.</b>
+     * 그래서 {@code targetId} 의 뜻을 넓혔다 — <b>«대상의 id, 그게 무엇인지는 이 action 이 말한다»</b>
+     * (2026-08-14 사용자와 확정). {@code targetLogin} 은 {@code null} 이고 상품명은 {@code detail} 에 넣는다.
+     *
+     * <p>⚠ 대가를 하나 안다: 감사 화면의 검색은 <b>{@code targetLogin} 부분일치</b>뿐이라
+     * (AdminAuditLogRepository) 상품 행은 <b>「조작 종류」 필터로만</b> 걸린다. 「대상 아이디」 열도 빈칸이다.
+     * 이것이 «회원 아닌 대상» 이 처음 들어온 대가이고, 늘어나면 그때 {@code target_type} 을 세운다.
+     *
+     * <p>⚠ <b>영구 삭제(purge)는 남기지 않는다</b> — 부르는 것이 배치라 <b>행위자가 사람이 아니다</b>
+     * ({@code actor_id} 는 NOT NULL 이고 지어낼 값이 아니다). 그 시점은 애플리케이션 로그에만 남는다.
+     *
+     * <p>🔴 <b>과거 삭제는 감사에 없다</b> — 백필할 출처가 없다({@code deleted_by_name} 은 «누가» 만 알고
+     * «언제» 는 {@code deleted_at} 인데, <b>복구하면 둘 다 지워진다</b>). 원장은 오늘부터 시작한다
+     * (V44 가 리뷰 숨김에서 한 판단과 같다 — 모르는 값은 지어내지 않는다).
+     *
+     * <p>⚠ {@code V50} 으로 CHECK 제약을 함께 넓혔다. 넓히는 방향이라 구 jar 는 영향받지 않는다.
+     */
+    PRODUCT_DELETE,
+    PRODUCT_RESTORE
 }

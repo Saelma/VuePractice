@@ -5,7 +5,9 @@ import com.glassvue.domain.catalog.dto.LowStockResponse;
 import com.glassvue.domain.catalog.dto.StockHistoryResponse;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
@@ -84,6 +86,9 @@ public interface AdminProductController {
 
                     🔴 **「지금 바로 지우는」 엔드포인트는 없다.** 유예를 건너뛸 수 있으면 이 기능이
                     무의미해진다 — 영구 삭제는 배치(`ProductPurgeScheduler`)만 한다.
+
+                    ⚠ 2026-08-14 부터 **감사 원장에 남는다**(`PRODUCT_RESTORE`). 멱등 호출(대기 중이
+                    아닌 상품)은 **남지 않는다** — 조작이 없었으므로 기록도 없다.
                     """)
-    ResponseEntity<ApiResponse<Void>> restore(UUID id);
+    ResponseEntity<ApiResponse<Void>> restore(@Parameter(hidden = true) AuthUser user, UUID id);
 }

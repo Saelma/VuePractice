@@ -15,8 +15,9 @@ import java.util.UUID;
  * @param action      조작 종류
  * @param actorId     행위자(관리자) id
  * @param actorName   행위자 닉네임 스냅샷
- * @param targetId    대상 회원 id
- * @param targetLogin 대상 loginId 스냅샷
+ * @param targetId    대상의 id. <b>대개 회원</b>이지만 회원이 아닐 수 있다 — 무엇인지는 {@code action} 이
+ *                    말한다(2026-08-14, {@code PRODUCT_DELETE} 부터. 그전까지는 «대상 회원 id» 였다).
+ * @param targetLogin 대상 loginId 스냅샷. 대상이 회원이 아니거나(상품) 이미 없으면(탈퇴) {@code null}
  * @param detail      부가 설명(역할변경의 전/후 등). 없으면 null.
  */
 public record AdminActionEvent(

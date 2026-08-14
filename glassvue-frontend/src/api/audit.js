@@ -33,6 +33,8 @@ export const AUDIT_ACTION_LABEL = {
   REVIEW_UNHIDE: '리뷰 숨김 해제',
   INQUIRY_HIDE: '문의 숨김',
   INQUIRY_UNHIDE: '문의 숨김 해제',
+  PRODUCT_DELETE: '상품 삭제',
+  PRODUCT_RESTORE: '상품 복구',
 };
 export function auditActionText(action) {
   return AUDIT_ACTION_LABEL[action] || action || '';
@@ -63,6 +65,10 @@ export const AUDIT_ACTION_BADGE = {
   REVIEW_UNHIDE: 'badge-success',
   INQUIRY_HIDE: 'badge-warning',
   INQUIRY_UNHIDE: 'badge-success',
+  // 상품 삭제는 **유예 안에서는 되돌릴 수 있다**(F-7) — 그래서 danger 가 아니라 warning 이다.
+  // ⚠ 유예가 지나 배치가 진짜로 지우는 순간은 되돌릴 수 없지만, 그건 감사에 안 남는다(V50 참조).
+  PRODUCT_DELETE: 'badge-warning',
+  PRODUCT_RESTORE: 'badge-success',
 };
 export function auditActionBadge(action) {
   return AUDIT_ACTION_BADGE[action] || 'badge-neutral';

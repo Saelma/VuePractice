@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.catalog.config.CatalogProperties;
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
@@ -23,6 +25,8 @@ import com.glassvue.domain.catalog.repository.VariantStockSnapshot;
 import com.glassvue.domain.image.service.ImageService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.security.AuthUser;
+import com.glassvue.domain.member.entity.Role;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +54,9 @@ class ProductCommandServiceTest {
 
     private final CatalogProperties catalogProperties = new CatalogProperties(5, 7, true); // 임계치 5 · 삭제 유예 7일 · 배치 on
     private ProductCommandService service;
+
+    /** 조작을 한 관리자 — 감사 원장이 actorId 를 요구하면서 닉네임만으로는 부족해졌다(2026-08-14). */
+    private final AuthUser admin = new AuthUser(UUID.randomUUID(), Role.ADMIN, "ZZ관리자");
 
     private final UUID productId = UUID.randomUUID();
     private final UUID variantId = UUID.randomUUID();
@@ -133,7 +140,7 @@ class ProductCommandServiceTest {
     @DisplayName("삭제: 없는 상품 → PRODUCT_NOT_FOUND, 아무것도 안 건드린다")
     void delete_notFound() {
         when(productRepository.findById(productId)).thenReturn(Optional.empty());
-        assertErrorCode(() -> service.delete(productId, "ZZ관리자"), ErrorCode.PRODUCT_NOT_FOUND);
+        assertErrorCode(() -> service.delete(productId, admin), ErrorCode.PRODUCT_NOT_FOUND);
         verify(productRepository, never()).delete(any());
         verify(imageService, never()).deleteGroup(any());
     }
@@ -152,12 +159,45 @@ class ProductCommandServiceTest {
         Product product = productWithImageGroup(groupId);
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
 
-        service.delete(productId, "ZZ관리자");
+        service.delete(productId, admin);
 
         assertThat(product.isDeleted()).isTrue();
         assertThat(product.getDeletedByName()).isEqualTo("ZZ관리자");
         verify(productRepository, never()).delete(any());
         verify(imageService, never()).deleteGroup(any());
+    }
+
+    @Test
+    @DisplayName("🔴 삭제는 감사 원장에 남는다 — 상품명을 **스냅샷**으로 싣는다(상품은 나중에 사라진다)")
+    void delete_publishesAudit() {
+        Product product = productWithImageGroup(UUID.randomUUID());
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        service.delete(productId, admin);
+
+        ArgumentCaptor<AdminActionEvent> captor = ArgumentCaptor.forClass(AdminActionEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        AdminActionEvent event = captor.getValue();
+        assertThat(event.action()).isEqualTo(AuditAction.PRODUCT_DELETE);
+        assertThat(event.actorId()).isEqualTo(admin.id());
+        assertThat(event.actorName()).isEqualTo("ZZ관리자");
+        assertThat(event.detail()).isEqualTo("지바"); // 상품명 스냅샷
+        // 🔴 대상이 **회원이 아니다** — 이 자리가 그것을 못 박는 단언이다(V50 의 결정).
+        assertThat(event.targetLogin()).isNull();
+    }
+
+    @Test
+    @DisplayName("🔴 이미 삭제 대기인 상품을 또 지워도 **감사는 안 남는다**(조작이 없었다)")
+    void delete_idempotent_noAudit() {
+        Product product = productWithImageGroup(UUID.randomUUID());
+        product.softDelete("먼저지운관리자");
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        service.delete(productId, admin);
+
+        // 유예가 되돌아가지 않는 것과 **같은 이유**로 원장도 늘지 않는다.
+        assertThat(product.getDeletedByName()).isEqualTo("먼저지운관리자");
+        verify(eventPublisher, never()).publishEvent(any(AdminActionEvent.class));
     }
 
     @Test
@@ -180,10 +220,26 @@ class ProductCommandServiceTest {
         product.softDelete("ZZ관리자");
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
 
-        service.restore(productId);
+        service.restore(productId, admin);
 
         assertThat(product.isDeleted()).isFalse();
         assertThat(product.getDeletedByName()).isNull();
+
+        ArgumentCaptor<AdminActionEvent> captor = ArgumentCaptor.forClass(AdminActionEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().action()).isEqualTo(AuditAction.PRODUCT_RESTORE);
+    }
+
+    @Test
+    @DisplayName("🔴 복구 버튼을 **두 번 눌러도** 감사는 한 줄이다(멱등은 200 이지만 기록은 아니다)")
+    void restore_idempotent_noAudit() {
+        Product product = productWithImageGroup(UUID.randomUUID()); // 대기 중이 아니다
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        service.restore(productId, admin);
+
+        assertThatCode(() -> service.restore(productId, admin)).doesNotThrowAnyException(); // 멱등은 그대로
+        verify(eventPublisher, never()).publishEvent(any(AdminActionEvent.class));
     }
 
     @Test

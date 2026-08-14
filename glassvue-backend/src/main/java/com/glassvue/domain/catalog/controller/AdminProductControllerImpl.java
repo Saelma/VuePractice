@@ -8,6 +8,8 @@ import com.glassvue.domain.catalog.service.query.ProductQueryService;
 import com.glassvue.domain.catalog.service.query.StockHistoryQueryService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.global.security.AuthUser;
+import com.glassvue.global.security.LoginUser;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -56,8 +58,8 @@ public class AdminProductControllerImpl implements AdminProductController {
 
     @Override
     @PostMapping("/{id}/restore")
-    public ResponseEntity<ApiResponse<Void>> restore(@PathVariable UUID id) {
-        productCommandService.restore(id);
+    public ResponseEntity<ApiResponse<Void>> restore(@LoginUser AuthUser user, @PathVariable UUID id) {
+        productCommandService.restore(id, user);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 }
