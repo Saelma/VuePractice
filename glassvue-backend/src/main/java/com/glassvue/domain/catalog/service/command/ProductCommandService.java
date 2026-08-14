@@ -138,6 +138,43 @@ public class ProductCommandService {
         // 옵션을 통째로 교체하므로 옵션이 아니라 상품 총재고 0→양수로 판단한다. sumStockByProduct 는
         // JPQL 이라 위 save 들을 flush 한 뒤의 값을 본다(새 옵션 반영).
         publishIfReplenished(id, stockBefore, product.getName());
+        publishIfCrossedIntoLow(id, product.getName(), stockByName, saved);
+    }
+
+    /**
+     * 관리자 편집으로 재고가 <b>임계 위 → 이하로 넘어간</b> 옵션에 재고 부족을 알린다
+     * (2026-08-14, BACKLOG F-8).
+     *
+     * <p>🔴 <b>주문 경로와 규칙이 일부러 다르다.</b> 주문은 «차감 후 값이 임계 이하면» 발행이라
+     * 5→4→3 으로 팔리면 <b>세 번</b> 온다(실측: 07-27 에 4·3·2·1 로 네 건). 그게 주문에는 맞다 —
+     * 파는 사람은 재고가 줄고 있다는 것을 매번 알아야 한다.
+     * <b>편집에 같은 규칙을 쓰면 관리자가 저장할 때마다 온다</b>(8→7 로 고쳐도 7이 임계 이하면 발송).
+     * 관리자는 <b>자기가 그 값을 입력한 사람</b>이라 그건 알림이 아니라 소음이다.
+     * → 편집은 <b>전이</b>일 때만 낸다(2026-08-14 사용자와 확정).
+     *
+     * <p>⚠ <b>새로 생긴 옵션은 내지 않는다.</b> 비교할 이전 상태가 없어 «넘어갔다» 가 성립하지 않는다
+     * (재고 1짜리 옵션을 새로 만들어도 조용하다 — 방금 그 값을 입력한 사람이 안다).
+     * ⚠ 🔴 <b>사라진 옵션도 내지 않는다.</b> {@code recordEdit} 은 이름 합집합을 돌며 사라진 옵션을
+     * «0 으로 갔다» 로 세지만(이력에는 그게 맞다), <b>여기서 같은 셈을 하면 옵션을 지운 것이
+     * 「재고 부족」으로 나간다.</b> 그 옵션은 이제 없으므로 채울 재고도 없다 —
+     * 그래서 <b>편집 후 살아남은 옵션만</b> 본다.
+     *
+     * <p>⚠ 재입고와 동시에 날 수는 없다: 총재고가 0 이었다면 모든 옵션이 0 이라 «임계 위» 인 옵션이
+     * 하나도 없다. 둘은 구조적으로 배타적이다.
+     */
+    private void publishIfCrossedIntoLow(UUID productId, String productName,
+                                         Map<String, Long> before, List<ProductVariant> after) {
+        long threshold = catalogProperties.lowStockThreshold();
+        for (ProductVariant variant : after) {
+            Long from = before.get(variant.getName());
+            if (from == null) {
+                continue; // 새 옵션 — 넘어온 것이 아니라 그렇게 태어났다
+            }
+            if (from > threshold && variant.getStock() <= threshold) {
+                eventPublisher.publishEvent(new StockRunningLowEvent(
+                        productId, productName, variant.getName(), variant.getStock(), threshold));
+            }
+        }
     }
 
     /**
@@ -265,7 +302,14 @@ public class ProductCommandService {
         publishIfRunningLow(snapshot);
     }
 
-    /** 차감 후 잔여가 임계치 이하면 재고 부족 이벤트 발행(어느 옵션인지 함께). */
+    /**
+     * 차감 후 잔여가 임계치 이하면 재고 부족 이벤트 발행(어느 옵션인지 함께).
+     *
+     * <p>⚠ <b>이것은 「상태」 판정이다</b> — 차감할 때마다 값을 보므로 5→4→3 이면 <b>세 번</b> 나간다.
+     * 파는 사람은 재고가 줄고 있다는 것을 매번 알아야 하므로 주문 경로에는 이게 맞다.
+     * 🔴 <b>편집 경로는 「전이」로 갈렸다</b> — 이유는 {@link #publishIfCrossedIntoLow} 에 적었다.
+     * 두 규칙이 다른 것은 실수가 아니다.
+     */
     private void publishIfRunningLow(Optional<VariantStockSnapshot> snapshot) {
         snapshot.filter(s -> s.stock() <= catalogProperties.lowStockThreshold())
                 .ifPresent(s -> eventPublisher.publishEvent(new StockRunningLowEvent(

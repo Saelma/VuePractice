@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.glassvue.domain.catalog.entity.Category;
+import com.glassvue.domain.catalog.event.StockRunningLowEvent;
 import com.glassvue.domain.catalog.entity.StockChangeReason;
 import com.glassvue.domain.catalog.entity.StockHistory;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
@@ -29,6 +30,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +58,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@RecordApplicationEvents
 class StockHistoryIntegrationTest {
 
     @Autowired MockMvc mockMvc;
@@ -64,6 +68,7 @@ class StockHistoryIntegrationTest {
     @Autowired ProductVariantRepository variantRepository;
     @Autowired StockHistoryRepository stockHistoryRepository;
     @Autowired EntityManager entityManager;
+    @Autowired ApplicationEvents events;
 
     private static final String JSON = "application/json";
     private static final String PW = "password123";
@@ -379,6 +384,65 @@ class StockHistoryIntegrationTest {
                         .header("Authorization", login(adminLoginId)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false));
+    }
+
+    // ── 재고 부족 알림 — 편집 경로 (2026-08-14, BACKLOG F-8) ──────
+    //
+    // 🔴 **주문 경로와 규칙이 일부러 다르다**: 주문은 「상태」(차감마다 임계 이하면 발행),
+    //    편집은 「전이」(임계 위 → 이하로 넘어갈 때만). 관리자는 자기가 그 값을 입력한 사람이라
+    //    저장할 때마다 오면 알림이 아니라 소음이다. 아래 넷이 그 규칙의 경계를 못 박는다.
+
+    /** 이번 테스트에서 발행된 재고 부족 이벤트(옵션명만). */
+    private List<String> lowStockEvents() {
+        return events.stream(StockRunningLowEvent.class).map(StockRunningLowEvent::variantName).toList();
+    }
+
+    @Test
+    @DisplayName("🔴 전이: 임계 **위 → 이하**로 내리면 알린다 (10 → 3, 임계 5)")
+    void edit_crossesIntoLow_publishes() throws Exception {
+        String admin = login(adminLoginId);
+        UUID productId = createProduct(admin, "전이", variantJson("검정", 10));
+
+        updateProduct(admin, productId, "ZZP-재고이력전이" + suffix, variantJson("검정", 3));
+
+        assertThat(lowStockEvents()).containsExactly("검정");
+    }
+
+    @Test
+    @DisplayName("🔴 이미 임계 이하면 **또 내려도 안 알린다** — 여기가 「상태」와 갈리는 자리다 (3 → 2)")
+    void edit_alreadyLow_doesNotPublish() throws Exception {
+        String admin = login(adminLoginId);
+        UUID productId = createProduct(admin, "이미낮음", variantJson("검정", 3));
+
+        updateProduct(admin, productId, "ZZP-재고이력이미낮음" + suffix, variantJson("검정", 2));
+
+        // 주문 경로였다면 여기서 한 건 나갔다. 편집은 이미 넘어와 있던 것이라 새 소식이 아니다.
+        assertThat(lowStockEvents()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("⚠ 새로 만든 옵션은 안 알린다 — 비교할 이전 상태가 없어 「넘어갔다」가 성립 안 한다")
+    void edit_newVariant_doesNotPublish() throws Exception {
+        String admin = login(adminLoginId);
+        UUID productId = createProduct(admin, "새옵션", variantJson("검정", 10));
+
+        updateProduct(admin, productId, "ZZP-재고이력새옵션" + suffix,
+                variantJson("검정", 10), variantJson("흰색", 1));
+
+        assertThat(lowStockEvents()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("🔴 **사라진 옵션은 안 알린다** — 지운 것을 「재고 부족」으로 알리면 채울 대상이 없다")
+    void edit_removedVariant_doesNotPublish() throws Exception {
+        String admin = login(adminLoginId);
+        UUID productId = createProduct(admin, "옵션삭제", variantJson("검정", 10), variantJson("흰색", 10));
+
+        // 「흰색」을 뺀다. ⚠ 재고 **이력**은 이것을 «10 → 0» 감소로 남긴다(update_removedVariant_recordsDecrease).
+        //    같은 셈을 알림에 쓰면 0 은 임계 이하라 「흰색 재고 부족」이 나간다 — 그 옵션은 이제 없는데도.
+        updateProduct(admin, productId, "ZZP-재고이력옵션삭제" + suffix, variantJson("검정", 10));
+
+        assertThat(lowStockEvents()).isEmpty();
     }
 
     @Test
