@@ -96,7 +96,7 @@ async function onSubmit() {
       <div class="card p-6">
         <h1 class="page-title">회원가입</h1>
         <p class="muted mt-1">가입이 끝나면 자동으로 로그인됩니다.</p>
-        <p v-if="welcomeCoupon" class="mt-3 rounded-card border border-ink-200 bg-canvas px-4 py-3 text-sm text-ink-700">
+        <p v-if="welcomeCoupon" class="mt-3 rounded-card border border-line bg-canvas px-4 py-3 text-sm text-ink-700">
           가입 즉시 <strong class="text-ink-900">{{ couponDiscountText(welcomeCoupon) }}</strong> 쿠폰이 지급됩니다.
         </p>
 
