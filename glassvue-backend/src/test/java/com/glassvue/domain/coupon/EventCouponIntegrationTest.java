@@ -177,10 +177,17 @@ class EventCouponIntegrationTest {
         String user = login(userLoginId);
         Instant now = Instant.now();
 
-        // 어제 하루짜리 이벤트. ⚠ 사용 기간은 아직 살아 있다 — «발급은 끝났지만 쓸 수는 있다» 가 정상이다.
-        String closed = "ZZ어제 이벤트 " + UUID.randomUUID().toString().substring(0, 8);
-        createCoupon(admin, closed, now.minus(2, ChronoUnit.DAYS),
-                now.minus(1, ChronoUnit.DAYS), now.plus(20, ChronoUnit.DAYS)).andExpect(status().isOk());
+        // 이미 닫힌 하루짜리 이벤트. ⚠ 사용 기간은 아직 살아 있다 — «발급은 끝났지만 쓸 수는 있다» 가 정상이다.
+        //
+        // 🔴 **창을 «어제» 에서 «한 해 전» 으로 옮겼다**(2026-08-14). 어제 창은 **운영과 겹쳐 생성이
+        //    거부됐다** — 08-13 검증 쿠폰(발급 창 08-13)이 남아 있었고, 겹침 금지는 앱이 지키므로
+        //    createCoupon 자체가 실패해 **테스트가 볼 것에 닿지도 못했다.**
+        // ⚠ 한 해 전이 안전한 것은 우연이 아니다: **이벤트 쿠폰 기능은 2026-08-13 에 생겼다**(G-8, V49).
+        //    그 이전 발급 창을 가진 쿠폰은 **구조적으로 있을 수 없다** — «아마 없겠지» 가 아니다.
+        //    (근본은 그대로다: 공유 DB라 운영 상태를 전제하는 단언은 언젠가 깨진다 — 08-13 §9-4.)
+        String closed = "ZZ지난해 이벤트 " + UUID.randomUUID().toString().substring(0, 8);
+        createCoupon(admin, closed, now.minus(400, ChronoUnit.DAYS),
+                now.minus(399, ChronoUnit.DAYS), now.plus(20, ChronoUnit.DAYS)).andExpect(status().isOk());
 
         String banner = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();

@@ -235,11 +235,20 @@ class AdminLowStockIntegrationTest {
         productWithVariant("대조숨김", ProductStatus.HIDDEN, 1);
 
         // 서비스가 쓰는 것과 **같은 정의**를 SQL 로 다시 쓴다. 둘이 갈라지면 여기서 잡힌다.
+        //
+        // 🔴 `deleted_at IS NULL` 은 **2026-08-14 에 뒤늦게 붙었다.** F-7(삭제 유예, 08-12)이
+        //    서비스 쪽에는 이 조건을 넣었는데 **여기 대조 SQL 에는 안 넣었다** — 그래서 이 테스트는
+        //    «둘이 같은 정의인가» 를 묻는 이름을 달고 **정의가 다른 채로 초록**이었다.
+        //    드러난 계기: 08-13 검증 상품(재고 3)이 삭제 대기로 가면서 **삭제 대기이면서 저재고**인
+        //    행이 운영에 처음 생겼다. 그런 행이 없는 동안은 두 정의가 우연히 같은 답을 냈을 뿐이다.
+        // ⚠ 이 자리는 "테스트가 운영 데이터에 깨졌다" 가 아니다 — **운영 데이터가 테스트의 결함을
+        //    드러낸 것**이다. 둘은 다르고, 대응도 다르다(전자는 견디게, 후자는 고친다).
         Number expected = (Number) entityManager.createNativeQuery("""
                 SELECT COUNT(*)
                   FROM product_variant v
                   JOIN product p ON p.id = v.product_id
                  WHERE p.status <> 'HIDDEN'
+                   AND p.deleted_at IS NULL
                    AND v.stock <= ?1
                 """).setParameter(1, THRESHOLD).getSingleResult();
 
