@@ -52,8 +52,12 @@ async function mountWith(rows) {
   // 🔴 **고정 대기(setTimeout(0))를 쓰지 않는다.** 처음엔 그렇게 썼는데 **단독 실행만 초록이고
   //    전수에서 깨졌다** — 다른 파일과 함께 돌면 그리드가 첫 로딩을 끝내는 데 더 걸린다.
   //    조건으로 기다린다(WA §3 의 「밟았는지 숫자로 판정한다」와 같은 결).
+  // ⚠ **대기 시간은 `testTimeout` 보다 짧아야 한다.** 처음엔 둘 다 5초로 같았는데,
+  //    DevExtreme 화면이 둘이 된 순간(2026-08-14 `MemberDetailAdminView`) 전수에서 넘어갔고
+  //    «타임아웃» 만 뜨고 **무엇을 기다리다 죽었는지는 안 나왔다**. 바깥을 20초로 벌리고 여기를
+  //    12초로 뒀다 — 이제 조건 대기가 먼저 끝나 이유를 말한다(`vitest.config.mjs` 주석).
   await vi.waitUntil(() => wrapper.find('.dx-data-row').exists() || rows.length === 0,
-    { timeout: 5000, interval: 20 });
+    { timeout: 12_000, interval: 20 });
   await flushPromises();
   return wrapper;
 }
@@ -128,7 +132,7 @@ describe('AuditLogAdminView', () => {
     await typeTargetLogin(w, 'zzuser');
     await w.findAll('button').find((b) => b.text() === '검색').trigger('click');
 
-    await vi.waitUntil(() => fetchAuditLogs.mock.calls.length > 0, { timeout: 5000, interval: 20 });
+    await vi.waitUntil(() => fetchAuditLogs.mock.calls.length > 0, { timeout: 12_000, interval: 20 });
     expect(fetchAuditLogs.mock.calls.at(-1)[0]).toMatchObject({ targetLogin: 'zzuser' });
   });
 
@@ -139,7 +143,7 @@ describe('AuditLogAdminView', () => {
 
     await w.findAll('button').find((b) => b.text() === '초기화').trigger('click');
 
-    await vi.waitUntil(() => fetchAuditLogs.mock.calls.length > 0, { timeout: 5000, interval: 20 });
+    await vi.waitUntil(() => fetchAuditLogs.mock.calls.length > 0, { timeout: 12_000, interval: 20 });
     const last = fetchAuditLogs.mock.calls.at(-1)[0];
     expect(last.targetLogin).toBe('');
     expect(last.action).toBeNull();
