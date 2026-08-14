@@ -231,8 +231,11 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    @DisplayName("🔴 복구 버튼을 **두 번 눌러도** 감사는 한 줄이다(멱등은 200 이지만 기록은 아니다)")
+    @DisplayName("🔴 **낡은 목록**으로 복구를 또 걸어도 감사는 안 는다(멱등은 200 이지만 기록은 아니다)")
     void restore_idempotent_noAudit() {
+        // ⚠ 닿는 경로는 «한 사람이 두 번 누르는 것» 이 아니다 — 복구하면 그 줄이 목록에서 곧바로
+        //    빠져 두 번째 버튼이 없다(2026-08-14 브라우저 검증). 두 관리자(또는 두 탭)가 같은 줄을
+        //    열어 두고 차례로 복구할 때 뒤엣것이 **이미 복구된 상품**을 친다 — 그 상태가 이것이다.
         Product product = productWithImageGroup(UUID.randomUUID()); // 대기 중이 아니다
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
 
