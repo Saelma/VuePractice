@@ -28,6 +28,7 @@ import MemberDetailAdminView from '../views/MemberDetailAdminView.vue';
 import AuditLogAdminView from '../views/AuditLogAdminView.vue';
 import ReviewAdminView from '../views/ReviewAdminView.vue';
 import ProductTrashAdminView from '../views/ProductTrashAdminView.vue';
+import ProductDiscountAdminView from '../views/ProductDiscountAdminView.vue';
 import InquiryAdminView from '../views/InquiryAdminView.vue';
 import CartView from '../views/CartView.vue';
 import WishlistView from '../views/WishlistView.vue';
@@ -89,6 +90,10 @@ const routes = [
   // 삭제 대기 상품(F-7, 2026-08-12). ⚠ `/products/...` 아래가 아니라 `/admin/...` 인 이유는
   // 서버 권한이 경로(`/api/admin/**`)로 걸리기 때문이다 — 화면 경로도 같은 모양으로 맞춘다.
   { path: '/admin/products/trash', name: 'product-trash-admin', component: ProductTrashAdminView, meta: { requiresAdmin: true } },
+  // 기간 할인(G-5, 2026-08-19). ⚠ `/admin/...` 인 이유는 trash 와 같다 — 서버 권한이 경로
+  // (`/api/admin/**`)로 걸리므로 화면 경로도 같은 모양으로 맞춘다.
+  // ⚠ **`/admin/products/trash` 보다 뒤에 둬야 한다**: `:id` 가 먼저면 「trash」를 상품 id 로 먹는다.
+  { path: '/admin/products/:id/discounts', name: 'product-discount-admin', component: ProductDiscountAdminView, props: true, meta: { requiresAdmin: true } },
   // 문의 관리(G-3 1단계). 답변은 기존 API 를 쓰고, 이 화면이 더한 것은 「무엇에 답할지 찾는 길」이다.
   { path: '/admin/inquiries', name: 'inquiry-admin', component: InquiryAdminView, meta: { requiresAdmin: true } },
   { path: '/admin/members', name: 'member-admin', component: MemberAdminView, meta: { requiresAdmin: true } },

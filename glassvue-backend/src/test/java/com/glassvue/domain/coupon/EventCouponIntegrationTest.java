@@ -10,6 +10,7 @@ import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.PathNotFoundException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -110,9 +111,8 @@ class EventCouponIntegrationTest {
     private String openEventName(String admin, String user) throws Exception {
         String body = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        Object data = JsonPath.read(body, "$.data");
-        if (data != null && (Boolean) JsonPath.read(body, "$.data.open")) {
-            return JsonPath.read(body, "$.data.name");
+        if (openEventNameOrNull(body) != null) {
+            return openEventNameOrNull(body);
         }
         Instant now = Instant.now();
         // 발급 창은 오늘 하루(±1h), 사용 기간은 한 달 — 이 «다름» 이 이 기능의 요점이다.
@@ -120,6 +120,47 @@ class EventCouponIntegrationTest {
         createCoupon(admin, name, now.minus(1, ChronoUnit.HOURS),
                 now.plus(1, ChronoUnit.HOURS), now.plus(30, ChronoUnit.DAYS)).andExpect(status().isOk());
         return name;
+    }
+
+
+    /**
+     * 배너 응답에서 «지금 열린 이벤트의 이름» 을 꺼낸다. 없으면 {@code null}.
+     *
+     * <p>🔴 <b>2026-08-19 에 고쳤다 — 위 {@code openEventName} 의 «없으면 만든다» 갈래가
+     * 만들어진 이래 한 번도 안 밟혀 있었다.</b> {@code ApiResponse} 에
+     * {@code @JsonInclude(NON_NULL)} 이 붙어 있어서 <b>열린 이벤트가 없으면 {@code data} 키가
+     * 응답에서 통째로 빠지는데</b>, 예전 코드는 {@code JsonPath.read(body, "$.data")} 로 읽어
+     * <b>null 이 아니라 {@link PathNotFoundException} 을 맞았다.</b> 즉 «없을 때를 위해» 쓴 갈래가
+     * <b>없을 때 터졌다.</b>
+     *
+     * <p>⚠ <b>그동안 초록이었던 이유는 맞아서가 아니라 그 갈래를 안 밟아서다</b>(WA §3-3).
+     * 2026-08-13~14 에는 운영에 열린 이벤트 쿠폰이 늘 있어서 항상 <b>첫 갈래</b>로 흘렀고,
+     * 08-19 에 그 둘의 발급 창이 다 지나자(08-13·08-14 마감) 처음으로 두 번째 갈래에 닿았다.
+     * 🔴 <b>날짜가 지나야 드러나는 결함</b>이라 코드를 아무리 봐도 안 보이는 종류다.
+     */
+    private String openEventNameOrNull(String body) {
+        try {
+            return (Boolean) JsonPath.read(body, "$.data.open")
+                    ? JsonPath.read(body, "$.data.name")
+                    : null;
+        } catch (PathNotFoundException e) {
+            return null; // data 자체가 없다 = 열린 이벤트도, 예고된 이벤트도 없다
+        }
+    }
+
+    /**
+     * 배너 본문(`$.data`) — <b>없으면 {@code null}</b>.
+     *
+     * <p>⚠ <b>이 한 줄이 이 클래스에 네 번 있었다</b>(2026-08-19 실측). 넷 다 «없으면 null 이겠지» 로
+     * 쓰였고 넷 다 {@link PathNotFoundException} 을 맞는다 — {@code @JsonInclude(NON_NULL)} 이
+     * 키를 통째로 빼기 때문이다. 같은 사실이 네 곳에 흩어져 있으면 <b>한 곳만 고쳐진다.</b>
+     */
+    private Object bannerOrNull(String body) {
+        try {
+            return JsonPath.read(body, "$.data");
+        } catch (PathNotFoundException e) {
+            return null;
+        }
     }
 
     @Test
@@ -191,7 +232,7 @@ class EventCouponIntegrationTest {
 
         String banner = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        Object data = JsonPath.read(banner, "$.data");
+        Object data = bannerOrNull(banner);
         boolean somethingOpen = data != null && (Boolean) JsonPath.read(banner, "$.data.open");
 
         if (somethingOpen) {
@@ -229,7 +270,7 @@ class EventCouponIntegrationTest {
 
         String baseline = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        Object existing = JsonPath.read(baseline, "$.data");
+        Object existing = bannerOrNull(baseline);
 
         Instant start = Instant.now().plus(3, ChronoUnit.DAYS);
         createCoupon(admin, "ZZ다음주 이벤트", start, start.plus(1, ChronoUnit.HOURS),
@@ -312,7 +353,7 @@ class EventCouponIntegrationTest {
         //    (2026-08-13 검증 잔재에 실제로 깨졌다). 여기서 볼 것은 **상시 쿠폰이 배너에 안 온다**는 것뿐이다.
         String body = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        Object data = JsonPath.read(body, "$.data");
+        Object data = bannerOrNull(body);
         if (data != null) {
             assertThat((String) JsonPath.read(body, "$.data.name")).isNotEqualTo("ZZ상시 쿠폰");
         }

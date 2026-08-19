@@ -50,6 +50,13 @@ export function pushRecentlyViewed(product) {
     id: product.id,
     name: product.name,
     price: product.price,
+    // ⚠ 세일 값도 함께 스냅샷한다 — 없으면 세일 중인 상품이 「그냥 싼 상품」으로 보인다
+    //    (2026-08-19, G-5. 찜 목록과 같은 이유).
+    // 🔴 **낡을 수 있다.** 이건 localStorage 스냅샷이라 세일이 끝나도 여기 값은 그대로다 —
+    //    다만 그건 **가격 자체도 원래 그랬던 것**이라(관리자가 판매가를 바꿔도 안 따라온다)
+    //    세일이 새로 만든 문제가 아니다. 클릭하면 상세에서 진짜 값을 본다.
+    regularPrice: product.regularPrice ?? product.price,
+    discountRate: product.discountRate ?? null,
     listPrice: product.listPrice ?? null,
     thumbUrl: product.images?.length ? product.images[0].thumbUrl : null,
   };

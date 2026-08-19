@@ -378,20 +378,3 @@ async function onIssue(member) {
     </div>
   </section>
 </template>
-
-<style scoped>
-/* 네이티브 input/select 를 우리 토큰에 맞춘다(DxTextBox 없이 폼을 가볍게). */
-.ipt {
-  width: 100%;
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  color: var(--color-ink-900);
-}
-.ipt:focus-visible {
-  outline: 2px solid var(--color-brand-600);
-  outline-offset: 2px;
-}
-</style>

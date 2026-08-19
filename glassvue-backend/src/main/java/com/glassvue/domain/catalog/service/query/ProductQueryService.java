@@ -3,12 +3,15 @@ package com.glassvue.domain.catalog.service.query;
 import com.glassvue.domain.catalog.config.CatalogProperties;
 import com.glassvue.domain.catalog.dto.LowStockItemResponse;
 import com.glassvue.domain.catalog.dto.LowStockResponse;
+import com.glassvue.domain.catalog.dto.ProductDiscountResponse;
 import com.glassvue.domain.catalog.dto.ProductResponse;
 import java.time.Duration;
 import com.glassvue.domain.catalog.dto.DeletedProductResponse;
 import com.glassvue.domain.catalog.dto.ProductSearchCondition;
 import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.entity.ProductDiscount;
 import com.glassvue.domain.catalog.entity.ProductVariant;
+import com.glassvue.domain.catalog.repository.ProductDiscountRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
 import com.glassvue.domain.catalog.repository.ProductVariantRepository;
 import com.glassvue.domain.image.dto.ImageResponse;
@@ -16,6 +19,7 @@ import com.glassvue.domain.image.service.ImageService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.response.PageResponse;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +27,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +35,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -42,6 +48,7 @@ public class ProductQueryService {
     private static final int LOW_STOCK_ITEMS = 8;
 
     private final ProductRepository productRepository;
+    private final ProductDiscountRepository discountRepository;
     private final ProductVariantRepository variantRepository;
     private final ImageService imageService;
     private final CatalogProperties catalogProperties;
@@ -60,7 +67,8 @@ public class ProductQueryService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         List<ProductVariant> variants =
                 variantRepository.findByProductIdOrderBySortOrderAscCreatedAtAsc(id);
-        return ProductResponse.from(product, variants, imageService.findByGroup(product.getImageGroupId()));
+        return ProductResponse.from(product, variants, imageService.findByGroup(product.getImageGroupId()),
+                activeDiscountsOf(List.of(product)).get(id));
     }
 
     /**
@@ -86,10 +94,12 @@ public class ProductQueryService {
         List<Product> products = productRepository.findAllById(ids);
         Map<UUID, List<ProductVariant>> variantsByProduct = variantsOf(products);
         Map<UUID, List<ImageResponse>> imagesByGroup = imagesOf(products);
+        Map<UUID, ProductDiscount> discounts = activeDiscountsOf(products);
         return products.stream()
                 .map(p -> ProductResponse.from(p,
                         variantsByProduct.getOrDefault(p.getId(), List.of()),
-                        imagesFor(p, imagesByGroup)))
+                        imagesFor(p, imagesByGroup),
+                        discounts.get(p.getId())))
                 .toList();
     }
 
@@ -99,11 +109,64 @@ public class ProductQueryService {
         List<Product> products = page.getContent();
         Map<UUID, List<ProductVariant>> variantsByProduct = variantsOf(products);
         Map<UUID, List<ImageResponse>> imagesByGroup = imagesOf(products);
+        Map<UUID, ProductDiscount> discounts = activeDiscountsOf(products);
 
         Page<ProductResponse> mapped = page.map(p -> ProductResponse.from(p,
                 variantsByProduct.getOrDefault(p.getId(), List.of()),
-                imagesFor(p, imagesByGroup)));
+                imagesFor(p, imagesByGroup),
+                discounts.get(p.getId())));
         return PageResponse.from(mapped);
+    }
+
+
+    /**
+     * 지금 유효한 할인을 상품별로 하나씩 — <b>세일가가 만들어지는 유일한 입구</b> (2026-08-19, G-5).
+     *
+     * <p>🔴 <b>상품당 하나로 줄이는 것이 이 메서드의 일이다.</b> 기간 겹침은 Oracle 유니크로 못 막아
+     * 앱이 유일한 방어인데(V52), 그 방어가 뚫리면 한 상품에 유효한 할인이 둘 이상 있게 된다.
+     * G-8 에서 «열린 이벤트 둘» 이 홈 전체를 500 으로 만들 뻔한 것과 같은 자리라 —
+     * <b>여기서 죽지 않고 하나를 고른다.</b>
+     *
+     * <p>⚠ 고르는 기준은 <b>할인율이 가장 높은 것</b>이다(리포지토리가 그 순서로 준다).
+     * 고객에게 유리한 쪽이 사고가 덜 난다 — 더 비싸게 청구하는 것보다 낫다.
+     * ⚠ 목록 정렬·가격필터가 쓰는 SQL 도 {@code max(rate)} 로 같은 것을 고른다. <b>둘이 갈리면
+     * 「1만원 이하」로 걸러 놓고 목록엔 1만원 넘는 값이 뜬다.</b>
+     *
+     * <p>🔴 <b>뚫렸으면 로그를 남긴다.</b> 조용히 하나를 고르면 겹침이 영원히 안 보인다 —
+     * 화면은 멀쩡하고 아무도 모르는 채로 «어느 할인이 먹었는지» 만 달라진다.
+     */
+    private Map<UUID, ProductDiscount> activeDiscountsOf(List<Product> products) {
+        if (products.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> ids = products.stream().map(Product::getId).toList();
+        Map<UUID, ProductDiscount> chosen = new java.util.HashMap<>();
+        for (ProductDiscount d : discountRepository.findActive(ids, Instant.now())) {
+            ProductDiscount prev = chosen.putIfAbsent(d.getProductId(), d);
+            if (prev != null) {
+                // ⚠ 여기 왔다는 것은 등록·수정의 겹침 가드가 뚫렸다는 뜻이다(동시 등록 등).
+                //    적용된 것과 무시된 것을 **둘 다** 적는다 — 하나만 적으면 어느 쪽이 문제인지 모른다.
+                log.warn("[상품] 기간이 겹치는 할인이 둘 이상이다 — productId={} 적용={}% ({}~{}) 무시={}% ({}~{})",
+                        d.getProductId(), prev.getRate(), prev.getStartsAt(), prev.getEndsAt(),
+                        d.getRate(), d.getStartsAt(), d.getEndsAt());
+            }
+        }
+        return chosen;
+    }
+
+
+    /**
+     * 한 상품의 할인 일정 전부 — 관리자 화면 (2026-08-19, G-5).
+     *
+     * <p>⚠ <b>지난 것도 함께 준다.</b> 「지금 세일 중인가」만 보여주면 관리자는 <b>다음 세일을 언제
+     * 걸어야 겹치지 않는지</b>를 알 수 없고, 겹침 거절(4xx)을 만난 뒤에야 무엇과 겹쳤는지 찾게 된다.
+     * 시간순으로 죽 늘어놓는 것이 그 질문에 답한다.
+     */
+    public List<ProductDiscountResponse> discountsOf(UUID productId) {
+        Instant now = Instant.now();
+        return discountRepository.findByProductIdOrderByStartsAtAsc(productId).stream()
+                .map(d -> ProductDiscountResponse.from(d, now))
+                .toList();
     }
 
     /** 상품들의 옵션을 한 번에 조회해 productId 로 묶는다(정렬 유지). */

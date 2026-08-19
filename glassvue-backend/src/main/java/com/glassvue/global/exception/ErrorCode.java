@@ -103,6 +103,18 @@ public enum ErrorCode {
     PRODUCT_LIST_PRICE_NOT_HIGHER("PRODUCT-400L", HttpStatus.BAD_REQUEST,
             "정가는 판매가보다 커야 합니다. 할인이 없으면 정가를 비워 두세요."),
 
+    // 기간 할인 (G-5, V52 — 2026-08-19)
+    DISCOUNT_NOT_FOUND("PRODUCT-404D", HttpStatus.NOT_FOUND, "할인을 찾을 수 없습니다."),
+    // ⚠ **앱이 유일한 방어다** — Oracle 유니크로는 기간 겹침을 못 막는다(V49 의 이벤트 쿠폰과 같은 자리).
+    //    그래서 이 코드가 나가는 갈래는 테스트로 못 박는다.
+    DISCOUNT_PERIOD_OVERLAP("PRODUCT-400DO", HttpStatus.BAD_REQUEST,
+            "기간이 겹치는 할인이 이미 있습니다."),
+    // ⚠ 「끝이 시작보다 앞」인 할인은 **어느 순간에도 유효하지 않아 조용히 아무 일도 안 한다** —
+    //    관리자는 세일을 걸었다고 믿고 가격은 그대로다. DB CHECK 도 같은 것을 막지만, 4xx 로
+    //    이유를 말해 주는 것은 여기다(DB 제약에 걸리면 500 이 나간다).
+    DISCOUNT_PERIOD_INVALID("PRODUCT-400DP", HttpStatus.BAD_REQUEST,
+            "할인 종료는 시작보다 뒤여야 합니다."),
+
     // 주문
     CART_EMPTY("ORDER-400E", HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),
     UNAVAILABLE_ITEM("ORDER-400U", HttpStatus.BAD_REQUEST, "구매할 수 없는 상품(품절·판매중지)이 포함되어 있습니다."),

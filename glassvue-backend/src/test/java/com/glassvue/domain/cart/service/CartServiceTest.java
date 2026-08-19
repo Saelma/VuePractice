@@ -48,9 +48,10 @@ class CartServiceTest {
 
     /** {@code deleted} 는 「삭제 대기」다(2026-08-12, F-7) — 줄은 남고 구매만 막힌다. */
     private ProductResponse product(long price, long stock, ProductStatus status, boolean deleted) {
-        VariantResponse variant = new VariantResponse(variantId, "기본", 0, price, stock, stock <= 0);
+        // ⚠ 세일 없는 상태다 — price == regularPrice, discountRate == null (2026-08-19, G-5).
+        VariantResponse variant = new VariantResponse(variantId, "기본", 0, price, price, stock, stock <= 0);
         boolean soldOut = status != ProductStatus.SELLING || stock <= 0;
-        return new ProductResponse(productId, "지바", null, "desc", price, null,
+        return new ProductResponse(productId, "지바", null, "desc", price, price, null, null, null,
                 List.of(variant), stock, soldOut, status,
                 UUID.randomUUID(), "전자기기", List.of(), 0.0, 0L, 0L, deleted, null, null);
     }

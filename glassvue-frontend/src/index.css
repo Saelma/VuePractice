@@ -146,6 +146,31 @@ body {
   @apply text-xs text-danger;
 }
 
+/*
+  네이티브 input/select 를 우리 토큰에 맞춘다(DevExtreme 없이 폼을 가볍게).
+
+  🔴 **2026-08-19 에 여기로 올렸다.** 그전까지 이 클래스는 `CouponAdminView` 안에
+     `<style scoped>` 로만 있었는데, **`StatsAdminView` 도 `class="ipt"` 를 쓰고 있었다** —
+     scoped 라 거기서는 안 먹어 **입력칸이 스타일 없이 그려지고 있었다.**
+     ⚠ 아무것도 안 깨지고 콘솔에도 안 남는 종류의 고장이라(08-13 §8 의 `border-ink-200` 과 같다)
+     세 번째 화면(기간 할인)이 같은 것을 필요로 할 때까지 안 보였다.
+  ⚠ **DESIGN §7 의 「관리자 기간 선택은 네이티브 date」 규약이 이 클래스를 전제로 한다** —
+     규약이 공용인데 스타일이 한 화면에 갇혀 있으면 다음 화면이 또 같은 자리를 밟는다.
+*/
+.ipt {
+  width: 100%;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-ink-900);
+}
+.ipt:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
+
 /* --- 알림 박스(전역/서버 에러) --- */
 .alert-error {
   @apply rounded-card border border-red-100 bg-red-50 p-3 text-sm text-danger;

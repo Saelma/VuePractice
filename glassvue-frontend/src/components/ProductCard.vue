@@ -17,7 +17,7 @@
  */
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { priceText, hasDiscount, discountRate, statusText } from '../api/product';
+import { priceText, hasDiscount, discountRate, strikePrice, statusText } from '../api/product';
 import StarRating from './StarRating.vue';
 import WishlistButton from './WishlistButton.vue';
 
@@ -84,7 +84,7 @@ const stateLabel = computed(() => {
         <div class="mt-auto flex items-end justify-between gap-2 pt-2">
           <div class="min-w-0">
             <!-- 할인율은 이미지 뱃지로 옮겼다. 여기선 정가 취소선(위) + 판매가(아래)만. 정가 없으면 판매가만. -->
-            <span v-if="hasDiscount(product)" class="muted block tabular-nums line-through">{{ priceText(product.listPrice) }}</span>
+            <span v-if="strikePrice(product)" class="muted block tabular-nums line-through">{{ priceText(strikePrice(product)) }}</span>
             <span class="text-lg font-semibold tabular-nums text-ink-900">{{ priceText(product.price) }}</span>
           </div>
           <StarRating :model-value="product.averageRating" :count="product.reviewCount" size="sm" />

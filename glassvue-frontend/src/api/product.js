@@ -71,18 +71,58 @@ export function priceText(price) {
 }
 
 /**
- * 할인 중인가 — 정가가 있고 판매가보다 클 때만.
+ * **기간 할인(타임세일) 중인가** — 서버가 준 `discountRate` 가 유일한 판정값이다 (2026-08-19, G-5).
  *
- * 서버는 `listPrice`(정가)만 내려주고 할인율은 화면이 계산한다. 택배사 조회 URL과 달리
- * 이건 **화면이 이미 가진 두 숫자의 산술**이라 서버가 완성해 줄 이유가 없다.
- * 대신 **여기 한 곳에만** 둬서 화면마다 계산이 갈리지 않게 한다(주문 상태 색을 한 곳에 모은 것과 같은 이유).
+ * ⚠ **`price < regularPrice` 로 유추하지 않는다.** 1원짜리에 1% 를 걸면 반올림으로 두 값이 같아지는데,
+ * 그때도 **세일 중인 것은 맞다**(배지·종료일이 떠야 한다). 그리고 「지금 세일인가」는
+ * **서버 시계**로 판정해야 할 질문이다 — 브라우저 시계로 계산하면 자정 근처에서 갈린다
+ * (B-26 에서 「오늘」을 서버가 준 것과 같은 이유).
  */
-export function hasDiscount(item) {
-  return !!item && item.listPrice != null && item.listPrice > item.price;
+export function isOnSale(item) {
+  return !!item && item.discountRate != null;
 }
 
-/** 할인율(%). 표시용이라 반올림한다. 할인이 아니면 0. */
+/**
+ * 할인 중인가 — **세일 중**이거나, 정가가 있고 판매가보다 클 때.
+ *
+ * 서버는 `listPrice`(정가)만 내려주고 정가 기준 할인율은 화면이 계산한다. 택배사 조회 URL과 달리
+ * 이건 **화면이 이미 가진 두 숫자의 산술**이라 서버가 완성해 줄 이유가 없다.
+ * 대신 **여기 한 곳에만** 둬서 화면마다 계산이 갈리지 않게 한다(주문 상태 색을 한 곳에 모은 것과 같은 이유).
+ *
+ * ⚠ **주문 항목(OrderItemResponse)에는 `discountRate` 가 없다** — 스냅샷이라 `price`·`listPrice` 둘뿐이다.
+ * 그래서 주문 상세는 자동으로 아래쪽(정가 기준) 갈래를 탄다. **그게 맞다**: 산 시점의 값이지
+ * 지금 세일 중인지가 아니다.
+ */
+export function hasDiscount(item) {
+  if (!item) return false;
+  return isOnSale(item) || (item.listPrice != null && item.listPrice > item.price);
+}
+
+/**
+ * **취소선을 그을 값** — 없으면 `null`(그 줄을 아예 안 그린다).
+ *
+ * 🔴 **세일 중에는 「정가」가 아니라 「원래 판매가」를 긋는다**(2026-08-19, 사용자 결정).
+ * 값이 셋(정가·판매가·세일가)인데 화면 자리는 둘이라, 고객이 **「지금 얼마나 싼가」**를
+ * 바로 읽을 수 있는 쪽을 남겼다.
+ *
+ * ⚠ 세일인데 두 값이 같으면(1원짜리 1% 같은 경우) `null` 을 준다 — 같은 숫자에 줄을 그으면
+ * **고장으로 보인다.** 배지는 그래도 뜬다(`hasDiscount` 는 참).
+ */
+export function strikePrice(item) {
+  if (!item) return null;
+  if (isOnSale(item)) {
+    return item.regularPrice > item.price ? item.regularPrice : null;
+  }
+  return item.listPrice != null && item.listPrice > item.price ? item.listPrice : null;
+}
+
+/**
+ * 할인율(%). 세일 중이면 **서버가 준 값을 그대로** 쓰고(화면이 다시 계산하지 않는다 —
+ * 반올림 때문에 서버가 「20%」라 한 것이 화면에서 「19%」가 될 수 있다),
+ * 아니면 정가 기준으로 계산한다. 표시용이라 반올림한다. 할인이 아니면 0.
+ */
 export function discountRate(item) {
+  if (isOnSale(item)) return item.discountRate;
   if (!hasDiscount(item)) return 0;
   return Math.round(((item.listPrice - item.price) / item.listPrice) * 100);
 }
@@ -139,4 +179,55 @@ export function stockReasonText(reason) {
 export function stockDeltaText(quantity) {
   const n = Number(quantity);
   return (n > 0 ? '+' : '') + n.toLocaleString('ko-KR');
+}
+
+// ── 기간 할인(타임세일) — 관리자 (2026-08-19, BACKLOG G-5) ──────────────
+
+/**
+ * 상품의 할인 일정 — 지난 것·진행 중·예정을 **시간순으로 전부**.
+ *
+ * 응답 한 줄: `{ id, rate, startDate, endDate, startsAt, endsAt, status }`
+ *
+ * ⚠ **`status` 를 화면이 계산하지 않는다**(`UPCOMING`·`ACTIVE`·`ENDED`). 「지금 진행 중인가」는
+ * **서버 시계**로 답해야 할 질문이라, 브라우저 시계로 세면 자정 근처에서 갈린다
+ * (B-26 에서 「오늘」을 서버가 준 것과 같은 이유).
+ *
+ * ⚠ **날짜는 `startDate`·`endDate` 를 쓴다**(`startsAt`·`endsAt` 이 아니라). 뒤엣것은
+ * **배타 경계**라 종료일이 하루 뒤로 보인다.
+ */
+export function fetchProductDiscounts(productId) {
+  return apiGet(`/api/admin/products/${productId}/discounts`);
+}
+
+/**
+ * 할인 등록. `{ rate, startDate, endDate }` — **종료일은 포함**이고 경계는 서버가 만든다.
+ *
+ * ⚠ 기간이 겹치면 **400**(`PRODUCT-400DO`)이다. 경계가 **맞닿는 것은 겹침이 아니다** —
+ * 「8/24 까지」와 「8/25 부터」는 이어 붙일 수 있다.
+ */
+export function createProductDiscount(productId, payload) {
+  return apiPost(`/api/admin/products/${productId}/discounts`, payload);
+}
+
+/** 할인 수정. 겹침 검사에서 자기 자신은 빠지므로 기간을 그대로 두고 할인율만 고칠 수 있다. */
+export function updateProductDiscount(productId, discountId, payload) {
+  return apiPut(`/api/admin/products/${productId}/discounts/${discountId}`, payload);
+}
+
+/**
+ * 할인 삭제 — **진행 중인 것도 지울 수 있다**(잘못 건 세일을 되돌리는 유일한 방법).
+ * 지우면 그 순간 원가로 돌아가고, **이미 팔린 주문의 금액은 안 변한다**(B-7 스냅샷).
+ */
+export function deleteProductDiscount(productId, discountId) {
+  return apiDelete(`/api/admin/products/${productId}/discounts/${discountId}`);
+}
+
+/** 할인 상태 표시. 서버 enum 에 값이 늘면 원문을 그대로 되돌린다(stockReasonText 와 같은 방식). */
+export const DISCOUNT_STATUS_LABEL = {
+  UPCOMING: '예정',
+  ACTIVE: '진행 중',
+  ENDED: '종료',
+};
+export function discountStatusText(status) {
+  return DISCOUNT_STATUS_LABEL[status] || status || '';
 }

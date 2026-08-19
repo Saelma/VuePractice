@@ -53,7 +53,8 @@ public class WishlistQueryService {
                 continue;
             }
             items.add(new WishlistItemResponse(
-                    p.id(), p.name(), p.price(), p.listPrice(), p.status(),
+                    p.id(), p.name(), p.price(), p.regularPrice(), p.discountRate(),
+                    p.listPrice(), p.status(),
                     p.images().isEmpty() ? null : p.images().get(0).thumbUrl(),
                     p.averageRating(), p.reviewCount(),
                     !p.soldOut(),

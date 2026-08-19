@@ -6,7 +6,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DxNumberBox } from 'devextreme-vue/number-box';
-import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discountRate } from '../api/product';
+import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discountRate, strikePrice, isOnSale } from '../api/product';
 import { addToCart } from '../api/cart';
 import { loadCartCount } from '../stores/cart';
 import { authState, isLoggedIn, isAdmin } from '../stores/auth';
@@ -48,6 +48,22 @@ const mainImage = computed(() => images.value[selected.value] ?? images.value[0]
 
 /** 담기 전에 얼마인지 바로 보이게 — 옵션 가격 × 수량. 옵션 미선택이면 기본가로 미리 보여준다. */
 const unitPrice = computed(() => selectedVariant.value?.price ?? product.value?.price ?? 0);
+
+/**
+ * 「8월 25일까지」 — 세일이 언제 끝나는지 (2026-08-19, G-5).
+ *
+ * ⚠ **서버가 준 `discountEndsAt` 은 배타 경계**(종료일 다음 날 00:00)라 **하루를 빼야**
+ *    관리자가 적은 종료일이 된다. 안 빼면 고객에게 **하루 더 긴 세일**을 약속한다.
+ * ⚠ 경계 시각은 KST 로 만들어졌고 여기서는 브라우저 지역시간으로 읽는다 — 국내 서비스라
+ *    실질적으로 같다. 지역이 갈리는 날이 오면 서버가 문구를 통째로 주는 쪽이 맞다.
+ */
+const saleUntilText = computed(() => {
+  const raw = product.value?.discountEndsAt;
+  if (!raw) return '';
+  const end = new Date(raw);
+  end.setDate(end.getDate() - 1);
+  return `${end.getMonth() + 1}월 ${end.getDate()}일까지`;
+});
 const lineTotal = computed(() => unitPrice.value * (qty.value || 1));
 
 /**
@@ -239,12 +255,23 @@ async function onDelete() {
               <StarRating :model-value="product.averageRating" :count="product.reviewCount" />
             </button>
 
-            <!-- 할인 중이면 정가(취소선) + 할인율을 함께 보여준다. 아니면 판매가만. -->
-            <p v-if="hasDiscount(product)" class="muted mt-4 tabular-nums line-through">{{ priceText(product.listPrice) }}</p>
-            <p class="tabular-nums text-ink-900" :class="hasDiscount(product) ? 'text-3xl font-semibold' : 'mt-4 text-3xl font-semibold'">
+            <!--
+              할인 중이면 취소선 + 할인율을 함께 보여준다. 아니면 판매가만.
+              ⚠ **세일 중에는 긋는 값이 「원래 판매가」**이고 세일이 아니면 「정가」다 —
+                 그 판단은 strikePrice() 한 곳에 있다(api/product.js).
+              ⚠ 여백 클래스도 strikePrice() 로 가른다: hasDiscount 로 가르면 「세일인데 그을 값이
+                 없는」 경우(1원짜리 1%)에 윗줄이 없는 채로 mt-4 가 빠져 간격이 무너진다.
+            -->
+            <p v-if="strikePrice(product)" class="muted mt-4 tabular-nums line-through">{{ priceText(strikePrice(product)) }}</p>
+            <p class="tabular-nums text-ink-900" :class="strikePrice(product) ? 'text-3xl font-semibold' : 'mt-4 text-3xl font-semibold'">
               {{ priceText(product.price) }}
               <span v-if="hasDiscount(product)" class="ml-2 text-xl font-semibold text-danger">{{ discountRate(product) }}%</span>
             </p>
+            <!--
+              🔴 **종료일은 세일일 때만 뜬다.** 정가 기준 할인(listPrice)은 기한이 없어서
+                 「언제까지」를 말할 수 없다 — 둘을 같은 줄에서 다루면 없는 날짜를 지어내게 된다.
+            -->
+            <p v-if="isOnSale(product)" class="muted mt-1 text-sm">{{ saleUntilText }}</p>
 
             <!-- 상품 정보 요약 -->
             <dl class="mt-5 space-y-2 border-t border-line pt-5 text-sm">

@@ -1,11 +1,11 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, RouterLink } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { DxSelectBox } from 'devextreme-vue/select-box';
-import { getProduct, createProduct, updateProduct, STATUS_OPTIONS } from '../api/product';
+import { getProduct, createProduct, updateProduct, priceText, STATUS_OPTIONS } from '../api/product';
 import { fetchCategories } from '../api/category';
 import ImageUploader from '../components/ImageUploader.vue';
 import StockHistoryPanel from '../components/StockHistoryPanel.vue';
@@ -17,6 +17,8 @@ const isEdit = computed(() => !!props.id);
 const categories = ref([]);
 // 옵션(variant): 최소 1개. 단일 옵션 상품은 이름 "기본" 한 줄이면 된다(2026-07-24 C-8).
 const form = reactive({ name: '', tagline: '', description: '', price: null, listPrice: null, status: 'SELLING', categoryId: null, images: [], variants: [] });
+/** 지금 걸린 세일(있으면). 판매가 칸 아래에 「지금 20% 세일 중 → 8,000원」을 띄우는 데만 쓴다. */
+const activeSale = ref(null);
 
 function newVariant() { return { name: '', priceDelta: 0, stock: null }; }
 function addVariant() { form.variants.push(newVariant()); }
@@ -36,10 +38,21 @@ onMounted(async () => {
   if (isEdit.value) {
     try {
       const p = await getProduct(props.id);
+      // 🔴 **`p.price` 가 아니라 `p.regularPrice` 다**(2026-08-19, G-5).
+      //    `price` 에는 기간 할인이 반영돼 있어서, 세일 중에 이 폼을 열어 저장하면
+      //    **세일가가 원래 판매가로 굳는다.** 그리고 세일이 아직 살아 있으면 그 위에
+      //    할인이 또 먹어 **두 번 깎인다.** 화면은 멀쩡히 돌고 값만 틀린다.
+      //    ⚠ 세일이 없을 때는 두 값이 같으므로 이 줄은 그때 아무것도 바꾸지 않는다.
       Object.assign(form, {
-        name: p.name, tagline: p.tagline || '', description: p.description, price: p.price, listPrice: p.listPrice,
+        name: p.name, tagline: p.tagline || '', description: p.description,
+        price: p.regularPrice, listPrice: p.listPrice,
         status: p.status, categoryId: p.categoryId,
       });
+      // 세일 중이면 관리자에게 그 사실을 말해 준다 — 안 그러면 「내가 적은 값과 고객이 보는 값이
+      // 다른」 상황을 폼 어디에서도 알 수 없다(G-8 에서 폼이 만들 것을 되읽어 준 것과 같은 이유).
+      activeSale.value = p.discountRate != null
+        ? { rate: p.discountRate, price: p.price }
+        : null;
       form.images = p.images || [];
       form.variants = (p.variants || []).map((v) => ({ name: v.name, priceDelta: v.priceDelta, stock: v.stock }));
       if (!form.variants.length) form.variants = [newVariant()];
@@ -100,7 +113,18 @@ async function onSave() {
 
 <template>
   <section class="page-narrow">
-    <h1 class="page-title mb-5">{{ isEdit ? '상품 수정' : '상품 등록' }}</h1>
+    <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <h1 class="page-title">{{ isEdit ? '상품 수정' : '상품 등록' }}</h1>
+      <!--
+        ⚠ **등록 화면에는 안 띄운다** — 상품 id 가 아직 없어 할인을 붙일 대상이 없다.
+           v-if 를 빼면 저장 전에 눌러 `/admin/products/undefined/discounts` 로 간다.
+      -->
+      <RouterLink
+        v-if="isEdit"
+        class="btn btn-secondary btn-sm"
+        :to="{ name: 'product-discount-admin', params: { id: props.id } }"
+      >기간 할인 관리</RouterLink>
+    </div>
 
     <!-- 전역/서버 에러는 상단 박스, 필드 단위 검증은 필드 아래(DESIGN.md §5) -->
     <div v-if="error" class="alert-error mb-4">{{ error }}</div>
@@ -129,6 +153,17 @@ async function onSave() {
         <label class="field flex-1">
           <span class="field-label">판매가(원)</span>
           <DxNumberBox v-model:value="form.price" :min="0" format="#,##0" />
+          <!--
+            🔴 **세일 중이면 반드시 말해 준다** (2026-08-19, G-5).
+            이 칸에는 **세일 전 판매가**가 들어 있는데(응답의 `regularPrice`), 고객이 보는 값은
+            세일가다. 그걸 안 알려 주면 관리자는 «내가 9,000 이라 적었는데 왜 7,200 으로 팔리지» 를
+            폼 어디에서도 확인할 수 없다 — 그리고 **여기 값을 고쳐서 맞추려 든다**(그러면 두 번 깎인다).
+          -->
+          <span v-if="activeSale" class="muted">
+            지금 <b>{{ activeSale.rate }}%</b> 세일 중 — 고객에게는
+            <b>{{ priceText(activeSale.price) }}</b> 으로 보입니다.
+            이 칸은 <b>세일 전</b> 판매가입니다.
+          </span>
         </label>
         <!--
           🔴 **「빈칸」과 「0」을 같은 뜻으로 받는다 — 할인 없음** (2026-08-13, 사용자 신고 → 사용자 제안).

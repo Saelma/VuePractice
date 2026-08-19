@@ -39,11 +39,16 @@ class CacheSerializationTest {
                 "지바",
                 "매일 쓰기 좋은 기본형",   // tagline — null 아닌 값으로 둬서 왕복에 실제로 포함시킨다(V33)
                 "설명",
-                12000L,
+                12000L,   // price — 세일가(아래 discountRate 20% 가 반영된 값)
+                15000L,   // regularPrice — 세일 전 판매가 (2026-08-19, G-5)
                 39000L,   // listPrice — 정가가 있는 상태도 직렬화 왕복에 포함시킨다
+                // ⚠ discountRate·discountEndsAt 은 **null 이 아닌 값**으로 둔다 — null 이면
+                //    「필드가 왕복했다」와 「없어서 null 이 됐다」가 구분되지 않는다(WA §3-3).
+                20,
+                Instant.parse("2026-08-25T00:00:00Z"),
                 List.of(new VariantResponse(
                         UUID.fromString("019f7d1c-e0b4-7000-8000-00000000000a"),
-                        "기본", 0, 12000L, 7L, false)),
+                        "기본", 0, 12000L, 15000L, 7L, false)),
                 7L,      // totalStock
                 false,   // soldOut
                 ProductStatus.SELLING,

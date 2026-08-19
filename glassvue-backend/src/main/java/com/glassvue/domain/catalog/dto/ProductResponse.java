@@ -1,6 +1,7 @@
 package com.glassvue.domain.catalog.dto;
 
 import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.entity.ProductDiscount;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.entity.ProductVariant;
 import com.glassvue.domain.image.dto.ImageResponse;
@@ -18,6 +19,19 @@ import java.util.UUID;
  *   <li>{@code soldOut} — 판매중이 아니거나 <b>모든 옵션이 품절</b>이면 true(목록 배지).</li>
  * </ul>
  * {@code price} 는 여전히 <b>기본가</b>다. 옵션 가격차는 각 variant 의 {@code price} 에 반영돼 있다.
+ *
+ * <p>🔴 <b>{@code price} 에는 기간 할인이 반영된다</b>(2026-08-19, G-5) — 즉 <b>«지금 청구되는 금액»</b>
+ * 이라는 이 필드의 뜻은 그대로다. 세일 전 값이 필요한 자리는 {@code regularPrice} 를 읽는다.
+ * <ul>
+ *   <li>⚠ <b>관리자 상품 수정 폼이 그 자리다.</b> 폼이 {@code price} 를 입력칸에 실으면
+ *       세일 중에 상품을 저장하는 순간 <b>세일가가 원래 판매가로 굳고</b>, 세일이 살아 있으면
+ *       <b>할인이 두 번 먹는다.</b> 폼은 반드시 {@code regularPrice} 를 읽는다.</li>
+ *   <li>🔴 <b>실측(2026-08-19)으로 이 방향을 골랐다</b>: 프론트에서 {@code product.price} 를 읽는
+ *       자리가 8곳인데 <b>7곳이 «고객에게 보이는 가격»</b> 이고 관리자 입력칸은 1곳뿐이다.
+ *       반대로 («{@code price} 는 원가, {@code salePrice} 를 새로 둔다») 했으면 7곳을 전부
+ *       {@code salePrice ?? price} 로 고쳐야 하고 <b>한 곳만 빠져도 세일이 조용히 안 먹는다.</b>
+ *       위험을 여러 곳에 흩는 대신 <b>한 곳에 모은</b> 것이 이 선택이다.</li>
+ * </ul>
  */
 public record ProductResponse(
         UUID id,
@@ -25,9 +39,23 @@ public record ProductResponse(
         // 카드 한 줄 카피(V33). null 이면 화면이 그 줄을 감춘다 — 기존 상품은 전부 null 이다.
         String tagline,
         String description,
+        // 🔴 지금 청구되는 금액 — **기간 할인이 반영된 값**이다(2026-08-19, G-5).
         long price,
+        // 세일 전 판매가. 세일 중이 아니면 price 와 같다.
+        // ⚠ **관리자 상품 수정 폼이 읽어야 할 값이 이것이다**(위 클래스 주석).
+        long regularPrice,
         // 정가(할인 전). null이면 할인 없음 — 할인율은 화면이 두 값에서 계산한다.
+        // ⚠ **세일과 다른 것이다**: 정가는 «원래 이 값어치» 라는 표시고, 세일은 «이 기간만 싸게» 다.
+        //    세일이 정가를 덮어쓰지 않으므로 세일이 끝나면 되돌릴 원본이 그대로 남는다.
         Long listPrice,
+        /**
+         * 지금 걸린 할인율 %. <b>null 이면 세일 중이 아니다</b> — 화면이 「세일」을 판정하는 유일한 값이다.
+         * ⚠ {@code price < regularPrice} 로 유추하지 않는다: 1원짜리에 1% 할인이면 반올림으로 두 값이
+         * 같아지는데, 그때도 <b>세일 중인 것은 맞다</b>(배지·종료일이 떠야 한다).
+         */
+        Integer discountRate,
+        /** 지금 걸린 할인의 종료 시각(배타). 화면의 「8/25까지」. 세일 중이 아니면 null. */
+        Instant discountEndsAt,
         // 옵션 목록. 단일 옵션 상품이면 한 줄("기본")이다.
         List<VariantResponse> variants,
         long totalStock,
@@ -54,18 +82,35 @@ public record ProductResponse(
 ) {
     /** 옵션·이미지 없이 (일부 내부 용도만). 실사용은 variants 를 넘기는 아래 팩토리다. */
     public static ProductResponse from(Product p) {
-        return from(p, List.of(), List.of());
+        return from(p, List.of(), List.of(), null);
     }
 
-    public static ProductResponse from(Product p, List<ProductVariant> variants, List<ImageResponse> images) {
+    /**
+     * @param discount 지금 유효한 할인. 없으면 {@code null}
+     *
+     *                 <p>🔴 <b>인자로 받는 것이 요점이다.</b> 여기서 리포지토리를 부르면 목록 조회가
+     *                 상품 수만큼 쿼리를 날린다(N+1) — 호출자가 <b>한 번에 조회해서</b> 넘긴다.
+     *                 ⚠ 그래서 «넘기는 걸 잊으면 세일이 조용히 안 붙는» 자리가 생긴다.
+     *                 {@code ProductQueryService} 의 세 갈래(상세·목록·여러건)가 전부 넘기는지가
+     *                 이 기능이 새는지 마는지를 정한다.
+     */
+    public static ProductResponse from(Product p, List<ProductVariant> variants,
+                                       List<ImageResponse> images, ProductDiscount discount) {
+        // ⚠ 옵션에 넘기는 기본가는 **세일 전 값**이어야 한다 — 가격차를 더한 뒤에 할인율이 먹어야
+        //    모든 옵션이 같은 비율로 싸진다(VariantResponse.from 주석).
         List<VariantResponse> variantResponses = variants.stream()
-                .map(v -> VariantResponse.from(v, p.getPrice()))
+                .map(v -> VariantResponse.from(v, p.getPrice(), discount))
                 .toList();
         long totalStock = variants.stream().mapToLong(ProductVariant::getStock).sum();
         boolean soldOut = p.getStatus() != ProductStatus.SELLING
                 || variants.stream().noneMatch(v -> v.getStock() > 0);
+        long regularPrice = p.getPrice();
+        long price = discount == null ? regularPrice : discount.applyTo(regularPrice);
         return new ProductResponse(
-                p.getId(), p.getName(), p.getTagline(), p.getDescription(), p.getPrice(), p.getListPrice(),
+                p.getId(), p.getName(), p.getTagline(), p.getDescription(),
+                price, regularPrice, p.getListPrice(),
+                discount == null ? null : discount.getRate(),
+                discount == null ? null : discount.getEndsAt(),
                 variantResponses, totalStock, soldOut,
                 p.getStatus(), p.getCategory().getId(), p.getCategory().getName(),
                 images, p.getAvgRating(), p.getReviewCount(), p.getSoldCount(),

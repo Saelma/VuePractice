@@ -15,12 +15,15 @@ public record ProductSearchCondition(
         @Cond(op = Op.CONTAINS)
         String name,
 
-        @Schema(description = "최소 가격")
-        @Cond(path = "price", op = Op.GOE)
+        // 🔴 **@Cond 를 뗐다**(2026-08-19, G-5). 자동 처리는 `product.price` 컬럼을 그대로 보는데,
+        //    기간 할인이 생기면서 그 값이 «지금 파는 가격» 이 아니게 됐다. 세일가로 걸러야 해서
+        //    ProductRepositoryImpl 이 유효 판매가 식으로 직접 처리한다(categoryId 와 같은 탈출구).
+        // ⚠ 애노테이션을 뗀 채로 Impl 에 안 적으면 **필터가 조용히 사라진다** — 400도 500도 안 나고
+        //    그냥 «전부 나온다». 둘은 세트다.
+        @Schema(description = "최소 가격(세일 중이면 세일가 기준)")
         Long minPrice,
 
-        @Schema(description = "최대 가격")
-        @Cond(path = "price", op = Op.LOE)
+        @Schema(description = "최대 가격(세일 중이면 세일가 기준)")
         Long maxPrice,
 
         @Schema(description = "상태")

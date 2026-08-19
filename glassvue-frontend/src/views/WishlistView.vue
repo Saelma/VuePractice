@@ -14,7 +14,7 @@ import { fetchWishlist } from '../api/wishlist';
 import { removeWishlist } from '../api/wishlist';
 import { addToCart } from '../api/cart';
 import { loadCartCount } from '../stores/cart';
-import { priceText, statusText, hasDiscount, discountRate } from '../api/product';
+import { priceText, statusText, hasDiscount, discountRate, strikePrice } from '../api/product';
 import { wishlistState } from '../stores/wishlist';
 import StarRating from '../components/StarRating.vue';
 import EmptyState from '../components/EmptyState.vue';
@@ -112,8 +112,8 @@ async function onRemove(item) {
           <div class="min-w-0 flex-1">
             <h3 class="line-clamp-2 text-sm font-medium text-ink-900">{{ item.name }}</h3>
             <div class="mt-1">
-              <span v-if="hasDiscount(item)" class="muted block tabular-nums line-through">
-                {{ priceText(item.listPrice) }}
+              <span v-if="strikePrice(item)" class="muted block tabular-nums line-through">
+                {{ priceText(strikePrice(item)) }}
               </span>
               <span class="text-lg font-semibold tabular-nums text-ink-900">{{ priceText(item.price) }}</span>
               <span v-if="hasDiscount(item)" class="ml-1 text-sm font-semibold text-danger">
