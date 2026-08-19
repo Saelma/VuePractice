@@ -241,38 +241,13 @@ public class CouponService {
         return (int) ChronoUnit.DAYS.between(LocalDate.ofInstant(now, KST), LocalDate.ofInstant(start, KST));
     }
 
-    /**
-     * 프로모션 달력 한 달치(B-27, 관리자).
+    /*
+     * 🔴 **프로모션 달력은 2026-08-19 에 여기서 나갔다** → `service/query/PromotionCalendarService`.
      *
-     * <p>🔴 <b>착수 조건이 G-8 로 채워졌다</b> — 그전까지 쿠폰 5개가 <b>전부 상시</b>라 달력에 그려도
-     * 가로줄 다섯 개일 뿐 목록보다 나은 게 없었다. <b>겹침이 정보가 되려면 기간이 갈려야</b> 하고,
-     * 이벤트 쿠폰이 그 갈림을 만든다.
-     *
-     * <p>⚠ 이벤트 쿠폰은 막대를 <b>둘</b> 낸다(발급 창 · 사용 기간). 겹치면 안 되는 것은 앞엣것뿐이라
-     * 화면이 갈라 그린다 — 한 색으로 그리면 <b>정상인 사용 기간 겹침을 사고로 읽는다.</b>
-     *
-     * <p>⚠ 지금 규모(쿠폰 한 자리 수)에선 한 달치를 통째로 읽어 화면에 넘긴다. 페이징도 캐시도 두지
-     * 않는다 — <b>미리 만들지 않는다.</b>
+     * G-5(상품 기간 할인)가 들어오면서 달력이 **쿠폰만의 것이 아니게 됐다.** 그대로 뒀으면
+     * «쿠폰 도메인 서비스가 상품 세일을 조립한다» 가 되고, 다음 사람이 거기 발송·기획전을
+     * 얹을 때 **또 이 파일을 열게 된다.** 조립은 조립하는 자리에서 한다.
      */
-    @Transactional(readOnly = true)
-    public PromotionCalendarResponse promotionCalendar(YearMonth month) {
-        LocalDate first = month.atDay(1);
-        LocalDate last = month.atEndOfMonth();
-        // 경계는 KST 로 만든다 — 「8월」은 UTC 의 8월이 아니라 한국의 8월이다.
-        Instant from = first.atStartOfDay(KST).toInstant();
-        Instant to = last.plusDays(1).atStartOfDay(KST).toInstant().minusNanos(1);
-
-        List<PromotionSpanResponse> spans = new ArrayList<>();
-        for (Coupon c : couponRepository.findAliveBetween(from, to)) {
-            spans.add(PromotionSpanResponse.use(c, first, last, KST));
-            // 발급 창이 이 달에 안 걸치면(지난달에 끝난 이벤트 등) 막대를 만들지 않는다.
-            if (c.isEventCoupon() && !c.getIssueUntil().isBefore(from) && !c.getValidFrom().isAfter(to)) {
-                spans.add(PromotionSpanResponse.issue(c, first, last, KST));
-            }
-        }
-        return new PromotionCalendarResponse(
-                month.toString(), month.lengthOfMonth(), first.getDayOfWeek().getValue(), spans);
-    }
 
     /**
      * 이벤트 쿠폰 「받기」(G-8) — 이 기능의 본체.

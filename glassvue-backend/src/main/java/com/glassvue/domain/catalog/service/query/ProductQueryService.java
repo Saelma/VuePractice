@@ -5,6 +5,7 @@ import com.glassvue.domain.catalog.dto.LowStockItemResponse;
 import com.glassvue.domain.catalog.dto.LowStockResponse;
 import com.glassvue.domain.catalog.dto.ProductDiscountResponse;
 import com.glassvue.domain.catalog.dto.ProductResponse;
+import com.glassvue.domain.catalog.dto.ProductSaleResponse;
 import java.time.Duration;
 import com.glassvue.domain.catalog.dto.DeletedProductResponse;
 import com.glassvue.domain.catalog.dto.ProductSearchCondition;
@@ -167,6 +168,22 @@ public class ProductQueryService {
         return discountRepository.findByProductIdOrderByStartsAtAsc(productId).stream()
                 .map(d -> ProductDiscountResponse.from(d, now))
                 .toList();
+    }
+
+
+    /**
+     * 어떤 기간에 걸치는 상품 세일 — <b>catalog 가 다른 도메인에 내주는 공개 API</b>
+     * (2026-08-19, B-27 프로모션 달력).
+     *
+     * <p>🔴 <b>이 메서드가 도메인 경계를 지킨다.</b> 달력은 coupon 쪽에 있는데 상품 세일도 그려야 한다 —
+     * 엔티티·리포지토리를 넘겨주면 catalog 를 폴더째 들어낼 수 없게 되므로, 여기서 <b>DTO 로만</b> 준다
+     * (장바구니가 {@link #findByIds} 만 쓰는 것과 같은 방식).
+     *
+     * <p>⚠ 경계는 <b>호출한 쪽이 만들어서 넘긴다.</b> 달력의 「8월」은 KST 의 8월이고 그 판단은
+     * 달력이 한다 — 여기서 다시 자르면 <b>경계가 두 곳</b>에 생긴다(B-26 이 없앤 갈래).
+     */
+    public List<ProductSaleResponse> salesBetween(Instant from, Instant to) {
+        return discountRepository.findSalesBetween(from, to);
     }
 
     /** 상품들의 옵션을 한 번에 조회해 productId 로 묶는다(정렬 유지). */

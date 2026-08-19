@@ -1,5 +1,6 @@
 package com.glassvue.domain.catalog.repository;
 
+import com.glassvue.domain.catalog.dto.ProductSaleResponse;
 import com.glassvue.domain.catalog.entity.ProductDiscount;
 import java.time.Instant;
 import java.util.Collection;
@@ -57,4 +58,30 @@ public interface ProductDiscountRepository extends JpaRepository<ProductDiscount
                                           @Param("startsAt") Instant startsAt,
                                           @Param("endsAt") Instant endsAt,
                                           @Param("excludeId") UUID excludeId);
+
+    /**
+     * 어떤 기간에 <b>걸치는</b> 세일 전부 — 프로모션 달력이 쓰는 유일한 질문 (2026-08-19, B-27).
+     *
+     * <p>⚠ 겹침 판정이 {@link #findOverlapping} 과 <b>같은 모양</b>이다({@code 시작 <= to AND 끝 > from}).
+     * 종료가 배타라 «그 달 1일 00:00 에 끝나는 세일» 은 이 달에 안 걸린다 — 맞다, 그 순간부터
+     * 원가이기 때문이다.
+     *
+     * <p>🔴 <b>상품과 조인해 이름까지 한 번에 가져온다.</b> 나눠 읽으면 달력이 세일 수만큼
+     * catalog 를 다시 부른다(N+1).
+     * ⚠ <b>삭제 대기 상품은 뺀다</b>(F-7) — 목록에 안 나오는 상품을 달력에만 그릴 이유가 없다.
+     *
+     * <p>정렬은 <b>시작이 이른 순</b>. 같은 날 시작이면 상품명으로 안정화한다 —
+     * 안 그러면 새로고침마다 막대 순서가 바뀐다(재고 부족 목록과 같은 이유).
+     */
+    @Query("""
+            select new com.glassvue.domain.catalog.dto.ProductSaleResponse(
+                d.id, d.productId, p.name, d.rate, d.startsAt, d.endsAt)
+            from ProductDiscount d, Product p
+            where p.id = d.productId
+              and p.deletedAt is null
+              and d.startsAt <= :to
+              and d.endsAt > :from
+            order by d.startsAt asc, p.name asc
+            """)
+    List<ProductSaleResponse> findSalesBetween(@Param("from") Instant from, @Param("to") Instant to);
 }

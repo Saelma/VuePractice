@@ -6,6 +6,7 @@ import com.glassvue.domain.coupon.dto.EventCouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
 import com.glassvue.domain.coupon.dto.PromotionCalendarResponse;
 import com.glassvue.domain.coupon.service.CouponService;
+import com.glassvue.domain.coupon.service.query.PromotionCalendarService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class CouponControllerImpl implements CouponController {
 
     private final CouponService couponService;
+    private final PromotionCalendarService promotionCalendarService;
 
     @Override
     @GetMapping("/coupons/me")
@@ -89,7 +91,7 @@ public class CouponControllerImpl implements CouponController {
         YearMonth target = (month == null || month.isBlank())
                 ? YearMonth.now(ZoneId.of("Asia/Seoul"))
                 : YearMonth.parse(month);
-        return ResponseEntity.ok(ApiResponse.ok(couponService.promotionCalendar(target)));
+        return ResponseEntity.ok(ApiResponse.ok(promotionCalendarService.calendar(target)));
     }
 
     @Override
