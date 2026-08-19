@@ -320,16 +320,30 @@ class ProductDiscountIntegrationTest {
     @Test
     @DisplayName("🔴 가격 필터가 **세일가**를 본다 — 화면엔 8,000인데 「1만원 이하」에 안 걸리면 안 된다")
     void priceFilterUsesSalePrice() throws Exception {
-        // 세일 전: 10,000 이라 «9,000 이하» 에 안 걸린다 (대조군)
-        mockMvc.perform(get("/api/products").param("name", productName).param("maxPrice", "9000"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content.length()").value(0));
+        // 🔴 **대조군을 「세일 없는 다른 상품」으로 둔다** — 둘 다 기본가 10,000 이고 세일만 다르다.
+        //    ⚠ 예전에는 «같은 조회를 세일 전후로 두 번» 불러 비교했는데 그 방식이 **간헐적으로 실패했다**
+        //       (2026-08-19 실측: 3~4회 중 1~2회). 두 호출 사이에 `products:list` 캐시 쓰기와
+        //       `@CacheEvict` 가 끼어 있는 구조였고, **원인은 확정하지 못했다**
+        //       (EntityManager flush 가설은 세워서 밟아 봤고 **기각됐다**).
+        //    → 원인을 모르는 채로 «가끔 빨개지는 테스트» 를 남기지 않는다. 한 번의 조회로 둘을 함께
+        //       증명하면 그 의존이 아예 없어지고, **대조군의 값어치는 오히려 커진다**
+        //       (같은 순간·같은 쿼리에서 «걸리는 것» 과 «안 걸리는 것» 을 나란히 본다, WA §3-3).
+        String plainName = productName + "-대조군";
+        String body = "{\"name\":\"" + plainName + "\",\"description\":\"설명\","
+                + "\"price\":" + BASE_PRICE + ",\"status\":\"SELLING\",\"categoryId\":\"" + categoryId + "\","
+                + "\"variants\":[{\"name\":\"기본\",\"priceDelta\":0,\"stock\":5}]}";
+        mockMvc.perform(post("/api/products").contentType(JSON)
+                        .header(HttpHeaders.AUTHORIZATION, login(adminLoginId)).content(body))
+                .andExpect(status().isCreated());
 
-        createTodayDiscount(20); // → 8,000
+        createTodayDiscount(20); // 세일 상품만 8,000 이 된다
 
+        // 「9,000 이하」로 걸러 보면 **세일 상품만** 나온다. 대조군은 10,000 이라 안 걸린다 —
+        // 즉 이 단언은 «필터가 세일가를 본다» 와 «필터가 실제로 거르고 있다» 를 동시에 말한다.
         mockMvc.perform(get("/api/products").param("name", productName).param("maxPrice", "9000"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].name").value(productName))
                 .andExpect(jsonPath("$.data.content[0].price").value(8000));
     }
 
