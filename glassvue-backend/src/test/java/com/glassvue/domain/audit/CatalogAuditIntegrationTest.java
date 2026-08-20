@@ -176,17 +176,30 @@ class CatalogAuditIntegrationTest {
         assertThat(detail).doesNotContain("옵션");
     }
 
-    @DisplayName("🔴 재고만 바꾼 수정 — detail 에 재고가 없다(stock_history 가 갖는다)")
+    @DisplayName("🔴 재고만 바꾼 수정 — 수량은 없고 «어디를 보라» 만 있다")
     @Test
-    void productUpdateDoesNotRecordStock() throws Exception {
+    void productUpdateRecordsStockAsPointerOnly() throws Exception {
         updateProduct(productBody(productName, BASE_PRICE, "SELLING", 99));
 
         String detail = onlyRow(productId, AuditAction.PRODUCT_UPDATE).getDetail();
 
-        // 재고는 바뀌었지만 원장에는 «변경 없음» 이다 — 같은 사실을 두 곳에 적지 않는다는 결정이
-        // 여기서 눈에 보인다. ⚠ 재고 이력 쪽에는 남는다(StockHistoryIntegrationTest 가 본다).
-        assertThat(detail).isEqualTo("변경 없음");
+        // 🔴 **이 단언 둘이 한 쌍이다.** 수량을 안 적는 것은 stock_history 와 같은 사실을 두 곳에
+        //    남기지 않기 위해서고(한쪽만 고쳐지면 어긋난다), 그래도 «일이 있었다» 는 적어야 한다.
+        //    ⚠ 2026-08-20 브라우저 검증에서 드러난 자리다 — 재고가 5개 움직인 저장이 «변경 없음» 으로
+        //      남아, **정말 아무 일도 없던 저장과 한 글자도 다르지 않았다.**
+        assertThat(detail).isEqualTo("재고 바뀜(이력 참조)");
         assertThat(detail).doesNotContain("99");
+    }
+
+    @DisplayName("🔴 재고와 다른 값이 함께 바뀌면 둘 다 적힌다 — 재고가 다른 변경을 가리지 않는다")
+    @Test
+    void productUpdateRecordsStockAlongsideOtherChanges() throws Exception {
+        updateProduct(productBody(productName, 8_000L, "SELLING", 42));
+
+        String detail = onlyRow(productId, AuditAction.PRODUCT_UPDATE).getDetail();
+
+        assertThat(detail).contains("판매가 10000→8000");
+        assertThat(detail).contains("재고 바뀜(이력 참조)");
     }
 
     @DisplayName("⚠ 아무것도 안 바뀐 저장도 줄을 남긴다 — «변경 없음»(2026-08-20 결정)")
@@ -196,6 +209,9 @@ class CatalogAuditIntegrationTest {
 
         // 🔴 PRODUCT_DELETE 는 «조용히 통과한 호출» 에 줄을 안 남긴다. 여기는 갈린다 —
         //    거기는 아무 일도 안 일어났고, 여기는 저장까지 실제로 갔다.
+        // 🔴 그리고 이 «변경 없음» 은 **정말 아무 일도 없었다는 뜻이어야 한다** —
+        //    재고가 움직인 저장과 같은 문자열이면 원장이 둘을 구분해 주지 못한다
+        //    (위 productUpdateRecordsStockAsPointerOnly 와 짝이다).
         assertThat(onlyRow(productId, AuditAction.PRODUCT_UPDATE).getDetail()).isEqualTo("변경 없음");
     }
 

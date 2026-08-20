@@ -137,7 +137,7 @@ public class ProductCommandService {
         variantRepository.flush(); // 삭제를 먼저 DB 에 보내 새 옵션과 섞이지 않게
         List<ProductVariant> saved = saveVariants(id, req.variants());
 
-        recordEdit(id, stockByName, saved, actor);
+        boolean stockChanged = recordEdit(id, stockByName, saved, actor);
 
         imageService.deleteGroup(oldGroupId);
 
@@ -148,7 +148,7 @@ public class ProductCommandService {
         publishIfCrossedIntoLow(id, product.getName(), stockByName, saved);
 
         publishAudit(AuditAction.PRODUCT_UPDATE, actor, product,
-                describeChanges(before, ProductSnapshot.of(product, saved.size())));
+                describeChanges(before, ProductSnapshot.of(product, saved.size()), stockChanged));
     }
 
     /**
@@ -186,7 +186,8 @@ public class ProductCommandService {
      * 관리 화면이 상품 전체를 다시 보내 흔한 경우이고, 그래도 줄은 남긴다 —
      * «누가 언제 손댔나» 를 접근 기록으로 본다(2026-08-20 사용자와 확정).
      */
-    private String describeChanges(ProductSnapshot before, ProductSnapshot after) {
+    private String describeChanges(ProductSnapshot before, ProductSnapshot after,
+                                   boolean stockChanged) {
         List<String> changes = new ArrayList<>();
         if (!Objects.equals(before.name(), after.name())) {
             changes.add("이름 " + before.name() + "→" + after.name());
@@ -211,6 +212,15 @@ public class ProductCommandService {
         }
         if (!Objects.equals(before.description(), after.description())) {
             changes.add("설명 바뀜");
+        }
+        if (stockChanged) {
+            // 🔴 **값이 아니라 «어디를 보라» 를 적는다**(2026-08-20 사용자 결정, 브라우저 검증에서 나왔다).
+            //    수량을 적으면 stock_history 와 같은 사실이 두 곳에 남아 한쪽만 고쳐질 때 어긋난다 —
+            //    그 판단은 그대로 두고, **갈라야 할 것은 값이 아니라 «일이 있었나»** 였다.
+            //    ⚠ 실증: 재고만 5개 움직인 저장이 원장에 «변경 없음» 으로 남아,
+            //      **정말 아무 일도 없던 저장 둘과 한 글자도 다르지 않았다**(10:59 세 줄).
+            //      감사 화면만 보는 사람에게는 셋이 다 «헛저장» 으로 읽힌다.
+            changes.add("재고 바뀜(이력 참조)");
         }
         return changes.isEmpty() ? "변경 없음" : String.join(" · ", changes);
     }
@@ -455,9 +465,14 @@ public class ProductCommandService {
      *
      * <p>⚠ <b>변동이 0이면 남기지 않는다.</b> 상품명·설명만 고쳐도 저장은 옵션을 통째로 다시 만드는데,
      * 그때마다 줄이 쌓이면 원장이 시끄러워져 진짜 변동이 묻힌다.
+     *
+     * @return 재고 줄을 <b>하나라도 남겼는가</b>. 감사 {@code detail} 이 «재고가 움직였다» 를
+     *         가리키는 데 쓴다(2026-08-20). ⚠ <b>가드를 여기로 옮긴 것이 아니다</b> —
+     *         판정은 여전히 {@code recordAdmin} 한 곳이고, 여기서는 <b>그것이 한 일을 전할 뿐</b>이다
+     *         (같은 규칙을 두 곳이 지키면 한쪽은 죽은 코드다 — 2026-08-04 M2 의 교훈).
      */
-    private void recordEdit(UUID productId, Map<String, Long> before,
-                            List<ProductVariant> after, AuthUser actor) {
+    private boolean recordEdit(UUID productId, Map<String, Long> before,
+                               List<ProductVariant> after, AuthUser actor) {
         Map<String, Long> afterByName = stockByName(after);
         Map<String, ProductVariant> variantByName = new LinkedHashMap<>();
         after.forEach(v -> variantByName.putIfAbsent(v.getName(), v));
@@ -465,6 +480,7 @@ public class ProductCommandService {
         Set<String> names = new LinkedHashSet<>(afterByName.keySet());
         names.addAll(before.keySet());
 
+        boolean recorded = false;
         for (String name : names) {
             long from = before.getOrDefault(name, 0L);
             long to = afterByName.getOrDefault(name, 0L);
@@ -472,9 +488,12 @@ public class ProductCommandService {
             //    처음엔 이 자리에도 같은 가드를 뒀는데, **변형 주입에서 뒤집어도 아무 테스트가 안
             //    빨개졌다**(2026-08-04 M2). 아래 가드가 흡수하고 있어서다 — 같은 규칙을 두 곳이
             //    지키면 한쪽은 죽은 코드이고, 죽은 코드는 "지키고 있다"는 착각만 만든다.
-            recordAdmin(productId, variantByName.get(name), name, StockChangeReason.ADMIN_EDIT,
-                    to - from, to, actor);
+            // 🔴 `|=` 다(`||` 가 아니다) — `||` 로 쓰면 한 번 참이 된 뒤의 옵션은 **호출 자체가
+            //    건너뛰어져** 재고 이력이 통째로 빠진다. 단축 평가가 부작용을 삼키는 자리다.
+            recorded |= recordAdmin(productId, variantByName.get(name), name,
+                    StockChangeReason.ADMIN_EDIT, to - from, to, actor);
         }
+        return recorded;
     }
 
     /**
@@ -489,24 +508,26 @@ public class ProductCommandService {
         return byName;
     }
 
-    private void recordAdmin(UUID productId, ProductVariant variant, StockChangeReason reason,
-                             long quantity, long stockAfter, AuthUser actor) {
-        recordAdmin(productId, variant, variant.getName(), reason, quantity, stockAfter, actor);
+    private boolean recordAdmin(UUID productId, ProductVariant variant, StockChangeReason reason,
+                                long quantity, long stockAfter, AuthUser actor) {
+        return recordAdmin(productId, variant, variant.getName(), reason, quantity, stockAfter, actor);
     }
 
     /**
      * {@code variant} 는 <b>null 일 수 있다</b> — 삭제된 옵션의 마지막 줄이라 가리킬 대상이 없다.
      * 그때도 이름은 남으므로 이력은 끊기지 않는다.
      */
-    private void recordAdmin(UUID productId, ProductVariant variant, String variantName,
-                             StockChangeReason reason, long quantity, long stockAfter, AuthUser actor) {
+    private boolean recordAdmin(UUID productId, ProductVariant variant, String variantName,
+                                StockChangeReason reason, long quantity, long stockAfter,
+                                AuthUser actor) {
         if (quantity == 0) {
-            return; // 변동 없음 — 원장에 남길 것이 없다
+            return false; // 변동 없음 — 원장에 남길 것이 없다
         }
         stockHistoryRepository.save(StockHistory.byAdmin(
                 productId, variantName, variant == null ? null : variant.getId(),
                 reason, quantity, stockAfter,
                 actor == null ? null : actor.id(),
                 actor == null ? null : actor.nickname()));
+        return true;
     }
 }
