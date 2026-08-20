@@ -67,6 +67,22 @@ public class OrderItem extends BaseTimeEntity {
     @Column(name = "list_price")
     private Long listPrice;
 
+    /**
+     * 🔴 <b>주문 시점 «세일 전 판매가» 스냅샷</b> (2026-08-20, V55, BACKLOG G-9).
+     *
+     * <p>기간 할인이 없었으면 받았을 금액(기본가 + 옵션 가격차). 세일 중이 아니었으면 {@code price} 와 같다.
+     *
+     * <p>⚠ <b>{@link #listPrice}(정가)와 다른 값이다.</b> 정가는 관리자가 <b>손으로</b> 넣는
+     * «원래 이 값어치» 라 비어 있을 수 있고, 이건 <b>서버가 계산</b>한다.
+     * 🔴 실측(2026-08-20, {@code 20260820-4733}): 세일가 9,600 에 팔린 주문의 {@code list_price} 가
+     * <b>NULL</b> 이라 «원래 12,000 이었다» 가 통째로 사라졌다 — 이 컬럼이 그 자리를 메운다.
+     *
+     * <p>⚠ <b>{@code null} 은 «이 컬럼이 생기기 전 주문» 이다</b>(백필 안 했다).
+     * 세일이 없었다는 뜻이 <b>아니다</b> — 모르는 것이다(V55 주석 참조).
+     */
+    @Column(name = "regular_price")
+    private Long regularPrice;
+
     @Column(nullable = false)
     private long quantity;
 
@@ -75,13 +91,14 @@ public class OrderItem extends BaseTimeEntity {
 
     private OrderItem(UUID productId, UUID variantId, String variantName,
                       String productName, String productImageUrl,
-                      long price, Long listPrice, long quantity) {
+                      long price, Long regularPrice, Long listPrice, long quantity) {
         this.productId = productId;
         this.variantId = variantId;
         this.variantName = variantName;
         this.productName = productName;
         this.productImageUrl = productImageUrl;
         this.price = price;
+        this.regularPrice = regularPrice;
         this.listPrice = listPrice;
         this.quantity = quantity;
         this.lineTotal = price * quantity;
@@ -89,9 +106,9 @@ public class OrderItem extends BaseTimeEntity {
 
     public static OrderItem of(UUID productId, UUID variantId, String variantName,
                                String productName, String productImageUrl,
-                               long price, Long listPrice, long quantity) {
+                               long price, Long regularPrice, Long listPrice, long quantity) {
         return new OrderItem(productId, variantId, variantName, productName,
-                productImageUrl, price, listPrice, quantity);
+                productImageUrl, price, regularPrice, listPrice, quantity);
     }
 
     void assignOrder(Order order) {

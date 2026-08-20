@@ -99,8 +99,11 @@ public class CartService {
             String thumb = product.images().isEmpty() ? null : product.images().get(0).thumbUrl();
             // 단일 옵션 상품은 옵션명을 감춘다("기본" 노이즈 방지). 옵션이 2개 이상일 때만 보여준다.
             String optionName = product.variants().size() > 1 ? variant.name() : null;
+            // ⚠ regularPrice 는 **세일 전 판매가**다(G-9) — 주문이 이걸 스냅샷한다.
+            //    listPrice(정가)와 다른 값이라 한 칸에 섞지 않는다.
             lines.add(new CartItemResponse(product.id(), variantId, product.name(), optionName,
-                    variant.price(), product.listPrice(), product.status(), qty, lineTotal, available, thumb));
+                    variant.price(), variant.regularPrice(), product.listPrice(), product.status(),
+                    qty, lineTotal, available, thumb));
             totalQuantity += qty;
             totalPrice += lineTotal;
         }

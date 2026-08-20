@@ -87,8 +87,11 @@ public class OrderService {
         for (CartItemResponse i : cart.items()) {
             // 옵션 id·이름도 스냅샷한다 — 취소 시 재고 복원 대상이고, 옵션명은 주문 내역 표시용이다
             // (정가·배송지·운송장과 같은 스냅샷 원칙).
+            // ⚠ regularPrice 는 **세일 전 판매가**다(G-9, 2026-08-20) — 정가(listPrice)와 다른 값이고
+            //    둘 다 스냅샷한다. 그전에는 이 값을 나를 통로가 아예 없어서
+            //    «원래 얼마였는데 세일로 얼마에 샀다» 가 주문에 안 남았다.
             orderItems.add(OrderItem.of(i.productId(), i.variantId(), i.optionName(),
-                    i.name(), i.thumbUrl(), i.price(), i.listPrice(), i.quantity()));
+                    i.name(), i.thumbUrl(), i.price(), i.regularPrice(), i.listPrice(), i.quantity()));
         }
 
         // 금액 계산 순서: 상품합계 → 쿠폰할인 → 배송비 → 결제금액.

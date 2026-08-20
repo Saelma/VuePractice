@@ -85,7 +85,7 @@ class AdminOrderCancelIntegrationTest {
     /** @param usedPoint 이 주문에 쓴 적립금. 0 이면 적립금을 안 쓴 주문. */
     private Order save(long usedPoint, java.util.function.Consumer<Order> transition) {
         Order order = Order.create(userId, MARK + "-구매자",
-                List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, MARK + "-상품", null, 10_000, null, 1)),
+                List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, MARK + "-상품", null, 10_000, 10_000L, null, 1)),
                 "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000,
                 uniqueOrderNo(), null, 0L, null, usedPoint);
         transition.accept(order);
@@ -273,7 +273,7 @@ class AdminOrderCancelIntegrationTest {
         // 주문만 남기고 회원은 없는 상태 = 탈퇴 후의 주문(F-1)
         UUID goneMemberId = UUID.randomUUID();
         Order order = orderRepository.save(Order.create(goneMemberId, MARK + "-탈퇴자",
-                List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, MARK + "-상품", null, 10_000, null, 1)),
+                List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, MARK + "-상품", null, 10_000, 10_000L, null, 1)),
                 "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null, 3_000,
                 uniqueOrderNo(), null, 0L, null, 0L));
 

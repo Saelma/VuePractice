@@ -89,13 +89,21 @@ export function isOnSale(item) {
  * 이건 **화면이 이미 가진 두 숫자의 산술**이라 서버가 완성해 줄 이유가 없다.
  * 대신 **여기 한 곳에만** 둬서 화면마다 계산이 갈리지 않게 한다(주문 상태 색을 한 곳에 모은 것과 같은 이유).
  *
- * ⚠ **주문 항목(OrderItemResponse)에는 `discountRate` 가 없다** — 스냅샷이라 `price`·`listPrice` 둘뿐이다.
- * 그래서 주문 상세는 자동으로 아래쪽(정가 기준) 갈래를 탄다. **그게 맞다**: 산 시점의 값이지
- * 지금 세일 중인지가 아니다.
+ * ⚠ **주문 항목(OrderItemResponse)에는 `discountRate` 가 없다** — 스냅샷이라 산 시점의 «값» 만 있고
+ * «지금 세일 중인가» 는 없다. **그게 맞다.**
+ *
+ * 🔴 **대신 2026-08-20(G-9)부터 `regularPrice`(세일 전 판매가)가 주문에도 실린다.** 그래서 주문 상세도
+ * «세일로 샀다» 를 그릴 수 있다 — 그전에는 정가 칸이 빈 상품을 세일가로 사면 **화면에 흔적이 아예
+ * 안 남았다**(실측 2026-08-20, `20260820-4733`).
+ * ⚠ 여기서는 `regularPrice > price` 로 판정한다. 위 `isOnSale` 이 그 유추를 금지한 것과 **모순이 아니다** —
+ * 거기는 «**지금** 세일 중인가» 라 서버 시계·반올림이 걸렸고, 여기는 «**그때** 깎여서 샀나» 라
+ * 두 스냅샷의 대소가 곧 답이다. 반올림으로 같아지면 줄을 안 긋는데, 그건 안 그리는 게 맞다.
  */
 export function hasDiscount(item) {
   if (!item) return false;
-  return isOnSale(item) || (item.listPrice != null && item.listPrice > item.price);
+  return isOnSale(item)
+    || (item.regularPrice != null && item.regularPrice > item.price)
+    || (item.listPrice != null && item.listPrice > item.price);
 }
 
 /**
@@ -113,6 +121,12 @@ export function strikePrice(item) {
   if (isOnSale(item)) {
     return item.regularPrice > item.price ? item.regularPrice : null;
   }
+  // 주문 스냅샷(G-9) — `discountRate` 는 없고 `regularPrice` 만 있다. 세일로 샀으면 그 값을 긋는다.
+  // ⚠ **정가보다 먼저 본다.** 세일과 정가가 둘 다 있으면 「지금 얼마나 싼가」를 보여주는 쪽이
+  //    세일이다(위 isOnSale 갈래가 정가가 아니라 regularPrice 를 고른 것과 같은 판단).
+  if (item.regularPrice != null && item.regularPrice > item.price) {
+    return item.regularPrice;
+  }
   return item.listPrice != null && item.listPrice > item.price ? item.listPrice : null;
 }
 
@@ -124,7 +138,11 @@ export function strikePrice(item) {
 export function discountRate(item) {
   if (isOnSale(item)) return item.discountRate;
   if (!hasDiscount(item)) return 0;
-  return Math.round(((item.listPrice - item.price) / item.listPrice) * 100);
+  // 🔴 **긋는 값과 같은 기준으로 센다**(G-9). 취소선은 regularPrice 인데 비율은 listPrice 로 세면
+  //    «12,000 → 9,600» 옆에 엉뚱한 %가 붙는다. 기준이 갈리면 화면이 스스로 모순된다.
+  const base = strikePrice(item);
+  if (!base) return 0;
+  return Math.round(((base - item.price) / base) * 100);
 }
 
 /**

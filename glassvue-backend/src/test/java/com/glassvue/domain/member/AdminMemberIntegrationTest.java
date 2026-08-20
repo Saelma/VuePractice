@@ -80,7 +80,7 @@ class AdminMemberIntegrationTest {
 
     private void saveOrder() {
         Order order = Order.create(userId, MARK + "-대상회원",
-                List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, MARK + "-상품", null, 10_000, null, 1)),
+                List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, MARK + "-상품", null, 10_000, 10_000L, null, 1)),
                 "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
                 3_000, "20260101-" + UUID.randomUUID().toString().substring(0, 8), null, 0L, null, 0L);
         orderRepository.save(order);

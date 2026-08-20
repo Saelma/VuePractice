@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   statusText, priceText, STATUS_OPTIONS, hasDiscount, discountRate,
-  stockReasonText, stockDeltaText,
+  stockReasonText, stockDeltaText, strikePrice,
 } from './product';
 
 describe('product 헬퍼', () => {
@@ -60,5 +60,45 @@ describe('재고 이력 헬퍼 (B-19)', () => {
     expect(stockDeltaText(-3)).toBe('-3');
     expect(stockDeltaText(1234)).toBe('+1,234');
     expect(stockDeltaText(-1234)).toBe('-1,234');
+  });
+});
+
+/**
+ * 🔴 **주문 스냅샷의 세일 흔적** (2026-08-20, BACKLOG G-9).
+ *
+ * 주문 항목에는 `discountRate` 가 없다 — 산 시점의 값만 있다. 그래서 «세일로 샀나» 는
+ * `regularPrice > price` 로만 알 수 있고, **그 갈래가 없으면 정가 칸이 빈 상품을 세일가로 산 주문에
+ * 흔적이 아예 안 남는다**(실측 2026-08-20, `20260820-4733`: price 9,600 · listPrice NULL).
+ */
+describe('주문 스냅샷의 세일 흔적 (G-9)', () => {
+  // 실측 표본과 같은 모양: 정가 칸은 비었고 기간 세일로 12,000 → 9,600 에 샀다.
+  const soldOnSale = { price: 9600, regularPrice: 12000, listPrice: null };
+
+  it('🔴 정가가 없어도 세일로 샀으면 할인으로 읽는다', () => {
+    expect(hasDiscount(soldOnSale)).toBe(true);
+    expect(strikePrice(soldOnSale)).toBe(12000);
+    expect(discountRate(soldOnSale)).toBe(20);
+  });
+
+  it('세일 없이 샀으면 아무 줄도 안 긋는다 — regularPrice 가 price 와 같다', () => {
+    const plain = { price: 10000, regularPrice: 10000, listPrice: null };
+    expect(hasDiscount(plain)).toBe(false);
+    expect(strikePrice(plain)).toBeNull();
+  });
+
+  it('⚠ regularPrice 가 없는 옛 주문은 정가 갈래를 그대로 탄다 (백필 안 했다)', () => {
+    // null 은 «세일이 없었다» 가 아니라 «모른다» 다 — 추측해서 그리지 않는다.
+    const old = { price: 31200, listPrice: 39000 };
+    expect(hasDiscount(old)).toBe(true);
+    expect(strikePrice(old)).toBe(39000);
+    expect(discountRate(old)).toBe(20);
+  });
+
+  it('🔴 비율은 **긋는 값과 같은 기준**으로 센다 — 둘이 갈리면 화면이 스스로 모순된다', () => {
+    // 세일(12,000→9,600 = 20%)과 정가(20,000)가 함께 있는 경우.
+    // 취소선은 세일 전 판매가라, 비율도 그 기준이어야 한다(정가 기준이면 52% 가 된다).
+    const both = { price: 9600, regularPrice: 12000, listPrice: 20000 };
+    expect(strikePrice(both)).toBe(12000);
+    expect(discountRate(both)).toBe(20);
   });
 });

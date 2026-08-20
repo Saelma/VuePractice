@@ -9,7 +9,7 @@ import {
   requestReturn, approveReturn, rejectReturn,
   orderStatusText, orderStatusClass, DELIVERY_CARRIERS,
 } from '../api/order';
-import { priceText, hasDiscount, discountRate } from '../api/product';
+import { priceText, hasDiscount, discountRate, strikePrice } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
 import { addressText } from '../api/shipping';
 import { authState, isAdmin } from '../stores/auth';
@@ -325,8 +325,14 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
               <!-- 옵션명 스냅샷(2026-07-24 C-8). 단일 옵션/옵션 이전 주문이면 null이라 안 뜬다. -->
               <p v-if="item.optionName" class="muted truncate">{{ item.optionName }}</p>
               <p class="muted mt-1 tabular-nums">
-                <!-- 주문 시점 정가 스냅샷(V16). 없으면 할인 없이 샀거나 정가 도입 이전 주문이다. -->
-                <span v-if="hasDiscount(item)" class="line-through">{{ priceText(item.listPrice) }}</span>
+                <!--
+                  주문 시점 스냅샷에 줄을 긋는다. 🔴 **무엇을 그을지는 strikePrice 가 정한다**(G-9) —
+                  세일로 샀으면 `regularPrice`(세일 전 판매가), 아니면 `listPrice`(정가).
+                  ⚠ 예전엔 여기서 `item.listPrice` 를 직접 읽었는데, 그러면 **정가 칸이 빈 상품을
+                  세일가로 산 주문**에 흔적이 아예 안 남는다(실측 2026-08-20, 20260820-4733).
+                  ⚠ 둘 다 없으면 `hasDiscount` 가 거짓이라 이 줄 자체가 안 그려진다.
+                -->
+                <span v-if="hasDiscount(item)" class="line-through">{{ priceText(strikePrice(item)) }}</span>
                 {{ priceText(item.price) }} × {{ item.quantity }}
                 <span v-if="hasDiscount(item)" class="font-medium text-danger">{{ discountRate(item) }}%</span>
               </p>
