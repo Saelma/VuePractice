@@ -3,6 +3,7 @@ package com.glassvue.domain.catalog.controller;
 import com.glassvue.domain.catalog.dto.ProductDiscountRequest;
 import com.glassvue.domain.catalog.dto.ProductDiscountResponse;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
@@ -57,7 +58,7 @@ public interface AdminProductDiscountController {
                     ⚠ **삭제 대기 상품에는 걸 수 없다**(404) — 목록에 안 나오는 상품이라
                     걸어 봐야 관리자만 「걸었는데 아무 일도 안 난다」를 본다.
                     """)
-    ResponseEntity<ApiResponse<UUID>> create(UUID productId, ProductDiscountRequest request);
+    ResponseEntity<ApiResponse<UUID>> create(AuthUser user, UUID productId, ProductDiscountRequest request);
 
     @Operation(summary = "할인 수정",
             description = """
@@ -67,7 +68,7 @@ public interface AdminProductDiscountController {
                     ⚠ **다른 상품의 할인 id 를 넘기면 404** 다. 소속까지 확인하지 않으면
                     관리자가 **자기가 안 건드린 상품의 세일**을 바꿔 놓고 나중에야 알게 된다.
                     """)
-    ResponseEntity<ApiResponse<Void>> update(UUID productId, UUID discountId,
+    ResponseEntity<ApiResponse<Void>> update(AuthUser user, UUID productId, UUID discountId,
                                              ProductDiscountRequest request);
 
     @Operation(summary = "할인 삭제",
@@ -78,5 +79,5 @@ public interface AdminProductDiscountController {
                     🔴 **이미 팔린 주문의 금액은 안 변한다**(주문에 정가·판매가를 복사해 두므로, B-7).
                     그 토대가 있어서 이 조작이 안전하다.
                     """)
-    ResponseEntity<ApiResponse<Void>> delete(UUID productId, UUID discountId);
+    ResponseEntity<ApiResponse<Void>> delete(AuthUser user, UUID productId, UUID discountId);
 }

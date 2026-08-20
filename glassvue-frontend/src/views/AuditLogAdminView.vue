@@ -12,15 +12,28 @@ import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxSelectBox } from 'devextreme-vue/select-box';
-import { fetchAuditLogs, auditActionText, auditActionBadge, AUDIT_ACTION_LABEL } from '../api/audit';
+import {
+  fetchAuditLogs, auditActionText, auditActionBadge, auditTargetTypeText,
+  AUDIT_ACTION_LABEL, AUDIT_TARGET_TYPE_LABEL,
+} from '../api/audit';
 
-const form = ref({ action: null, targetLogin: '' });
+const form = ref({ action: null, targetType: null, targetLogin: '' });
 const applied = ref({ ...form.value });
 const gridRef = ref(null);
 
 const actionOptions = [
   { value: null, label: '전체' },
   ...Object.entries(AUDIT_ACTION_LABEL).map(([value, label]) => ({ value, label })),
+];
+
+/**
+ * 🔴 **대상 종류 필터 (2026-08-20, V53).** 상품·쿠폰 행은 targetLogin 이 비어 있어
+ * 「대상 아이디」로 못 찾는다 — 그전에는 「조작 종류」를 하나씩 골라 보는 수밖에 없었다.
+ * 이제 «상품에 일어난 일 전부»(등록·수정·삭제·복구 + **세일 조작**)를 한 번에 볼 수 있다.
+ */
+const targetTypeOptions = [
+  { value: null, label: '전체' },
+  ...Object.entries(AUDIT_TARGET_TYPE_LABEL).map(([value, label]) => ({ value, label })),
 ];
 
 const store = new CustomStore({
@@ -38,7 +51,7 @@ function search() {
   gridRef.value?.instance.refresh();
 }
 function reset() {
-  form.value = { action: null, targetLogin: '' };
+  form.value = { action: null, targetType: null, targetLogin: '' };
   search();
 }
 
@@ -57,7 +70,7 @@ const actionBadge = auditActionBadge;
     <!-- 셸만 토큰/공용 클래스로. 표는 운영 화면이라 DataGrid 그대로 (DESIGN.md §7) -->
     <div class="mb-5">
       <h1 class="page-title">감사 이력</h1>
-      <p class="muted mt-1">관리자 조작(정지·해제·역할변경) 이력입니다. 최상위 관리자만 조회합니다.</p>
+      <p class="muted mt-1">관리자 조작(회원·주문·상품·쿠폰·세일) 이력입니다. 최상위 관리자만 조회합니다.</p>
     </div>
 
     <div class="card mb-4 flex flex-wrap items-end gap-3 p-4">
@@ -73,6 +86,14 @@ const actionBadge = auditActionBadge;
       </label>
       <label class="field">
         <span class="field-label">대상 아이디</span>
+        <DxSelectBox
+          v-model:value="form.targetType"
+          :items="targetTypeOptions"
+          value-expr="value"
+          display-expr="label"
+          :width="140"
+          placeholder="대상 종류"
+        />
         <DxTextBox v-model:value="form.targetLogin" placeholder="loginId 부분일치" :width="200" @enter-key="search" />
       </label>
       <div class="flex gap-2">
@@ -99,6 +120,13 @@ const actionBadge = auditActionBadge;
         (상품 삭제·복구 — 그때 targetLogin 은 null 이다) 이 칸이 정상적으로 비는 줄이 섞인다.
         그냥 두면 «데이터가 빠졌다» 로 읽힌다 — 옆 「내용」 열이 같은 이유로 이미 이렇게 한다.
       -->
+      <!--
+        🔴 **「대상」과 「대상 아이디」는 다른 열이다**(2026-08-20). 앞은 «무엇을» 조작했는지
+        (회원·상품·쿠폰), 뒤는 «그게 회원이면 누구인지» 다. 합치면 상품 행에서 뭘 보여줄지가 없다.
+        ⚠ 옆 칸이 '—' 인 이유를 이 칸이 설명해 준다 — 「상품」이면 아이디가 비는 것이 정상이다.
+      -->
+      <DxColumn data-field="targetType" caption="대상" :width="90" alignment="center"
+                :calculate-display-value="(r) => auditTargetTypeText(r.targetType)" />
       <DxColumn data-field="targetLogin" caption="대상 아이디" :width="160"
                 :calculate-display-value="(r) => r.targetLogin || '—'" />
       <DxColumn data-field="detail" caption="내용" :calculate-display-value="(r) => r.detail || '—'" />

@@ -1,18 +1,23 @@
 package com.glassvue.domain.catalog.service.command;
 
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.catalog.dto.ProductDiscountRequest;
 import com.glassvue.domain.catalog.entity.ProductDiscount;
 import com.glassvue.domain.catalog.repository.ProductDiscountRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.security.AuthUser;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,25 +55,31 @@ public class ProductDiscountCommandService {
 
     private final ProductDiscountRepository discountRepository;
     private final ProductRepository productRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @CacheEvict(cacheNames = "products:list", allEntries = true)
-    public UUID create(UUID productId, ProductDiscountRequest req) {
+    public UUID create(UUID productId, ProductDiscountRequest req, AuthUser actor) {
         ensureProductAlive(productId);
         Instant startsAt = startBoundary(req);
         Instant endsAt = endBoundary(req);
         validatePeriod(productId, startsAt, endsAt, NO_EXCLUDE);
-        return discountRepository.save(
+        UUID id = discountRepository.save(
                 ProductDiscount.of(productId, req.rate(), startsAt, endsAt)).getId();
+        publishAudit(AuditAction.DISCOUNT_CREATE, actor, productId, describe(req));
+        return id;
     }
 
     @CacheEvict(cacheNames = "products:list", allEntries = true)
-    public void update(UUID productId, UUID discountId, ProductDiscountRequest req) {
+    public void update(UUID productId, UUID discountId, ProductDiscountRequest req, AuthUser actor) {
         ProductDiscount discount = findOwned(productId, discountId);
         Instant startsAt = startBoundary(req);
         Instant endsAt = endBoundary(req);
         // ⚠ 자기 자신은 겹침에서 뺀다 — 안 그러면 기간을 그대로 두고 **할인율만 고치는 것이 불가능**하다.
         validatePeriod(productId, startsAt, endsAt, discountId);
+        // ⚠ «전» 은 덮어쓰기 전에 붙잡는다 — 뒤에서 읽으면 전후가 같아진다(상품 수정과 같은 함정).
+        String before = describe(discount);
         discount.update(req.rate(), startsAt, endsAt);
+        publishAudit(AuditAction.DISCOUNT_UPDATE, actor, productId, before + " → " + describe(req));
     }
 
     /**
@@ -79,8 +90,43 @@ public class ProductDiscountCommandService {
      * 그 토대가 있어서 이 조작이 안전하다.
      */
     @CacheEvict(cacheNames = "products:list", allEntries = true)
-    public void delete(UUID productId, UUID discountId) {
-        discountRepository.delete(findOwned(productId, discountId));
+    public void delete(UUID productId, UUID discountId, AuthUser actor) {
+        ProductDiscount discount = findOwned(productId, discountId);
+        // ⚠ 지우기 **전에** 읽는다 — 지운 뒤엔 «무엇을 지웠나» 를 적을 값이 없다.
+        String detail = describe(discount);
+        discountRepository.delete(discount);
+        publishAudit(AuditAction.DISCOUNT_DELETE, actor, productId, detail);
+    }
+
+    /**
+     * 감사 {@code detail} — <b>할인율과 기간</b>이다 (2026-08-20, V53).
+     *
+     * <p>그 조작이 실제로 정한 것이 그 둘이라 그것만 적는다. 상품은 {@code targetId} 가 이미 말한다.
+     *
+     * <p>⚠ 기간은 <b>관리자가 적은 대로</b>(종료일 포함) 적는다. 저장된 {@code endsAt} 은
+     * 배타 경계라 <b>하루 뒤</b>인데, 그대로 적으면 관리자가 «내가 적은 날이 아닌데» 라고 읽는다.
+     */
+    private String describe(ProductDiscountRequest req) {
+        return req.rate() + "% · " + req.startDate() + "~" + req.endDate();
+    }
+
+    private String describe(ProductDiscount discount) {
+        LocalDate start = discount.getStartsAt().atZone(KST).toLocalDate();
+        // 배타 경계를 관리자가 적은 «포함» 종료일로 되돌린다(endBoundary 의 역).
+        LocalDate end = discount.getEndsAt().atZone(KST).toLocalDate().minusDays(1);
+        return discount.getRate() + "% · " + start + "~" + end;
+    }
+
+    /**
+     * ⚠ <b>대상은 할인이 아니라 상품이다</b>({@code AuditTargetType} 참조) — 할인 id 는 사람에게
+     * 의미가 없고, 대상을 상품으로 잡아야 상품 수정·삭제와 <b>같은 target_id 로 묶인다.</b>
+     *
+     * <p>⚠ audit 의 내부를 직접 부르지 않고 이벤트만 발행한다(도메인 간 직접 참조 금지 — CLAUDE.md).
+     * 기본 {@code @EventListener} 라 <b>같은 트랜잭션</b>이다 — 감사가 실패하면 조작도 롤백된다.
+     */
+    private void publishAudit(AuditAction action, AuthUser actor, UUID productId, String detail) {
+        eventPublisher.publishEvent(new AdminActionEvent(
+                action, actor.id(), actor.nickname(), productId, null, detail));
     }
 
     /**

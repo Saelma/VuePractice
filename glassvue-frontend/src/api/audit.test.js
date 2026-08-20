@@ -35,10 +35,17 @@ const AUDIT_ACTION_JAVA = resolve(
  * `AuditAction.java` 에서 enum 값을 뽑는다.
  *
  * ⚠ javadoc 줄은 `     * ` 로 시작하므로(공백 5 + `*`) 4칸 들여쓰기 + 대문자 규칙에 안 걸린다.
+ *
+ * 🔴 **2026-08-20(V53)에 한 번 깨졌다.** 값에 생성자 인자가 붙으면서
+ * (`PRODUCT_CREATE(AuditTargetType.PRODUCT),`) 예전 정규식이 **하나도 못 잡았다.**
+ * ⚠ 그런데 그건 «대조가 실패» 가 아니라 **«대조가 사라짐»** 이다 — 키 집합끼리 비교하는
+ * 아래 두 테스트는 `[] == []` 로 **초록**이 된다. 그걸 막으라고 있던 것이 첫 번째 가드이고,
+ * **실제로 그 가드가 잡았다.** 이 주석은 그 가드가 값을 한 일의 기록이다.
  */
 function enumValuesFromJava() {
   const src = readFileSync(AUDIT_ACTION_JAVA, 'utf8');
-  return [...src.matchAll(/^ {4}([A-Z][A-Z0-9_]*)\s*,?\s*$/gm)].map((m) => m[1]);
+  // 값 뒤의 `(...)` 는 있어도 없어도 된다. 마지막 값은 `;` 로 끝난다.
+  return [...src.matchAll(/^ {4}([A-Z][A-Z0-9_]*)\s*(?:\([^)]*\))?\s*[,;]\s*$/gm)].map((m) => m[1]);
 }
 
 describe('감사 라벨 ↔ 백엔드 enum 드리프트 (2026-08-10)', () => {

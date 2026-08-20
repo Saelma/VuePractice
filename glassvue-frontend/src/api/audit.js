@@ -4,9 +4,32 @@ import { apiGet } from './client';
 // 누가(actor) 누구를(target) 언제 어떻게 조작했는지의 append-only 이력. 조회 권한은 서버가
 // /api/admin/audit/** = SUPER_ADMIN 으로 막는다(일반 ADMIN 은 403). 화면 진입도 라우터가 SUPER 만 통과.
 
-/** 감사 이력 목록. action(조작 종류)·targetLogin(대상 loginId 부분일치)로 좁힐 수 있고, 정렬 미지정 시 최신순. */
-export function fetchAuditLogs({ action = null, targetLogin = null, page = 0, size = 20 } = {}) {
-  return apiGet('/api/admin/audit', { action, targetLogin, page, size });
+/**
+ * 감사 이력 목록. action(조작 종류)·targetType(대상 종류)·targetLogin(대상 loginId 부분일치)로
+ * 좁힐 수 있고, 정렬 미지정 시 최신순.
+ *
+ * 🔴 **targetType 은 회원 아닌 행을 좁히는 유일한 수단이다**(2026-08-20, V53). 상품·쿠폰 행은
+ * targetLogin 이 비어 있어 「대상 아이디」로 못 찾는다 — 그전에는 「조작 종류」를 하나씩
+ * 골라 보는 수밖에 없었다.
+ */
+export function fetchAuditLogs({ action = null, targetType = null, targetLogin = null,
+  page = 0, size = 20 } = {}) {
+  return apiGet('/api/admin/audit', { action, targetType, targetLogin, page, size });
+}
+
+/**
+ * 대상 종류 표시 문구 (2026-08-20, V53).
+ *
+ * ⚠ **`DISCOUNT` 가 없는 것이 맞다** — 세일 조작의 대상은 «상품» 이다. 할인 id 는 사람에게
+ * 의미가 없고, 대상을 상품으로 잡아야 상품 등록·수정·삭제와 **같은 줄에서** 읽힌다.
+ */
+export const AUDIT_TARGET_TYPE_LABEL = {
+  MEMBER: '회원',
+  PRODUCT: '상품',
+  COUPON: '쿠폰',
+};
+export function auditTargetTypeText(targetType) {
+  return AUDIT_TARGET_TYPE_LABEL[targetType] || targetType || '';
 }
 
 /**
@@ -39,6 +62,14 @@ export const AUDIT_ACTION_LABEL = {
   INQUIRY_UNHIDE: '문의 숨김 해제',
   PRODUCT_DELETE: '상품 삭제',
   PRODUCT_RESTORE: '상품 복구',
+  PRODUCT_CREATE: '상품 등록',
+  PRODUCT_UPDATE: '상품 수정',
+  COUPON_CREATE: '쿠폰 등록',
+  COUPON_ISSUE: '쿠폰 발급',
+  COUPON_WELCOME_SET: '가입 쿠폰 지정',
+  DISCOUNT_CREATE: '세일 등록',
+  DISCOUNT_UPDATE: '세일 수정',
+  DISCOUNT_DELETE: '세일 삭제',
 };
 export function auditActionText(action) {
   return AUDIT_ACTION_LABEL[action] || action || '';
@@ -85,6 +116,23 @@ export const AUDIT_ACTION_BADGE = {
   // ⚠ 유예가 지나 배치가 진짜로 지우는 순간은 되돌릴 수 없지만, 그건 감사에 안 남는다(V50 참조).
   PRODUCT_DELETE: 'badge-warning',
   PRODUCT_RESTORE: 'badge-success',
+  // 등록·수정은 **정상 흐름의 진행**이다 — 발송·배송완료를 neutral 로 둔 것과 같은 판단.
+  // ⚠ 상품 수정은 빈도가 가장 높아, 색을 주면 원장이 그 색으로 덮인다.
+  PRODUCT_CREATE: 'badge-neutral',
+  PRODUCT_UPDATE: 'badge-neutral',
+  COUPON_CREATE: 'badge-neutral',
+  // 🔴 **회수할 방법이 없다** — 발급 취소 API 자체가 없다(쿠폰을 «되돌리는» 경로는 주문 취소뿐).
+  //    되돌릴 수 없다는 기준에 그대로 걸린다. ⚠ 빈도가 낮아(수동 발급) 원장을 덮지 않는다.
+  COUPON_ISSUE: 'badge-danger',
+  // 지정/해제가 한 값이라 색이 하나다 — 토글이고 둘 다 되돌릴 수 있다.
+  COUPON_WELCOME_SET: 'badge-neutral',
+  // 🔴 **세 값 다 warning 이다.** 세일은 등록·수정·삭제가 전부 «가격이 움직인다» 이고,
+  //    어느 방향이 고객에게 유리한지가 그때그때 달라 **색으로는 못 가른다**
+  //    (진행 중인 세일을 지우면 값이 오르고, 거는 것은 내린다).
+  //    ⚠ 얼마가 어떻게 움직였는지는 「내용」에 %와 기간으로 적힌다 — 색이 아니라 값으로 읽는다.
+  DISCOUNT_CREATE: 'badge-warning',
+  DISCOUNT_UPDATE: 'badge-warning',
+  DISCOUNT_DELETE: 'badge-warning',
 };
 export function auditActionBadge(action) {
   return AUDIT_ACTION_BADGE[action] || 'badge-neutral';

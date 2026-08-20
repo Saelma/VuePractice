@@ -5,6 +5,8 @@ import com.glassvue.domain.catalog.dto.ProductDiscountResponse;
 import com.glassvue.domain.catalog.service.command.ProductDiscountCommandService;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.global.security.AuthUser;
+import com.glassvue.global.security.LoginUser;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -37,27 +39,30 @@ public class AdminProductDiscountControllerImpl implements AdminProductDiscountC
     @Override
     @PostMapping
     public ResponseEntity<ApiResponse<UUID>> create(
+            @LoginUser AuthUser user,
             @PathVariable UUID productId,
             @Valid @RequestBody ProductDiscountRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok(discountCommandService.create(productId, request)));
+        return ResponseEntity.ok(ApiResponse.ok(discountCommandService.create(productId, request, user)));
     }
 
     @Override
     @PutMapping("/{discountId}")
     public ResponseEntity<ApiResponse<Void>> update(
+            @LoginUser AuthUser user,
             @PathVariable UUID productId,
             @PathVariable UUID discountId,
             @Valid @RequestBody ProductDiscountRequest request) {
-        discountCommandService.update(productId, discountId, request);
+        discountCommandService.update(productId, discountId, request, user);
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
     @Override
     @DeleteMapping("/{discountId}")
     public ResponseEntity<ApiResponse<Void>> delete(
+            @LoginUser AuthUser user,
             @PathVariable UUID productId,
             @PathVariable UUID discountId) {
-        discountCommandService.delete(productId, discountId);
+        discountCommandService.delete(productId, discountId, user);
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 }

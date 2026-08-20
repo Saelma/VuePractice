@@ -13,6 +13,7 @@ import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.entity.StockChangeReason;
+import com.glassvue.global.security.AuthUser;
 import com.glassvue.domain.catalog.entity.ProductVariant;
 import com.glassvue.domain.catalog.event.StockReplenishedEvent;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
@@ -211,7 +212,10 @@ class RestockFlowIntegrationTest {
                 "ZZP-품절상품" + suffix, null, "재입고 테스트", 10_000L, null,
                 ProductStatus.SELLING, cat.getId(), null,
                 List.of(new VariantRequest("기본", 0L, 7L))); // 재고 7 로 다시 채움
-        productCommandService.update(productId, req, null);
+        // ⚠ 2026-08-20(V53)부터 상품 수정이 감사 원장에 남는다 — actor_id 가 NOT NULL 이라
+        //    null 행위자로는 수정 자체가 안 된다. 운영 경로는 늘 로그인한 관리자다(ProductControllerImpl).
+        productCommandService.update(productId, req,
+                new AuthUser(UUID.randomUUID(), Role.ADMIN, "ZZ재입고관리자"));
 
         assertThat(events.stream(StockReplenishedEvent.class)
                 .anyMatch(e -> e.productId().equals(productId))).isTrue();

@@ -8,6 +8,7 @@ import com.glassvue.domain.catalog.dto.ProductUpdateRequest;
 import com.glassvue.domain.catalog.dto.VariantRequest;
 import com.glassvue.domain.catalog.entity.Category;
 import com.glassvue.domain.catalog.entity.Product;
+import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.entity.ProductVariant;
 import com.glassvue.domain.catalog.entity.StockChangeReason;
 import com.glassvue.domain.catalog.entity.StockHistory;
@@ -27,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -101,6 +103,9 @@ public class ProductCommandService {
         for (ProductVariant v : variants) {
             recordAdmin(saved.getId(), v, StockChangeReason.ADMIN_CREATE, v.getStock(), v.getStock(), actor);
         }
+        // 등록은 «전» 이 없으니 스냅샷을 적는다 — 이름·판매가·옵션 수. 재고는 위 원장이 이미 갖고 있다.
+        publishAudit(AuditAction.PRODUCT_CREATE, actor, saved,
+                saved.getName() + " · 판매가 " + saved.getPrice() + "원 · 옵션 " + variants.size() + "개");
         log.info("Product created: {} ({} variants)", saved.getId(), variants.size());
         return saved.getId();
     }
@@ -115,6 +120,8 @@ public class ProductCommandService {
         UUID oldGroupId = product.getImageGroupId();
         UUID imageGroupId = imageService.createGroup(req.imageIds());
         long stockBefore = variantRepository.sumStockByProduct(id); // 옵션 교체 전 총재고(재입고 판단용)
+        // ⚠ 감사에 적을 «전» 은 update() 가 덮어쓰기 **전에** 붙잡아야 한다 — 뒤에서 읽으면 전후가 같아진다.
+        ProductSnapshot before = ProductSnapshot.of(product, variantRepository.countByProductId(id));
         product.update(req.name(), req.tagline(), req.description(), req.price(), req.listPrice(),
                 req.status(), imageGroupId, category);
 
@@ -139,6 +146,77 @@ public class ProductCommandService {
         // JPQL 이라 위 save 들을 flush 한 뒤의 값을 본다(새 옵션 반영).
         publishIfReplenished(id, stockBefore, product.getName());
         publishIfCrossedIntoLow(id, product.getName(), stockByName, saved);
+
+        publishAudit(AuditAction.PRODUCT_UPDATE, actor, product,
+                describeChanges(before, ProductSnapshot.of(product, saved.size())));
+    }
+
+    /**
+     * 감사 {@code detail} 에 적을 «전» 상태 (2026-08-20, V53).
+     *
+     * <p>⚠ <b>재고는 담지 않는다</b> — {@code stock_history}(B-19)가 이미 «누가·언제·얼마나» 를 갖는다.
+     * 같은 사실을 두 곳에 적으면 한쪽만 고쳐져 어긋난다(CLAUDE.md).
+     *
+     * <p>⚠ <b>이미지도 담지 않는다</b> — {@code imageService.createGroup} 이 저장할 때마다 <b>새 그룹</b>을
+     * 만들어서, 그룹 id 를 비교하면 «이미지 바뀜» 이 <b>항상 참</b>이 된다. 그건 정보가 아니라 소음이다.
+     * 🔴 <b>«비교할 수 없으니 안 적는다» 를 적어 둔다</b> — 안 적으면 다음 사람이 «왜 이미지는 빠졌지» 를
+     * 되짚어야 한다.
+     */
+    private record ProductSnapshot(String name, String tagline, String description, long price,
+                                   Long listPrice, ProductStatus status, String categoryName,
+                                   long variantCount) {
+
+        static ProductSnapshot of(Product product, long variantCount) {
+            return new ProductSnapshot(product.getName(), product.getTagline(), product.getDescription(),
+                    product.getPrice(), product.getListPrice(), product.getStatus(),
+                    product.getCategory() == null ? null : product.getCategory().getName(), variantCount);
+        }
+    }
+
+    /**
+     * «무엇이 바뀌었나» 를 한 줄로 (2026-08-20 사용자와 확정 — V50 이 미뤄 둔 결정).
+     *
+     * <p><b>바뀐 것만</b> 적는다. 매번 전부 적으면 그 안에서 바뀐 것을 눈으로 찾아야 해서
+     * 원장을 읽는 이유가 사라진다.
+     *
+     * <p>⚠ 설명·태그라인은 <b>«바뀜» 만</b> 적는다 — 본문을 전/후로 다 실으면 {@code detail}(1000자)을
+     * 넘긴다. 넘치면 잘리는데, <b>잘린 원장은 틀린 원장</b>이다.
+     *
+     * <p>⚠ 바뀐 것이 하나도 없으면 <b>«변경 없음»</b> 이다({@code null} 이 아니다).
+     * 관리 화면이 상품 전체를 다시 보내 흔한 경우이고, 그래도 줄은 남긴다 —
+     * «누가 언제 손댔나» 를 접근 기록으로 본다(2026-08-20 사용자와 확정).
+     */
+    private String describeChanges(ProductSnapshot before, ProductSnapshot after) {
+        List<String> changes = new ArrayList<>();
+        if (!Objects.equals(before.name(), after.name())) {
+            changes.add("이름 " + before.name() + "→" + after.name());
+        }
+        if (before.price() != after.price()) {
+            changes.add("판매가 " + before.price() + "→" + after.price());
+        }
+        if (!Objects.equals(before.listPrice(), after.listPrice())) {
+            changes.add("정가 " + text(before.listPrice()) + "→" + text(after.listPrice()));
+        }
+        if (before.status() != after.status()) {
+            changes.add("상태 " + before.status() + "→" + after.status());
+        }
+        if (!Objects.equals(before.categoryName(), after.categoryName())) {
+            changes.add("분류 " + text(before.categoryName()) + "→" + text(after.categoryName()));
+        }
+        if (before.variantCount() != after.variantCount()) {
+            changes.add("옵션 " + before.variantCount() + "→" + after.variantCount() + "개");
+        }
+        if (!Objects.equals(before.tagline(), after.tagline())) {
+            changes.add("태그라인 바뀜");
+        }
+        if (!Objects.equals(before.description(), after.description())) {
+            changes.add("설명 바뀜");
+        }
+        return changes.isEmpty() ? "변경 없음" : String.join(" · ", changes);
+    }
+
+    private String text(Object value) {
+        return value == null ? "없음" : String.valueOf(value);
     }
 
     /**
@@ -235,8 +313,21 @@ public class ProductCommandService {
      * 기본 {@code @EventListener} 라 <b>같은 트랜잭션</b>이다 — 감사가 실패하면 삭제도 롤백된다.
      */
     private void publishAudit(AuditAction action, AuthUser actor, Product product) {
+        publishAudit(action, actor, product, product.getName());
+    }
+
+    /**
+     * detail 을 따로 주는 갈래 — 등록·수정이 쓴다(삭제·복구는 상품명 하나로 충분하다).
+     *
+     * <p>⚠ {@code detail} 열은 <b>1000자</b>다. 넘칠 일이 없게 만들었지만
+     * ({@link #describeChanges} 가 긴 필드를 «바뀜» 으로 접는다) <b>넘치면 저장이 통째로 실패</b>하므로
+     * 여기서 한 번 더 자른다 — 🔴 <b>감사가 실패하면 조작도 롤백된다</b>(같은 트랜잭션).
+     * 상품 하나 못 고치는 것보다 원장 한 줄이 잘리는 편이 낫다.
+     */
+    private void publishAudit(AuditAction action, AuthUser actor, Product product, String detail) {
         eventPublisher.publishEvent(new AdminActionEvent(
-                action, actor.id(), actor.nickname(), product.getId(), null, product.getName()));
+                action, actor.id(), actor.nickname(), product.getId(), null,
+                detail != null && detail.length() > 1000 ? detail.substring(0, 1000) : detail));
     }
 
     /**

@@ -291,7 +291,9 @@ class ProductSoftDeleteIntegrationTest {
     void delete_isAudited() throws Exception {
         deleteProduct();
 
-        List<AdminAuditLog> logs = auditOf(productId);
+        // ⚠ 2026-08-20(V53)부터 등록도 원장에 남는다 — 이 절이 보는 것은 «삭제» 라 action 으로 좁힌다.
+        //    안 좁히면 setUp 이 만든 PRODUCT_CREATE 가 섞여 개수 단언이 깨진다.
+        List<AdminAuditLog> logs = auditOf(productId, AuditAction.PRODUCT_DELETE);
         assertThat(logs).hasSize(1);
         AdminAuditLog log = logs.get(0);
         assertThat(log.getAction()).isEqualTo(AuditAction.PRODUCT_DELETE);
@@ -310,7 +312,7 @@ class ProductSoftDeleteIntegrationTest {
         deleteProduct();
         deleteProduct();
 
-        assertThat(auditOf(productId)).hasSize(1);
+        assertThat(auditOf(productId, AuditAction.PRODUCT_DELETE)).hasSize(1);
     }
 
     @Test
@@ -323,8 +325,16 @@ class ProductSoftDeleteIntegrationTest {
         entityManager.flush();
         entityManager.clear();
 
+        // 🔴 등록까지 합쳐 «만들었다 지웠다 되살렸다» 가 한 줄로 읽힌다 — V53 이 등록을 붙이면서
+        //    이 상품의 이력이 처음부터 이어지게 됐다(그전에는 삭제부터 시작했다).
         assertThat(auditOf(productId)).extracting(AdminAuditLog::getAction)
-                .containsExactly(AuditAction.PRODUCT_DELETE, AuditAction.PRODUCT_RESTORE);
+                .containsExactly(AuditAction.PRODUCT_CREATE, AuditAction.PRODUCT_DELETE,
+                        AuditAction.PRODUCT_RESTORE);
+    }
+
+    /** 특정 조작만 — 등록(V53)이 섞이는 절에서 쓴다. */
+    private List<AdminAuditLog> auditOf(UUID targetId, AuditAction action) {
+        return auditOf(targetId).stream().filter(row -> row.getAction() == action).toList();
     }
 
     /** 이 상품을 대상으로 한 감사 이력(오래된 것부터). ⚠ 공유 DB 라 대상 id 로 좁힌다 — 상품은 매번 새로 만든다. */

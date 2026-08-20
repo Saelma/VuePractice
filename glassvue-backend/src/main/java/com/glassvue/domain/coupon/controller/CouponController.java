@@ -58,17 +58,17 @@ public interface CouponController {
     ResponseEntity<ApiResponse<PromotionCalendarResponse>> promotionCalendar(String month);
 
     @Operation(summary = "쿠폰 생성 (관리자)")
-    ResponseEntity<ApiResponse<UUID>> create(CouponCreateRequest request);
+    ResponseEntity<ApiResponse<UUID>> create(AuthUser user, CouponCreateRequest request);
 
     @Operation(summary = "회원에게 쿠폰 발급 (관리자)")
-    ResponseEntity<ApiResponse<UUID>> issue(UUID couponId, UUID memberId);
+    ResponseEntity<ApiResponse<UUID>> issue(AuthUser user, UUID couponId, UUID memberId);
 
     @Operation(summary = "가입 쿠폰으로 지정 (관리자)",
             description = "가입 즉시 자동 발급될 쿠폰으로 지정한다(V36). **전체에서 한 장만** 지정되며, "
                     + "다른 쿠폰이 이미 지정돼 있으면 그건 자동으로 해제된다. 재시작 없이 바로 반영된다.")
-    ResponseEntity<ApiResponse<Void>> designateWelcome(UUID couponId);
+    ResponseEntity<ApiResponse<Void>> designateWelcome(AuthUser user, UUID couponId);
 
     @Operation(summary = "가입 쿠폰 지정 해제 (관리자)",
             description = "해제하면 가입 시 아무 쿠폰도 발급되지 않고, 홈·가입 화면의 안내 문구도 사라진다.")
-    ResponseEntity<ApiResponse<Void>> clearWelcome(UUID couponId);
+    ResponseEntity<ApiResponse<Void>> clearWelcome(AuthUser user, UUID couponId);
 }

@@ -2,6 +2,7 @@ package com.glassvue.domain.audit.dto;
 
 import com.glassvue.domain.audit.entity.AdminAuditLog;
 import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.entity.AuditTargetType;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -9,6 +10,8 @@ import java.util.UUID;
 public record AdminAuditLogResponse(
         UUID id,
         AuditAction action,
+        /** 🔴 targetId 가 무엇의 id 인지(V53). 화면이 「대상」 열을 어떻게 그릴지 이걸로 가른다. */
+        AuditTargetType targetType,
         UUID actorId,
         String actorName,
         UUID targetId,
@@ -20,6 +23,7 @@ public record AdminAuditLogResponse(
         return new AdminAuditLogResponse(
                 log.getId(),
                 log.getAction(),
+                log.getTargetType(),
                 log.getActorId(),
                 log.getActorName(),
                 log.getTargetId(),

@@ -13,8 +13,11 @@ import com.glassvue.domain.coupon.entity.DiscountType;
 import com.glassvue.domain.coupon.entity.MemberCoupon;
 import com.glassvue.domain.coupon.repository.CouponRepository;
 import com.glassvue.domain.coupon.repository.MemberCouponRepository;
+import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.security.AuthUser;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
@@ -25,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * 쿠폰 사용 처리 (H-7, 2026-07-31).
@@ -46,7 +50,14 @@ class CouponServiceTest {
 
     @Mock CouponRepository couponRepository;
     @Mock MemberCouponRepository memberCouponRepository;
+    // 감사(V53) 배선 — 이 파일이 보는 것은 쿠폰 가드라 목이면 충분하다.
+    // 원장에 실제로 줄이 남는지는 AdminAuditIntegrationTest 가 본다.
+    @Mock ApplicationEventPublisher eventPublisher;
+    @Mock MemberService memberService;
     @InjectMocks CouponService couponService;
+
+    /** 가입 쿠폰 지정은 관리자 조작이라 행위자가 필요하다(V53). */
+    private static final AuthUser ADMIN = new AuthUser(UUID.randomUUID(), Role.ADMIN, "관리자");
 
     private static final UUID OWNER = UUID.randomUUID();
     private static final UUID STRANGER = UUID.randomUUID();
@@ -165,7 +176,7 @@ class CouponServiceTest {
         given(couponRepository.findById(MC_ID)).willReturn(Optional.of(next));
         given(couponRepository.findByWelcomeTrue()).willReturn(Optional.of(previous));
 
-        couponService.setWelcome(MC_ID, true);
+        couponService.setWelcome(MC_ID, true, ADMIN);
 
         assertThat(next.isWelcome()).isTrue();
         assertThat(previous.isWelcome()).isFalse();   // 안 풀면 둘이 되어 어느 쪽이 나갈지 알 수 없다
@@ -179,7 +190,7 @@ class CouponServiceTest {
         given(couponRepository.findById(MC_ID)).willReturn(Optional.of(coupon));
         given(couponRepository.findByWelcomeTrue()).willReturn(Optional.of(coupon));
 
-        couponService.setWelcome(MC_ID, true);
+        couponService.setWelcome(MC_ID, true, ADMIN);
 
         assertThat(coupon.isWelcome()).isTrue();
     }
@@ -191,7 +202,7 @@ class CouponServiceTest {
         coupon.markWelcome(true);
         given(couponRepository.findById(MC_ID)).willReturn(Optional.of(coupon));
 
-        couponService.setWelcome(MC_ID, false);
+        couponService.setWelcome(MC_ID, false, ADMIN);
 
         assertThat(coupon.isWelcome()).isFalse();
         verify(couponRepository, never()).findByWelcomeTrue();
@@ -202,7 +213,7 @@ class CouponServiceTest {
     void designateMissingCoupon() {
         given(couponRepository.findById(MC_ID)).willReturn(Optional.empty());
 
-        assertErrorCode(() -> couponService.setWelcome(MC_ID, true), ErrorCode.COUPON_NOT_FOUND);
+        assertErrorCode(() -> couponService.setWelcome(MC_ID, true, ADMIN), ErrorCode.COUPON_NOT_FOUND);
     }
 
     // ── 주문 스냅샷용 이름 ────────────────────────────────────

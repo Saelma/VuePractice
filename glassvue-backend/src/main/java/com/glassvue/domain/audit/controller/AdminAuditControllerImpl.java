@@ -2,6 +2,7 @@ package com.glassvue.domain.audit.controller;
 
 import com.glassvue.domain.audit.dto.AdminAuditLogResponse;
 import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.entity.AuditTargetType;
 import com.glassvue.domain.audit.service.query.AdminAuditQueryService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
@@ -28,8 +29,10 @@ public class AdminAuditControllerImpl implements AdminAuditController {
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<AdminAuditLogResponse>>> list(
             @RequestParam(required = false) AuditAction action,
+            @RequestParam(required = false) AuditTargetType targetType,
             @RequestParam(required = false) String targetLogin,
             Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(auditQueryService.search(action, targetLogin, pageable)));
+        return ResponseEntity.ok(ApiResponse.ok(
+                auditQueryService.search(action, targetType, targetLogin, pageable)));
     }
 }

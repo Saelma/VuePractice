@@ -309,7 +309,7 @@ class MemberPurgeIntegrationTest {
         assertKeptSurvives();
 
         // 감사 이력: 대상 loginId 스냅샷이 남아 **지워진 회원도 누가 지웠는지** 되짚을 수 있다
-        var rows = auditLogRepository.search(AuditAction.MEMBER_DELETE, targetLoginId, PageRequest.of(0, 10))
+        var rows = auditLogRepository.search(AuditAction.MEMBER_DELETE, null, targetLoginId, PageRequest.of(0, 10))
                 .getContent();
         assertThat(rows).hasSize(1);
         assertThat(rows.getFirst().getTargetLogin()).isEqualTo(targetLoginId);

@@ -3,6 +3,7 @@ package com.glassvue.domain.audit.service.query;
 import com.glassvue.domain.audit.dto.AdminAuditLogResponse;
 import com.glassvue.domain.audit.entity.AdminAuditLog;
 import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.entity.AuditTargetType;
 import com.glassvue.domain.audit.repository.AdminAuditLogRepository;
 import com.glassvue.global.response.PageResponse;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +24,11 @@ public class AdminAuditQueryService {
 
     private final AdminAuditLogRepository auditLogRepository;
 
-    public PageResponse<AdminAuditLogResponse> search(AuditAction action, String targetLogin, Pageable pageable) {
+    public PageResponse<AdminAuditLogResponse> search(AuditAction action, AuditTargetType targetType,
+                                                      String targetLogin, Pageable pageable) {
         String login = (targetLogin == null || targetLogin.isBlank()) ? null : targetLogin.trim();
-        Page<AdminAuditLog> page = auditLogRepository.search(action, login, withDefaultSort(pageable));
+        Page<AdminAuditLog> page =
+                auditLogRepository.search(action, targetType, login, withDefaultSort(pageable));
         return PageResponse.from(page.map(AdminAuditLogResponse::from));
     }
 

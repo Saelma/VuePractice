@@ -1,5 +1,7 @@
 package com.glassvue.domain.coupon.service;
 
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
@@ -7,11 +9,14 @@ import com.glassvue.domain.coupon.dto.MemberCouponResponse;
 import com.glassvue.domain.coupon.dto.PromotionCalendarResponse;
 import com.glassvue.domain.coupon.dto.PromotionSpanResponse;
 import com.glassvue.domain.coupon.entity.Coupon;
+import com.glassvue.domain.coupon.entity.DiscountType;
+import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.domain.coupon.entity.MemberCoupon;
 import com.glassvue.domain.coupon.repository.CouponRepository;
 import com.glassvue.domain.coupon.repository.MemberCouponRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.security.AuthUser;
 import com.glassvue.global.response.PageResponse;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -31,6 +36,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +60,8 @@ public class CouponService {
 
     private final CouponRepository couponRepository;
     private final MemberCouponRepository memberCouponRepository;
+    private final ApplicationEventPublisher eventPublisher;
+    private final MemberService memberService;
 
     /**
      * 쿠폰 생성(관리자).
@@ -62,7 +70,7 @@ public class CouponService {
      * 비우고 만들면 지금까지와 똑같은 상시 쿠폰이다.
      */
     @Transactional
-    public UUID create(CouponCreateRequest req) {
+    public UUID create(CouponCreateRequest req, AuthUser actor) {
         if (req.issueUntil() != null) {
             validateEventWindow(req.validFrom(), req.issueUntil(), req.validUntil());
         }
@@ -76,6 +84,9 @@ public class CouponService {
                 .validUntil(req.validUntil())
                 .issueUntil(req.issueUntil())
                 .build());
+        // 대상은 쿠폰 «정의» 다(회원이 아니라). detail 은 할인 내용 — 쿠폰명은 지워지지 않으니
+        // 이름만 적으면 원장에서 «얼마짜리였나» 를 못 읽는다.
+        publishAudit(AuditAction.COUPON_CREATE, actor, coupon.getId(), null, describe(coupon));
         log.info("Coupon created: {} ({}){}", coupon.getId(), coupon.getName(),
                 coupon.isEventCoupon() ? " [event, 발급마감 " + coupon.getIssueUntil() + "]" : "");
         return coupon.getId();
@@ -145,7 +156,7 @@ public class CouponService {
      * 그건 <b>함수기반 유니크 인덱스가 DB 에서 막는다</b>(V36). 앱과 DB 가 같은 규칙을 이중으로 지킨다.
      */
     @Transactional
-    public void setWelcome(UUID couponId, boolean welcome) {
+    public void setWelcome(UUID couponId, boolean welcome, AuthUser actor) {
         Coupon coupon = couponRepository.findById(couponId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
         if (welcome) {
@@ -154,6 +165,8 @@ public class CouponService {
                     .ifPresent(current -> current.markWelcome(false));
         }
         coupon.markWelcome(welcome);
+        publishAudit(AuditAction.COUPON_WELCOME_SET, actor, couponId, null,
+                coupon.getName() + " · 가입 쿠폰 " + (welcome ? "지정" : "해제"));
         log.info("Welcome coupon {}: {} ({})", welcome ? "designated" : "cleared", couponId, coupon.getName());
     }
 
@@ -175,6 +188,31 @@ public class CouponService {
         MemberCoupon issued = memberCouponRepository.save(MemberCoupon.issue(memberId, coupon));
         log.info("Coupon issued: {} to {}", couponId, memberId);
         return issued.getId();
+    }
+
+    /**
+     * <b>관리자가</b> 회원에게 발급 — {@link #issue} 에 감사 한 줄을 얹은 것 (2026-08-20, V53).
+     *
+     * <p>🔴 <b>두 갈래로 나눈 이유가 이 기능의 요점이다.</b> {@link #issue} 는 <b>가입 자동 발급</b>
+     * ({@code WelcomeCouponHandler}, G-2)도 쓰는 통로다. 거기에 감사를 붙이면
+     * <b>«행위자» 자리에 적을 사람이 없다</b> — 아무도 누르지 않았고 {@code actor_id} 는 NOT NULL 이다.
+     * 지어내는 대신 <b>부르는 쪽을 갈랐다</b>(V50 이 purge 를 안 남긴 것과 같은 판단 —
+     * 사람이 한 일이 아니면 원장에 안 적는다).
+     *
+     * <p>🔴 <b>여기만 대상이 회원이다</b>(쿠폰 셋 중에서). 관리자가 «누구에게» 줬는지가 요점이라
+     * 쿠폰은 {@code detail} 로 간다 — V43 이 주문 취소에서 주문번호를 detail 로 보낸 것과 같은 모양이다.
+     *
+     * <p>⚠ {@code targetLogin} 은 {@code MemberService} 로 읽는다(리뷰 숨김이 작성자 loginId 를
+     * 읽는 것과 같은 통로). 없으면 {@code null} — 그 자체가 «그때 그 회원이 없었다» 는 사실이다.
+     */
+    @Transactional
+    public UUID issueByAdmin(UUID couponId, UUID memberId, AuthUser actor) {
+        UUID issuedId = issue(couponId, memberId);
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+        publishAudit(AuditAction.COUPON_ISSUE, actor, memberId,
+                memberService.loginIdOf(memberId), describe(coupon));
+        return issuedId;
     }
 
     /**
@@ -374,5 +412,31 @@ public class CouponService {
     public void deleteAllForMember(UUID memberId) {
         long deleted = memberCouponRepository.deleteByMemberId(memberId);
         log.info("Member coupons deleted for member {}: {}", memberId, deleted);
+    }
+
+    /**
+     * 감사 {@code detail} 에 쓰는 쿠폰 한 줄 — <b>이름과 할인 내용</b> (2026-08-20, V53).
+     *
+     * <p>⚠ 이름만 적지 않는다. 쿠폰은 지워지지 않지만 <b>이름은 바뀔 수 있고</b>, 그러면 원장이
+     * «그때 얼마짜리였나» 를 못 답한다 — 감사가 스냅샷을 박는 이유와 같다.
+     */
+    private String describe(Coupon coupon) {
+        String amount = coupon.getDiscountType() == DiscountType.PERCENT
+                ? coupon.getDiscountValue() + "%"
+                : coupon.getDiscountValue() + "원";
+        String min = coupon.getMinOrderAmount() > 0 ? " · " + coupon.getMinOrderAmount() + "원 이상" : "";
+        return coupon.getName() + " · " + amount + min;
+    }
+
+    /**
+     * ⚠ audit 의 내부를 직접 부르지 않고 이벤트만 발행한다(도메인 간 직접 참조 금지 — CLAUDE.md).
+     * 기본 {@code @EventListener} 라 <b>같은 트랜잭션</b>이다 — 감사가 실패하면 조작도 롤백된다.
+     *
+     * <p>⚠ {@code targetType} 은 넘기지 않는다 — {@code action} 이 답한다(V53).
+     */
+    private void publishAudit(AuditAction action, AuthUser actor, UUID targetId,
+                              String targetLogin, String detail) {
+        eventPublisher.publishEvent(new AdminActionEvent(
+                action, actor.id(), actor.nickname(), targetId, targetLogin, detail));
     }
 }

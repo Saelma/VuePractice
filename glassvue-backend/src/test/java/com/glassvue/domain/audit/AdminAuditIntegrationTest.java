@@ -106,7 +106,7 @@ class AdminAuditIntegrationTest {
 
     /** 이 테스트가 남긴 감사 행만(대상 loginId 표식으로 격리). 공유 DB 에 남의 이력이 있어도 안 섞인다. */
     private List<AdminAuditLog> rowsForTarget() {
-        return auditLogRepository.search(null, targetLoginId, PageRequest.of(0, 10)).getContent();
+        return auditLogRepository.search(null, null, targetLoginId, PageRequest.of(0, 10)).getContent();
     }
 
     // ---------- 권한 (WA §2-4) ----------
@@ -270,13 +270,13 @@ class AdminAuditIntegrationTest {
             memberAdminCommandService.suspend(actor, victim); // 여기서 감사 행이 저장된다
             // ⚠ 롤백 전에 "행이 실제로 만들어졌다"를 먼저 단언한다 — 이게 없으면 아래 isEmpty() 가
             // **아무 일도 안 일어나서** 통과하는 경우와 구분되지 않는다(빈손 통과 방지).
-            assertThat(auditLogRepository.search(null, rollbackLogin, PageRequest.of(0, 10)).getContent())
+            assertThat(auditLogRepository.search(null, null, rollbackLogin, PageRequest.of(0, 10)).getContent())
                     .hasSize(1);
             throw new IllegalStateException("의도적 실패 — 조작 전체를 롤백시킨다");
         })).isInstanceOf(IllegalStateException.class);
 
         List<AdminAuditLog> rows = newTx.execute(status ->
-                auditLogRepository.search(null, rollbackLogin, PageRequest.of(0, 10)).getContent());
+                auditLogRepository.search(null, null, rollbackLogin, PageRequest.of(0, 10)).getContent());
         assertThat(rows).isEmpty();
     }
 }

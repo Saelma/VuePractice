@@ -31,6 +31,20 @@ public class AdminAuditLog extends BaseTimeEntity {
     @Column(nullable = false, length = 20, updatable = false)
     private AuditAction action;
 
+    /**
+     * {@code targetId} 가 <b>무엇의 id 인지</b> (2026-08-20, V53).
+     *
+     * <p>🔴 <b>빌더로 받지 않는다</b> — {@code action} 에서 파생한다({@link AuditAction#targetType()}).
+     * 받게 두면 «action 과 targetType 이 어긋난 행» 을 만들 수 있고, 그런 행은 뜻이 없다.
+     *
+     * <p>⚠ {@code targetLogin} 이 «회원이냐» 를 <b>간접적으로</b> 말해 주긴 했지만
+     * ({@code null} 이면 회원 아님) 그것은 <b>탈퇴한 회원</b>과 구분되지 않았다 — V44 주석이 적어 둔
+     * 바로 그 {@code null} 이다. 이 열이 그 모호함을 없앤다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_type", nullable = false, length = 20, updatable = false)
+    private AuditTargetType targetType;
+
     @JdbcTypeCode(SqlTypes.BINARY)
     @Column(name = "actor_id", columnDefinition = "RAW(16)", nullable = false, updatable = false)
     private UUID actorId;
@@ -67,6 +81,8 @@ public class AdminAuditLog extends BaseTimeEntity {
     private AdminAuditLog(AuditAction action, UUID actorId, String actorName,
                           UUID targetId, String targetLogin, String detail) {
         this.action = action;
+        // 파생 — 빌더 인자가 아니다(위 targetType 주석).
+        this.targetType = action.targetType();
         this.actorId = actorId;
         this.actorName = actorName;
         this.targetId = targetId;
