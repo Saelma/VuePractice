@@ -31,8 +31,7 @@ class NoticeCommandServiceTest {
     @Mock NoticeViewCountStore viewCountStore;
     @InjectMocks NoticeCommandService service;
 
-    private final AuthUser user = new AuthUser(UUID.randomUUID(), Role.USER, "kim");
-    private final AuthUser admin = new AuthUser(UUID.randomUUID(), Role.ADMIN, "admin");
+    private final AuthUser user = new AuthUser(UUID.randomUUID(), Role.ADMIN, "admin");
 
     private Notice noticeBy(UUID authorId) {
         return Notice.builder().title("t").content("c").author("nick").authorId(authorId).pinned(false).build();
@@ -52,29 +51,33 @@ class NoticeCommandServiceTest {
     }
 
     @Test
-    @DisplayName("수정: 남의 글 → NOTICE_NOT_OWNER")
-    void update_notOwner() {
-        when(noticeRepository.findById(any())).thenReturn(Optional.of(noticeBy(UUID.randomUUID())));
-        assertErrorCode(() -> service.update(UUID.randomUUID(), new NoticeUpdateRequest("t", "c", false), user),
-                ErrorCode.NOTICE_NOT_OWNER);
+    @DisplayName("수정: 없는 글 → NOTICE_NOT_FOUND")
+    void update_notFound() {
+        when(noticeRepository.findById(any())).thenReturn(Optional.empty());
+        assertErrorCode(() -> service.update(UUID.randomUUID(), new NoticeUpdateRequest("t", "c", false)),
+                ErrorCode.NOTICE_NOT_FOUND);
     }
 
     @Test
-    @DisplayName("수정: 본인 글 → 반영")
-    void update_owner() {
-        Notice mine = noticeBy(user.id());
-        when(noticeRepository.findById(any())).thenReturn(Optional.of(mine));
-        service.update(UUID.randomUUID(), new NoticeUpdateRequest("새제목", "새본문", true), user);
-        assertThat(mine.getTitle()).isEqualTo("새제목");
-        assertThat(mine.isPinned()).isTrue();
-    }
-
-    @Test
-    @DisplayName("삭제: 관리자는 남의 글도 삭제 가능")
-    void delete_admin() {
+    @DisplayName("수정: 남의 글도 고친다 — 🔴 공지는 관리자 콘텐츠라 소유권 개념이 없다")
+    void update_anyNotice() {
+        // ⚠ 2026-08-20(BACKLOG E-4) 전에는 «본인 글만» 이었고, 남의 글이면 NOTICE_NOT_OWNER 였다.
+        //    공지가 관리자 전용이 되면서 그 갈래는 **도달할 수 없다** — 여기 오는 요청은 이미 관리자다.
+        //    🔴 권한은 SecurityConfig 한 곳이 본다(서비스에 같은 규칙을 또 두면 죽은 코드가 된다).
+        //    «관리자 아닌 요청이 막히는가» 는 AuthFlowIntegrationTest 가 403 으로 본다.
         Notice other = noticeBy(UUID.randomUUID());
         when(noticeRepository.findById(any())).thenReturn(Optional.of(other));
-        service.delete(UUID.randomUUID(), admin);
+        service.update(UUID.randomUUID(), new NoticeUpdateRequest("새제목", "새본문", true));
+        assertThat(other.getTitle()).isEqualTo("새제목");
+        assertThat(other.isPinned()).isTrue();
+    }
+
+    @Test
+    @DisplayName("삭제: 남의 글도 삭제된다")
+    void delete_anyNotice() {
+        Notice other = noticeBy(UUID.randomUUID());
+        when(noticeRepository.findById(any())).thenReturn(Optional.of(other));
+        service.delete(UUID.randomUUID());
         verify(noticeRepository).delete(other);
     }
 

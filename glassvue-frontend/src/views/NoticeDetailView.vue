@@ -5,7 +5,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getNotice, deleteNotice, increaseView } from '../api/notice';
-import { isLoggedIn, authState, isAdminRole } from '../stores/auth';
+import { authState, isAdminRole } from '../stores/auth';
 
 const props = defineProps({ id: { type: String, required: true } });
 const router = useRouter();
@@ -14,12 +14,14 @@ const notice = ref(null);
 const error = ref('');
 const loading = ref(true);
 
-// 본인 글이거나 ADMIN일 때 수정/삭제 노출 (백엔드도 동일 규칙으로 강제)
-const isOwner = computed(
-  () =>
-    isLoggedIn.value &&
-    (notice.value?.authorId === authState.user?.id || isAdminRole(authState.user?.role)),
-);
+// 🔴 **관리자만** 수정/삭제 (2026-08-20, BACKLOG E-4). 공지는 관리자 콘텐츠다.
+//
+// ⚠ 전에는 «본인 글이거나 ADMIN» 이었다. 공지가 관리자 전용이 되면서 **본인 글 갈래는 뜻을 잃는다** —
+//    일반 회원은 이제 공지를 못 쓰고, 이미 쓴 글도 못 고친다(의도한 결과다).
+//    ⚠ 운영에 그런 글이 1건 있다(검증 데이터라 그대로 둔다).
+// ⚠ 이름도 `isOwner` → `canManage` 로 바꾼다. 뜻이 «소유» 가 아니라 «권한» 이 됐는데 이름이 그대로면
+//    다음 사람이 소유권 규칙이 남아 있다고 읽는다(WA §2-10 — 이름을 바꾸는 쪽이 더 위험하다).
+const canManage = computed(() => isAdminRole(authState.user?.role));
 
 onMounted(async () => {
   try {
@@ -90,7 +92,7 @@ function fmt(v) {
 
       <div class="flex items-center gap-2 border-t border-line pt-5">
         <button type="button" class="btn btn-secondary" @click="router.push('/notices')">목록</button>
-        <template v-if="isOwner">
+        <template v-if="canManage">
           <button type="button" class="btn btn-secondary" @click="router.push(`/notices/${id}/edit`)">수정</button>
           <button type="button" class="btn btn-danger ml-auto" @click="onDelete">삭제</button>
         </template>

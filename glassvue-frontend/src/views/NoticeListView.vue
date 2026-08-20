@@ -8,7 +8,7 @@ import { useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxDateBox } from 'devextreme-vue/date-box';
 import { fetchNotices } from '../api/notice';
-import { isLoggedIn } from '../stores/auth';
+import { isAdmin } from '../stores/auth';
 import EmptyState from '../components/EmptyState.vue';
 import SkeletonList from '../components/SkeletonList.vue';
 
@@ -81,7 +81,9 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
         <h1 class="page-title">공지</h1>
         <p v-if="!loading" class="muted mt-1">{{ totalElements }}건</p>
       </div>
-      <button v-if="isLoggedIn" type="button" class="btn btn-primary" @click="router.push('/notices/new')">
+      <!-- 🔴 관리자만 (2026-08-20, BACKLOG E-4). 전에는 v-if="isLoggedIn" 이라 일반 회원에게도 보였고,
+           API 도 안 막고 있어서 실제로 쓸 수 있었다. -->
+        <button v-if="isAdmin" type="button" class="btn btn-primary" @click="router.push('/notices/new')">
         새 공지
       </button>
     </div>
@@ -122,7 +124,7 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
       :message="hasFilter ? '조건에 맞는 공지가 없어요.' : '아직 등록된 공지가 없어요.'"
     >
       <button v-if="hasFilter" type="button" class="btn btn-secondary" @click="reset">필터 초기화</button>
-      <button v-else-if="isLoggedIn" type="button" class="btn btn-primary" @click="router.push('/notices/new')">
+      <button v-else-if="isAdmin" type="button" class="btn btn-primary" @click="router.push('/notices/new')">
         새 공지 작성
       </button>
     </EmptyState>

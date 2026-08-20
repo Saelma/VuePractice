@@ -50,10 +50,6 @@ public class Notice extends BaseTimeEntity {
         this.viewCount = 0L;
     }
 
-    public boolean isOwnedBy(UUID memberId) {
-        return authorId != null && authorId.equals(memberId);
-    }
-
     public void update(String title, String content, boolean pinned) {
         this.title = title;
         this.content = content;

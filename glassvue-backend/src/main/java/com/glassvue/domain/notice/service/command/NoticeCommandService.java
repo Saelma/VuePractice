@@ -8,7 +8,6 @@ import com.glassvue.domain.notice.repository.NoticeRepository;
 import com.glassvue.domain.notice.viewcount.NoticeViewCountStore;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
-import com.glassvue.global.security.AuthUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -43,27 +42,34 @@ public class NoticeCommandService {
 
     @CacheEvict(cacheNames = "notices:list", allEntries = true)
     @Transactional
-    public void update(UUID id, NoticeUpdateRequest req, AuthUser user) {
-        Notice notice = findManageable(id, user);
+    public void update(UUID id, NoticeUpdateRequest req) {
+        Notice notice = find(id);
         notice.update(req.title(), req.content(), req.pinned());
     }
 
     @CacheEvict(cacheNames = "notices:list", allEntries = true)
     @Transactional
-    public void delete(UUID id, AuthUser user) {
-        Notice notice = findManageable(id, user);
-        noticeRepository.delete(notice);
+    public void delete(UUID id) {
+        noticeRepository.delete(find(id));
     }
 
-    /** 존재 확인 + (본인 글이거나 관리자면) 반환. 아니면 403. */
-    private Notice findManageable(UUID id, AuthUser user) {
-        Notice notice = noticeRepository.findById(id)
+    /**
+     * 존재 확인만 한다 — <b>권한은 여기서 안 본다</b> (2026-08-20, BACKLOG E-4).
+     *
+     * <p>🔴 <b>전에는 {@code user.isAdmin() || notice.isOwnedBy(user.id())} 였다.</b> 공지가
+     * 관리자 전용이 되면서 <b>{@code isAdmin()} 이 항상 참</b>이라 소유권 갈래에 도달할 수 없다 —
+     * 남겨 두면 <b>«지키고 있다» 는 착각만 만드는 죽은 코드</b>가 된다(2026-08-04 M2 의 교훈:
+     * 같은 규칙을 두 곳이 지키면 한쪽은 죽은 코드다).
+     *
+     * <p>⚠ <b>«앱과 DB 가 이중으로 지킨다»(V36 가입 쿠폰)와 갈리는 지점이다.</b> 거기는 두 층의
+     * <b>실패 모드가 달라서</b>(동시 요청은 앱이 못 막고 DB 가 막는다) 둘 다 값을 했다.
+     * 여기는 <b>같은 프로세스 안 두 겹</b>이라 뒤쪽이 하는 일이 없다.
+     *
+     * <p>→ 권한은 {@code SecurityConfig} <b>한 곳</b>이다. 관리자 아닌 요청은 여기 닿지 않는다.
+     */
+    private Notice find(UUID id) {
+        return noticeRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTICE_NOT_FOUND));
-        boolean allowed = user.isAdmin() || notice.isOwnedBy(user.id());
-        if (!allowed) {
-            throw new BusinessException(ErrorCode.NOTICE_NOT_OWNER);
-        }
-        return notice;
     }
 
     /**

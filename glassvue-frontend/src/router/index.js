@@ -61,9 +61,10 @@ const routes = [
   //    로그인이 풀려 있으면 그냥 홈으로 떨어뜨릴 수 없다.
   { path: '/support', name: 'support', component: SupportView, meta: { requiresAuth: true } },
   { path: '/notices', name: 'notice-list', component: NoticeListView },
-  { path: '/notices/new', name: 'notice-create', component: NoticeFormView, meta: { requiresAuth: true } },
+  // 🔴 공지는 관리자 콘텐츠다(2026-08-20, BACKLOG E-4) — 전에는 requiresAuth 라 일반 회원도 들어왔다.
+  { path: '/notices/new', name: 'notice-create', component: NoticeFormView, meta: { requiresAdmin: true } },
   { path: '/notices/:id', name: 'notice-detail', component: NoticeDetailView, props: true },
-  { path: '/notices/:id/edit', name: 'notice-edit', component: NoticeFormView, props: true, meta: { requiresAuth: true } },
+  { path: '/notices/:id/edit', name: 'notice-edit', component: NoticeFormView, props: true, meta: { requiresAdmin: true } },
 
   { path: '/products', name: 'product-list', component: ProductListView },
   { path: '/products/new', name: 'product-create', component: ProductFormView, meta: { requiresAdmin: true } },

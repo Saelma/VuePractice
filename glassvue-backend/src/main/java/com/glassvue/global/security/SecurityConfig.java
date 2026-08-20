@@ -42,9 +42,15 @@ public class SecurityConfig {
                         // AuthorizationFilter가 Access Denied를 낸다("응답 이미 커밋됨" 로그). 스프링 공식 해법이다.
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         // 공지 글쓰기(등록/수정/삭제)는 로그인 필요. 조회·조회수증가는 공개.
-                        .requestMatchers(HttpMethod.POST, "/api/notices").authenticated()
-                        .requestMatchers(HttpMethod.PUT, "/api/notices/*").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, "/api/notices/*").authenticated()
+                        // 🔴 **공지는 관리자 콘텐츠다**(2026-08-20, BACKLOG E-4). 그전까지 여기가
+                        //    `authenticated` 라 **일반 회원도 공지를 쓸 수 있었고**, 화면도 안 막았다
+                        //    (「새 공지」 버튼이 `v-if="isLoggedIn"` 이었다). 문서 두 곳
+                        //    (ARCHITECTURE 탈퇴 표 · 07-30 §F-1)만 「관리자 콘텐츠」라 말하고 있었다.
+                        //    ⚠ 이미 쓰인 일반 회원 공지 1건은 **그대로 둔다**(검증 데이터, 사용자 결정).
+                        //    그 글의 작성자는 이제 **자기 글도 못 고친다** — 의도한 결과다.
+                        .requestMatchers(HttpMethod.POST, "/api/notices").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/notices/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/notices/*").hasRole("ADMIN")
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
                         .requestMatchers("/api/members/**").authenticated()
                         .requestMatchers("/api/cart/**").authenticated()

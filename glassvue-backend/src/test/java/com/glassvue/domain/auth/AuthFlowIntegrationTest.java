@@ -7,6 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.glassvue.domain.auth.service.AuthService;
+import com.glassvue.domain.member.entity.Member;
+import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.member.repository.MemberRepository;
 import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -37,12 +40,14 @@ class AuthFlowIntegrationTest {
     // 재설정 토큰은 Redis에 저장되고 응답 노출은 dev 프로파일만 켜진다(테스트는 기본 프로파일).
     // 그래서 HTTP로 토큰을 못 받으니, 서비스로 직접 발급해 confirm 엔드포인트만 E2E로 검증한다.
     @Autowired AuthService authService;
+    // 공지가 관리자 전용이 되면서(2026-08-20, E-4) 가입 직후 계정으로는 못 쓴다 — 역할을 올려 준다.
+    @Autowired MemberRepository memberRepository;
 
     private static final String JSON = "application/json";
     private final String loginId = "it_" + UUID.randomUUID().toString().substring(0, 8);
 
     @Test
-    @DisplayName("회원가입 → 로그인 → 토큰으로 공지 작성 → 조회")
+    @DisplayName("회원가입 → 로그인 → 토큰으로 공지 작성 → 조회 (⚠ 공지는 이제 관리자 전용)")
     void fullFlow() throws Exception {
         // 1) 회원가입
         mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
@@ -57,7 +62,18 @@ class AuthFlowIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String token = JsonPath.read(loginBody, "$.data.accessToken");
 
-        // 3) 토큰으로 공지 작성(인증 필요) → id 추출
+        // 2-1) 🔴 **역할을 ADMIN 으로 올린다** (2026-08-20, BACKLOG E-4).
+        //      공지는 관리자 콘텐츠가 됐다 — 가입 직후 계정(USER)으로는 403 이다.
+        //      ⚠ 토큰은 발급 시점의 role 클레임을 들고 있으므로 **올린 뒤 다시 로그인**해야 한다.
+        Member joined = memberRepository.findByLoginId(loginId).orElseThrow();
+        joined.changeRole(Role.ADMIN);
+        memberRepository.flush();
+        token = JsonPath.read(mockMvc.perform(post("/api/auth/login").contentType(JSON).content(
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.accessToken");
+
+        // 3) 토큰으로 공지 작성(관리자) → id 추출
         String createBody = mockMvc.perform(post("/api/notices").header("Authorization", "Bearer " + token)
                         .contentType(JSON).content("{\"title\":\"통합테스트공지\",\"content\":\"본문\",\"pinned\":false}"))
                 .andExpect(status().isCreated())
@@ -77,6 +93,33 @@ class AuthFlowIntegrationTest {
         mockMvc.perform(post("/api/notices").contentType(JSON)
                         .content("{\"title\":\"x\",\"content\":\"y\",\"pinned\":false}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * 🔴 <b>공지는 관리자 콘텐츠다</b> (2026-08-20, BACKLOG E-4).
+     *
+     * <p>⚠ <b>이 계약이 없어서 생긴 자리다.</b> 문서 두 곳(ARCHITECTURE 탈퇴 표 · 07-30 §F-1)은
+     * 「관리자 콘텐츠」라 말했는데 <b>네 층이 전부 «아무나 쓸 수 있다»</b> 였다 —
+     * {@code SecurityConfig} 는 {@code authenticated}, 서비스 {@code create} 에는 가드가 없고,
+     * 라우터는 {@code requiresAuth}, 목록의 「새 공지」 버튼은 {@code v-if="isLoggedIn"} 이었다.
+     * <b>화면조차 안 막았으므로 「화면이 유일한 방어」 사례도 아니었다.</b>
+     *
+     * <p>🔴 <b>401 이 아니라 403 이어야 한다</b> — 로그인은 했고 권한이 없는 것이다.
+     * 위 {@code createWithoutToken}(401)과 <b>짝</b>이라야 «인증» 과 «권한» 이 갈린다.
+     */
+    @Test
+    @DisplayName("🔴 일반 회원이 공지 작성 → 403 (공지는 관리자 전용)")
+    void createAsUserIsForbidden() throws Exception {
+        mockMvc.perform(post("/api/auth/signup").contentType(JSON).content(
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\",\"nickname\":\"일반회원\",\"email\":\"" + loginId + "@example.com\",\"agreeTerms\":true}"))
+                .andExpect(status().isCreated());
+        String token = JsonPath.read(mockMvc.perform(post("/api/auth/login").contentType(JSON).content(
+                        "{\"loginId\":\"" + loginId + "\",\"password\":\"" + PW + "\"}"))
+                .andReturn().getResponse().getContentAsString(), "$.data.accessToken");
+
+        mockMvc.perform(post("/api/notices").header("Authorization", "Bearer " + token)
+                        .contentType(JSON).content("{\"title\":\"x\",\"content\":\"y\",\"pinned\":false}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
