@@ -76,7 +76,7 @@
 | 취소·반품했는데 **재고가 일부만** 복원됐다 | 그 주문이 가리키는 **옵션(`product_variant`)이 이미 삭제**됐다. `increaseStock` 은 조용히 넘어가고 **이력도 안 남긴다**(재고가 안 변했는데 남기면 원장이 거짓이 된다) — **설계다** | 옵션 생사를 먼저 본다: `select i.product_name, v.id from order_item i left join product_variant v on v.id=i.variant_id where i.order_id=…` · `handoffs/2026-08-10-handoff.md` §9-2 |
 | `systemctl is-active` 는 `active` 인데 안 된다 | 프로세스는 살아 있고 기능은 죽었다 | WA §5 — `/actuator/health` 로 본다 |
 | 재부팅 뒤 백엔드가 `deactivating (stop-sigterm)` · `Result: timeout` 인데 **로그엔 `Started … in 129 seconds` 가 찍혀 있다** | 🔴 **기동에 성공했는데 systemd 가 결승선 직전에 죽였다.** `TimeoutStartSec=120` 인데 **콜드 부팅 첫 기동이 129초** 걸린다(같은 VM 의 Oracle 이 함께 뜨느라 느리다). `Restart=on-failure` 로 재시도하면 캐시가 더워져 **57초**에 뜨므로 **혼자 낫는다** — 그래서 «가끔 뜨는데 가끔 실패» 로 보인다 | ⚠ **«실패» 로 기록되지만 원인은 앱이 아니다.** 판별: `journalctl -u glassvue-backend \| grep "Started GlassvueBackendApplication in"` 로 **소요 초를 본다** — 120 을 넘겼으면 이 건이다. 항구 대책은 `TimeoutStartSec` 를 늘리는 것(§3-7) · `handoffs/2026-08-21-handoff.md` §6 |
-| 🔴 **`.git/index` 가 0바이트** · `fatal: 현재 브랜치가 망가진 것처럼 보입니다` · object 파일 몇 개가 0바이트 | **크래시·강제 재부팅이 git 쓰기를 잘랐다.** ⚠ **커밋 «내용» 은 거의 안 깨진다** — 깨지는 건 마지막에 쓰인 것들(index · loose ref · 그 커밋의 object 몇 개)이다. 🔴 **push 는 성공했는데 로컬만 날아간 상태일 수 있다**(원격이 로컬보다 앞선다) | 복구 순서는 §3-8. **먼저 `git ls-remote origin` 과 `.git/logs/HEAD`(reflog)를 본다** — 둘 다 크래시에 잘 살아남고, 되돌아갈 SHA 를 알려 준다 · `handoffs/2026-08-21-handoff.md` §6 |
+| 🔴 **`.git/index` 가 0바이트** · `fatal: 현재 브랜치가 망가진 것처럼 보입니다` · object 파일 몇 개가 0바이트 | **크래시·강제 재부팅이 git 쓰기를 잘랐다.** ⚠ **커밋 «내용» 은 거의 안 깨진다** — 깨지는 건 마지막에 쓰인 것들(index · loose ref · 그 커밋의 object 몇 개)이다. 🔴 **push 는 성공했는데 로컬만 날아간 상태일 수 있다**(원격이 로컬보다 앞선다) | 복구 순서는 §5-1. **먼저 `git ls-remote origin` 과 `.git/logs/HEAD`(reflog)를 본다** — 둘 다 크래시에 잘 살아남고, 되돌아갈 SHA 를 알려 준다 · `handoffs/2026-08-21-handoff.md` §6 |
 | 메일이 안 온다 | **운영은 발송이 꺼져 있다**(`spring.mail` 키 없음) — 그게 정상 | WA §3 · `README.md` |
 | 배포 종료 로그에 `NoClassDefFoundError` 무더기 | 구 프로세스 밑에서 jar 를 갈아치웠다 | **§2-3 (아래)** |
 | 서비스가 부팅에만 실패한다(손으로는 됨) | SELinux 컨텍스트(`init_t` vs `unconfined_t`) | **§3 (아래)** |
@@ -295,42 +295,6 @@ DB 가 아직 몸을 푸는 동안 커넥션 풀·Flyway 검증·JPA 스키마 �
       ⚠ **`ExecStartPost` 헬스체크 자체는 그대로 둔다** — 그게 «active = 요청 처리 준비 완료» 를
       만드는 장치라, 줄이면 안 된다. 늘려야 하는 건 **기다려 주는 시간**이다.
 
-### 3-8. 🔴 **크래시가 git 을 잘랐을 때 복구 순서** (2026-08-21)
-
-> **사고 (2026-08-21)**: 강제 재부팅 뒤 `git status` 가 `fatal: .git/index: index file smaller than
-> expected`, `git log` 가 `fatal: 현재 브랜치가 망가진 것처럼 보입니다` 였다.
-> 실측: **`.git/index` 0바이트 · `.git/refs/heads/main` 0바이트 · loose object 5개가 0바이트**
-> (성한 object 는 1053개였다 — **손상은 «마지막에 쓰인 것» 에 몰린다**).
-
-⚠ **당황해서 re-clone 하면 안 된다** — 커밋 안 된 작업 트리가 함께 날아간다.
-🔴 **작업 트리는 대개 멀쩡하다.** 깨진 건 `.git/` 안쪽이다.
-
-**순서**(각 단계가 다음 단계의 근거를 만든다):
-
-1. **되돌아갈 SHA 를 먼저 찾는다** — 이 둘은 크래시에 잘 살아남는다:
-   - `tail -3 .git/logs/HEAD` (reflog — 마지막 커밋 SHA 가 그대로 있다)
-   - `git ls-remote origin refs/heads/main` (원격 tip)
-   🔴 **둘이 다르면 «push 는 됐는데 로컬만 날아간» 것**이다. 2026-08-21 이 그 경우였다 —
-   원격이 로컬보다 **한 커밋 앞서** 있었고, 그 커밋의 object 가 로컬에선 0바이트였다.
-2. **객체가 성한지 확인한다**: `git cat-file -t <sha>` → `commit` 이 나와야 한다.
-3. **0바이트 object 를 치운다**: `find .git/objects -type f -size 0 -delete`
-   ⚠ **내용이 없는 파일이라 지워도 잃을 것이 없고**, 지워야 `git fetch` 가 다시 받는다.
-   안 지우면 fetch 가 «이미 있다» 로 건너뛰어 **영영 안 낫는다.**
-4. **0바이트 loose ref 를 치우고 곧바로 세운다**:
-   `rm -f .git/refs/heads/main && git update-ref refs/heads/main <sha>`
-   🔴 **`git update-ref` 만으로는 안 된다** — 깨진 ref 는 잠금을 못 잡아
-   `cannot lock ref: reference broken` 이 난다. **지우는 것이 먼저다.**
-   ⚠ **지운 채로 두면 `packed-refs` 의 옛 SHA 로 조용히 되돌아간다**(이 레포는 08-14 판이 들어 있다) —
-   **지우기와 세우기는 한 호흡**이어야 한다.
-5. **인덱스를 다시 만든다**: `rm -f .git/index && git reset`
-   ⚠ mixed reset 이라 **작업 트리는 안 건드린다.** (HEAD 가 아직 안 고쳐졌으면 빈 인덱스가 만들어져
-   **모든 파일이 untracked 로 보이는데**, 놀라지 말 것 — 4번을 끝내고 다시 하면 원복된다.)
-6. **원격에서 마저 받는다**: `git fetch origin` → `git fsck` 가 깨끗해질 때까지.
-7. **원격이 앞서 있었으면 ff 한다.** ⚠ 그 커밋이 추가하는 파일이 작업 트리에 **untracked 로 남아
-   있으면** checkout 이 막힌다 → **먼저 내용을 대조**하고(`sha256sum` 두 개) 같으면 지운 뒤 ff 한다.
-
-⚠ **사후 확인은 `git fsck --no-progress` 가 `dangling` 말고 아무것도 안 뱉는 것**이다.
-
 ## 4. 디스크가 찰 때 · VM 디스크를 늘릴 때 (2026-08-07)
 
 ### 4-1. 먼저 «누가 먹었나» 를 가른다 — **우리 작업이 아닐 수 있다**
@@ -397,3 +361,47 @@ sudo xfs_growfs /
 UUID 도 파티션 번호도 안 바뀌므로 `fstab` 은 그대로 맞다.
 ⚠ **`xfs` 는 늘릴 수만 있고 줄일 수 없다.** 되돌리려면 4-2 의 폴더 복사본뿐이다.
 ⚠ `growpart` 가 없어도 **`parted` 로 된다** — 버전 고정 규칙(CLAUDE.md)이 있으니 설치부터 하지 않는다.
+
+---
+
+## 5. 크래시·강제 재부팅이 남긴 것 (2026-08-21)
+
+> ⚠ **§3 과 자리를 나눈 이유**: §3 은 «서비스가 안 뜬다» 이고 여기는 «껐다 켰더니 딴 게 깨졌다» 다.
+> 🔴 **한 번의 재부팅이 증상 여럿을 동시에 만든다** — 그때 증상마다 따로 파고들면 «각각 다른 고장»
+> 이라는 그림이 그려진다. **먼저 `uptime -s` 를 본다**(2026-08-21 실측: 그 한 줄이 넷을 설명했다).
+
+### 5-1. 🔴 **git 이 잘렸을 때 복구 순서**
+
+> **사고 (2026-08-21)**: 강제 재부팅 뒤 `git status` 가 `fatal: .git/index: index file smaller than
+> expected`, `git log` 가 `fatal: 현재 브랜치가 망가진 것처럼 보입니다` 였다.
+> 실측: **`.git/index` 0바이트 · `.git/refs/heads/main` 0바이트 · loose object 5개가 0바이트**
+> (성한 object 는 1053개였다 — **손상은 «마지막에 쓰인 것» 에 몰린다**).
+
+⚠ **당황해서 re-clone 하면 안 된다** — 커밋 안 된 작업 트리가 함께 날아간다.
+🔴 **작업 트리는 대개 멀쩡하다.** 깨진 건 `.git/` 안쪽이다.
+
+**순서**(각 단계가 다음 단계의 근거를 만든다):
+
+1. **되돌아갈 SHA 를 먼저 찾는다** — 이 둘은 크래시에 잘 살아남는다:
+   - `tail -3 .git/logs/HEAD` (reflog — 마지막 커밋 SHA 가 그대로 있다)
+   - `git ls-remote origin refs/heads/main` (원격 tip)
+   🔴 **둘이 다르면 «push 는 됐는데 로컬만 날아간» 것**이다. 2026-08-21 이 그 경우였다 —
+   원격이 로컬보다 **한 커밋 앞서** 있었고, 그 커밋의 object 가 로컬에선 0바이트였다.
+2. **객체가 성한지 확인한다**: `git cat-file -t <sha>` → `commit` 이 나와야 한다.
+3. **0바이트 object 를 치운다**: `find .git/objects -type f -size 0 -delete`
+   ⚠ **내용이 없는 파일이라 지워도 잃을 것이 없고**, 지워야 `git fetch` 가 다시 받는다.
+   안 지우면 fetch 가 «이미 있다» 로 건너뛰어 **영영 안 낫는다.**
+4. **0바이트 loose ref 를 치우고 곧바로 세운다**:
+   `rm -f .git/refs/heads/main && git update-ref refs/heads/main <sha>`
+   🔴 **`git update-ref` 만으로는 안 된다** — 깨진 ref 는 잠금을 못 잡아
+   `cannot lock ref: reference broken` 이 난다. **지우는 것이 먼저다.**
+   ⚠ **지운 채로 두면 `packed-refs` 의 옛 SHA 로 조용히 되돌아간다**(이 레포는 08-14 판이 들어 있다) —
+   **지우기와 세우기는 한 호흡**이어야 한다.
+5. **인덱스를 다시 만든다**: `rm -f .git/index && git reset`
+   ⚠ mixed reset 이라 **작업 트리는 안 건드린다.** (HEAD 가 아직 안 고쳐졌으면 빈 인덱스가 만들어져
+   **모든 파일이 untracked 로 보이는데**, 놀라지 말 것 — 4번을 끝내고 다시 하면 원복된다.)
+6. **원격에서 마저 받는다**: `git fetch origin` → `git fsck` 가 깨끗해질 때까지.
+7. **원격이 앞서 있었으면 ff 한다.** ⚠ 그 커밋이 추가하는 파일이 작업 트리에 **untracked 로 남아
+   있으면** checkout 이 막힌다 → **먼저 내용을 대조**하고(`sha256sum` 두 개) 같으면 지운 뒤 ff 한다.
+
+⚠ **사후 확인은 `git fsck --no-progress` 가 `dangling` 말고 아무것도 안 뱉는 것**이다.
