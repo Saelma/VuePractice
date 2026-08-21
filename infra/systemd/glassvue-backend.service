@@ -23,7 +23,7 @@ ExecStartPost=/bin/bash -c 'until curl -sf -m 2 http://127.0.0.1:8080/actuator/h
 
 Restart=on-failure
 RestartSec=5
-TimeoutStartSec=120
+TimeoutStartSec=300
 TimeoutStopSec=30
 SuccessExitStatus=143
 

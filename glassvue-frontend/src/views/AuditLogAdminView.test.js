@@ -27,8 +27,9 @@ vi.mock('../api/audit', async (importOriginal) => {
   return { ...real, fetchAuditLogs: (...a) => fetchAuditLogs(...a) };
 });
 
+import { DxSelectBox } from 'devextreme-vue/select-box';
 import AuditLogAdminView from './AuditLogAdminView.vue';
-import { AUDIT_ACTION_LABEL } from '../api/audit';
+import { AUDIT_ACTION_LABEL, AUDIT_TARGET_TYPE_LABEL } from '../api/audit';
 
 function log(overrides = {}) {
   return {
@@ -72,6 +73,26 @@ async function typeTargetLogin(w, value) {
   const input = w.find('input[placeholder="loginId 부분일치"]');
   await input.setValue(value);
   await input.trigger('change');
+  await flushPromises();
+}
+
+/**
+ * 「대상 종류」 SelectBox 를 **위젯 인스턴스로** 움직인다 (2026-08-21).
+ *
+ * 🔴 **이 파일이 «필요해지면 그때 가겠다» 고 적어 둔 그 길이다**(아래 팝업 주석). 08-20 에
+ * 필터가 생겼고 **08-21 에 값이 둘 늘었는데**(CATEGORY·NOTICE) 그걸 보는 테스트가 없었다.
+ *
+ * ⚠ 팝업(`.dx-list-item`)은 jsdom 에서 안 열린다 — 그건 이미 밟아서 확인된 경계다.
+ * 대신 **DevExtreme 인스턴스의 `option('value', …)`** 로 값을 넣는다. 이건 사용자가 항목을 고를 때
+ * 위젯이 스스로 하는 일과 **같은 경로**라(`update:value` 가 나가고 v-model 이 움직인다)
+ * `$emit` 을 흉내내는 것보다 정직하다.
+ */
+function selectBoxes(w) {
+  return w.findAllComponents(DxSelectBox);
+}
+async function pickTargetType(w, value) {
+  // [0] 조작 종류 · [1] 대상 종류 — 템플릿 순서다.
+  selectBoxes(w)[1].vm.instance.option('value', value);
   await flushPromises();
 }
 
@@ -123,6 +144,57 @@ describe('AuditLogAdminView', () => {
   //      (코드 한 줄이라 눈으로 보이지만, 누가 손으로 적은 목록으로 바꿔도 조용하다).
   //      → 필요해지면 그때는 **팝업이 아니라 위젯 인스턴스**로 가야 한다.
 
+  // ── 대상 종류 (2026-08-20 V53 · 2026-08-21 V56 로 값이 둘 늘었다) ──────────────
+
+  it('🔴 「대상」 열을 **라벨로** 옮긴다 — 오늘 늘어난 값도 날문자로 안 뜬다', async () => {
+    // V56 이 CATEGORY 를 세웠다. 라벨이 없으면 화면에 `CATEGORY` 가 그대로 뜬다 —
+    // 2026-08-10 에 조작 종류에서 났던 그 사고의 「대상 종류」 판이다.
+    const w = await mountWith([log({
+      action: 'CATEGORY_DELETE', targetType: 'CATEGORY', targetLogin: null, detail: 'ZZ-없앨분류',
+    })]);
+
+    const row = w.find('.dx-data-row').text();
+    expect(row).toContain('카테고리');
+    expect(row).not.toContain('CATEGORY');
+    // ⚠ 대상이 회원이 아니라 「대상 아이디」는 정상적으로 비고 `—` 가 된다.
+    //    🔴 그 빈칸의 **이유를 「대상」 열이 설명한다** — 두 열이 한 쌍인 이유다.
+    expect(row).toContain('—');
+  });
+
+  it('공지도 라벨로 뜬다 (V56 의 나머지 한 값)', async () => {
+    const w = await mountWith([log({
+      action: 'NOTICE_UPDATE', targetType: 'NOTICE', targetLogin: null, detail: '변경 없음',
+    })]);
+
+    expect(w.find('.dx-data-row').text()).toContain('공지');
+  });
+
+  it('🔴 대상 종류 **선택지가 라벨 맵에서 온다** — 손으로 적은 목록으로 바뀌면 여기서 걸린다', async () => {
+    // ⚠ 이 화면이 그 맵을 «쓴다» 는 사실은 그전까지 **아무도 안 지켰다**(아래 팝업 주석이 남긴 구멍).
+    //    api/audit.test.js 는 맵과 enum 을 대조할 뿐, 화면이 그 맵을 쓰는지는 모른다.
+    const w = await mountWith([log()]);
+
+    const items = selectBoxes(w)[1].props('items');
+    expect(items[0]).toEqual({ value: null, label: '전체' }); // 「전체」가 맨 앞이어야 비울 수 있다
+    expect(items.slice(1)).toEqual(
+      Object.entries(AUDIT_TARGET_TYPE_LABEL).map(([value, label]) => ({ value, label })),
+    );
+    // 🔴 오늘 늘린 둘이 실제로 고를 수 있는지 못 박는다 — 남겨도 못 찾으면 소용이 없다.
+    expect(items.map((i) => i.value)).toEqual(expect.arrayContaining(['CATEGORY', 'NOTICE']));
+  });
+
+  it('조작 종류 선택지도 라벨 맵에서 온다 (같은 이유)', async () => {
+    const w = await mountWith([log()]);
+
+    const items = selectBoxes(w)[0].props('items');
+    expect(items.slice(1)).toEqual(
+      Object.entries(AUDIT_ACTION_LABEL).map(([value, label]) => ({ value, label })),
+    );
+    expect(items.map((i) => i.value)).toEqual(
+      expect.arrayContaining(['CATEGORY_CREATE', 'NOTICE_DELETE', 'INQUIRY_ANSWER']),
+    );
+  });
+
   // ── 검색 · 초기화 ──────────────────────────────────────────────
 
   it('검색은 **폼 값을 실어** 서버에 다시 묻는다', async () => {
@@ -136,6 +208,19 @@ describe('AuditLogAdminView', () => {
     expect(fetchAuditLogs.mock.calls.at(-1)[0]).toMatchObject({ targetLogin: 'zzuser' });
   });
 
+  it('🔴 **대상 종류도 검색에 실린다** — 회원 아닌 행을 좁히는 유일한 수단이다', async () => {
+    // ⚠ 그전까지 이 화면 테스트는 targetLogin 만 봤다. targetType 이 payload 에서 빠져도
+    //    **화면은 멀쩡하고 목록도 그려진다** — 그냥 «안 좁혀질» 뿐이라 조용하다.
+    const w = await mountWith([log()]);
+    fetchAuditLogs.mockClear();
+
+    await pickTargetType(w, 'CATEGORY');
+    await w.findAll('button').find((b) => b.text() === '검색').trigger('click');
+
+    await vi.waitUntil(() => fetchAuditLogs.mock.calls.length > 0, { timeout: 12_000, interval: 20 });
+    expect(fetchAuditLogs.mock.calls.at(-1)[0]).toMatchObject({ targetType: 'CATEGORY' });
+  });
+
   it('초기화는 폼을 비우고 **곧바로 다시 묻는다** (「지웠는데 목록은 그대로」가 안 되게)', async () => {
     const w = await mountWith([log()]);
     await typeTargetLogin(w, 'zzuser');
@@ -147,5 +232,18 @@ describe('AuditLogAdminView', () => {
     const last = fetchAuditLogs.mock.calls.at(-1)[0];
     expect(last.targetLogin).toBe('');
     expect(last.action).toBeNull();
+  });
+
+  it('🔴 초기화는 **대상 종류도** 비운다 — 안 지우면 「전체로 돌렸는데 안 늘어난다」가 된다', async () => {
+    // ⚠ reset() 이 세 필드를 손으로 열거한다. 필드가 늘 때 하나를 빠뜨리기 딱 좋은 모양이고,
+    //    빠뜨려도 **아무것도 안 터진다** — 목록이 조용히 좁혀진 채로 남는다.
+    const w = await mountWith([log()]);
+    await pickTargetType(w, 'NOTICE');
+    fetchAuditLogs.mockClear();
+
+    await w.findAll('button').find((b) => b.text() === '초기화').trigger('click');
+
+    await vi.waitUntil(() => fetchAuditLogs.mock.calls.length > 0, { timeout: 12_000, interval: 20 });
+    expect(fetchAuditLogs.mock.calls.at(-1)[0].targetType).toBeNull();
   });
 });
