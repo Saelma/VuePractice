@@ -22,7 +22,7 @@ import org.springframework.http.ResponseEntity;
 @Tag(name = "Notice", description = "사내 공지 게시판 API")
 public interface NoticeController {
 
-    @Operation(summary = "공지 등록 (로그인 필요, 작성자=로그인 유저)")
+    @Operation(summary = "공지 등록 (관리자 전용, 작성자=로그인 관리자)")
     ResponseEntity<ApiResponse<UUID>> create(
             @Parameter(hidden = true) AuthUser user,
             @Valid NoticeCreateRequest request);
@@ -36,10 +36,12 @@ public interface NoticeController {
             @ParameterObject Pageable pageable);
 
     @Operation(summary = "공지 수정 (관리자 전용)")
-    ResponseEntity<ApiResponse<Void>> update(UUID id, @Valid NoticeUpdateRequest request);
+    ResponseEntity<ApiResponse<Void>> update(
+            @Parameter(hidden = true) AuthUser user,
+            UUID id, @Valid NoticeUpdateRequest request);
 
     @Operation(summary = "공지 삭제 (관리자 전용)")
-    ResponseEntity<ApiResponse<Void>> delete(UUID id);
+    ResponseEntity<ApiResponse<Void>> delete(@Parameter(hidden = true) AuthUser user, UUID id);
 
     @Operation(summary = "공지 조회수 증가")
     ResponseEntity<ApiResponse<Void>> increaseView(UUID id);

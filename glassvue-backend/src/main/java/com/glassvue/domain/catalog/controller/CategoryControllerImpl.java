@@ -4,6 +4,8 @@ import com.glassvue.domain.catalog.dto.CategoryCreateRequest;
 import com.glassvue.domain.catalog.dto.CategoryResponse;
 import com.glassvue.domain.catalog.service.CategoryService;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.global.security.AuthUser;
+import com.glassvue.global.security.LoginUser;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -27,8 +29,10 @@ public class CategoryControllerImpl implements CategoryController {
 
     @Override
     @PostMapping
-    public ResponseEntity<ApiResponse<CategoryResponse>> create(@Valid @RequestBody CategoryCreateRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(categoryService.create(request)));
+    public ResponseEntity<ApiResponse<CategoryResponse>> create(
+            @LoginUser AuthUser user, @Valid @RequestBody CategoryCreateRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(categoryService.create(request, user)));
     }
 
     @Override
@@ -39,8 +43,8 @@ public class CategoryControllerImpl implements CategoryController {
 
     @Override
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        categoryService.delete(id);
+    public ResponseEntity<ApiResponse<Void>> delete(@LoginUser AuthUser user, @PathVariable UUID id) {
+        categoryService.delete(id, user);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 }

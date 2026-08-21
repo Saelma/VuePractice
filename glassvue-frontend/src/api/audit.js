@@ -27,6 +27,10 @@ export const AUDIT_TARGET_TYPE_LABEL = {
   MEMBER: '회원',
   PRODUCT: '상품',
   COUPON: '쿠폰',
+  // 🔴 **여기가 V53 틀의 첫 확장이다** (2026-08-21, V56). 카테고리·공지는 위 셋 어디에도 안 들어간다 —
+  //    상품으로 접으면 「대상 종류=상품」에 상품 아닌 행이 섞여, 이 필터의 쓸모를 스스로 무너뜨린다.
+  CATEGORY: '카테고리',
+  NOTICE: '공지',
 };
 export function auditTargetTypeText(targetType) {
   return AUDIT_TARGET_TYPE_LABEL[targetType] || targetType || '';
@@ -70,6 +74,12 @@ export const AUDIT_ACTION_LABEL = {
   DISCOUNT_CREATE: '세일 등록',
   DISCOUNT_UPDATE: '세일 수정',
   DISCOUNT_DELETE: '세일 삭제',
+  CATEGORY_CREATE: '카테고리 등록',
+  CATEGORY_DELETE: '카테고리 삭제',
+  NOTICE_CREATE: '공지 등록',
+  NOTICE_UPDATE: '공지 수정',
+  NOTICE_DELETE: '공지 삭제',
+  INQUIRY_ANSWER: '문의 답변',
 };
 export function auditActionText(action) {
   return AUDIT_ACTION_LABEL[action] || action || '';
@@ -133,6 +143,19 @@ export const AUDIT_ACTION_BADGE = {
   DISCOUNT_CREATE: 'badge-warning',
   DISCOUNT_UPDATE: 'badge-warning',
   DISCOUNT_DELETE: 'badge-warning',
+  CATEGORY_CREATE: 'badge-neutral',
+  // 🔴 **되돌릴 수 없다** — 카테고리에는 유예(F-7)가 없어 행이 진짜로 사라진다. 같은 이름으로
+  //    다시 만들어도 **id 가 달라** 예전 것이 아니다. 상품 삭제가 warning 인 것과 갈리는 지점이다.
+  CATEGORY_DELETE: 'badge-danger',
+  NOTICE_CREATE: 'badge-neutral',
+  NOTICE_UPDATE: 'badge-neutral',
+  // 공지도 soft delete 가 없다 — 지우면 끝이다.
+  NOTICE_DELETE: 'badge-danger',
+  // 🔴 **답변 자체는 고칠 수 있는데 «첫 답변» 은 알림을 내보낸다 — 그건 회수할 수 없다.**
+  //    다만 danger 로 칠하지 않는다: 문의에 답하는 것은 **정상 흐름의 진행**이고 빈도가 높아,
+  //    빨갛게 칠하면 원장이 그 색으로 덮여 **진짜 위험한 줄이 묻힌다**(발송·배송완료와 같은 판단).
+  //    ⚠ 대신 알림이 나갔는지는 「내용」에 «첫 답변» 으로 적힌다 — 색이 아니라 값으로 읽는다.
+  INQUIRY_ANSWER: 'badge-neutral',
 };
 export function auditActionBadge(action) {
   return AUDIT_ACTION_BADGE[action] || 'badge-neutral';

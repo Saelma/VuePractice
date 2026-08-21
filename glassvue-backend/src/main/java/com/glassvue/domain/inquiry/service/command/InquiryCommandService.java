@@ -119,6 +119,17 @@ public class InquiryCommandService {
     /**
      * 답변 등록/수정 — 관리자 전용(권한은 SecurityConfig에서 강제).
      * 단, 본인이 등록한 문의에는 답변할 수 없다(질문자≠답변자).
+     *
+     * <p>🔴 <b>원장에 남긴다</b> (2026-08-21, V56 — 감사 확대 4차). 되돌릴 수 없는 것은 답변 자체가
+     * 아니라 <b>알림</b>이다 — 답변은 고쳐 쓸 수 있지만 <b>이미 나간 알림은 회수할 수 없다.</b>
+     * 그래서 {@code detail} 에 «첫 답변인가» 를 적는다: 알림은 첫 답변에만 나가므로
+     * <b>그 한 마디가 «알림이 나갔나» 의 답</b>이다.
+     *
+     * <p>⚠ <b>대상은 문의가 아니라 질문자</b>다 — {@link #setHidden} 과 같은 판단(V44)이라
+     * 같은 회원의 «숨김» 과 «답변» 이 한 {@code target_id} 로 묶인다.
+     *
+     * <p>⚠ <b>본인 문의라 막힌 요청은 안 남는다</b> — 예외가 나가면 같은 트랜잭션이 롤백되어
+     * 이벤트도 함께 사라진다. 원장에는 「일어난 일」만 있다.
      */
     public void answer(UUID id, InquiryAnswerRequest req, AuthUser user) {
         Inquiry inquiry = findById(id);
@@ -129,6 +140,10 @@ public class InquiryCommandService {
         boolean firstAnswer = !inquiry.isAnswered();
         inquiry.answer(req.answer());
         log.info("Inquiry answered: id={} by={} first={}", id, user.id(), firstAnswer);
+        eventPublisher.publishEvent(new AdminActionEvent(
+                AuditAction.INQUIRY_ANSWER, user.id(), user.nickname(),
+                inquiry.getAuthorId(), memberService.loginIdOf(inquiry.getAuthorId()),
+                inquiry.getTitle() + (firstAnswer ? " · 첫 답변" : " · 답변 수정")));
         if (firstAnswer) {
             // 처음 답이 달렸을 때만 알린다(B-15) — 수정마다 보내면 오타 고칠 때마다 알림이 간다.
             // 알림 생성은 notification 도메인이 이벤트를 받아서 한다(도메인 간 직접 참조 금지).

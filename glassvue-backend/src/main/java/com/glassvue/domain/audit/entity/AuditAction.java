@@ -183,7 +183,83 @@ public enum AuditAction {
      */
     DISCOUNT_CREATE(AuditTargetType.PRODUCT),
     DISCOUNT_UPDATE(AuditTargetType.PRODUCT),
-    DISCOUNT_DELETE(AuditTargetType.PRODUCT);
+    DISCOUNT_DELETE(AuditTargetType.PRODUCT),
+    /**
+     * 카테고리 <b>등록·삭제</b> (2026-08-21, V56 — 감사 확대 4차).
+     *
+     * <p>🔴 <b>여기가 V53 구조의 첫 시험대였다</b>(2026-08-20 백로그가 그렇게 적어 뒀다) —
+     * 대상이 {@code MEMBER}·{@code PRODUCT}·{@code COUPON} <b>어디에도 안 들어가는 첫 값</b>이다.
+     * 결론은 «접지 말고 값을 더한다» 였다({@link AuditTargetType#CATEGORY} 에 이유가 있다).
+     *
+     * <p>⚠ <b>삭제는 되돌릴 수 없다</b> — 카테고리에는 soft delete 가 없다({@code deleteById}).
+     * 상품이 하나라도 붙어 있으면 막히므로({@code CATEGORY_IN_USE}) <b>지워지는 것은 늘 빈
+     * 카테고리</b>지만, 그래도 «누가 무엇을 없앴나» 는 남아야 한다 — 이름을 다시 만들 수는 있어도
+     * <b>id 가 달라져</b> 예전 것과 같은 것이 아니다.
+     *
+     * <p><b>detail 은 카테고리명</b>이다. ⚠ 삭제는 <b>지우기 전에</b> 읽는다 —
+     * {@code DISCOUNT_DELETE} 와 같은 자리이고, 뒤에서 읽으면 적을 값이 없다.
+     *
+     * <p>❌ <b>수정은 값이 없다</b> — 카테고리를 고치는 API 자체가 없다(등록·삭제·조회뿐).
+     * 안 일어나는 일에 값을 만들면 «왜 한 번도 안 쌓이지» 를 나중에 되짚게 된다
+     * (쿠폰 삭제에 값을 안 만든 것과 같은 판단 — V53).
+     *
+     * <p>⚠ {@code V56} 으로 CHECK 제약을 함께 넓혔다 — {@code action} 과 {@code target_type} <b>둘 다</b>다.
+     * 🔴 <b>target_type 쪽은 이번이 처음</b>이라 V53 이후 한 번도 안 밟힌 경로다.
+     */
+    CATEGORY_CREATE(AuditTargetType.CATEGORY),
+    CATEGORY_DELETE(AuditTargetType.CATEGORY),
+    /**
+     * 공지 <b>등록·수정·삭제</b> (2026-08-21, V56 — 감사 확대 4차).
+     *
+     * <p>✅ <b>선행 조건은 E-4 가 풀었다</b>(2026-08-20) — 그전에는 공지를 <b>고객도 쓸 수 있어</b>
+     * «관리자 조작» 이 아니었다. 원장은 «관리자가 무엇을 했나» 라, 그 상태로는 남길 자리가 없었다.
+     * 🔴 <b>즉 이 값은 어제 기능 하나가 닫히면서 «비로소 뜻을 갖게 된» 값이다.</b>
+     *
+     * <p>⚠ <b>삭제는 되돌릴 수 없다</b> — 공지에도 soft delete 가 없다({@code repository.delete}).
+     * 상품(F-7)과 갈리는 지점이고, 그래서 <b>제목이 detail 에 남는 것이 유일한 흔적</b>이다.
+     *
+     * <p><b>detail 규칙</b>은 {@link #PRODUCT_UPDATE} 를 그대로 따른다:
+     * <ul>
+     *   <li>등록·삭제는 <b>제목</b>. 삭제는 지우기 전에 읽는다.</li>
+     *   <li>수정은 <b>바뀐 것만 «전→후»</b>. 🔴 <b>본문(content)은 «바뀜» 만</b> —
+     *       공지 본문은 상품 설명보다 길어서 전/후를 다 실으면 {@code detail}(1000자)을 확실히 넘긴다.</li>
+     *   <li>바뀐 것이 없어도 줄을 남긴다(detail 은 «변경 없음»). 관리 화면이 공지 전체를 다시 보내
+     *       흔한 경우인데, «누가 언제 손댔나» 를 접근 기록으로 본다 — {@code PRODUCT_UPDATE} 와 같은 선택이다.</li>
+     * </ul>
+     *
+     * <p>⚠ <b>조회수 증가({@code increaseView})는 남기지 않는다</b> — 고객이 읽은 것이고
+     * 관리자 조작이 아니다. 게다가 Redis 누적이라 개별 호출에 트랜잭션도 없다.
+     *
+     * <p>🔴 <b>과거 공지 조작은 감사에 없다</b> — 백필할 출처가 없다({@code author}·{@code authorId} 는
+     * <b>등록자</b>만 알고 수정·삭제는 «누가 언제» 를 아무 데도 안 남겼다). 원장은 오늘부터 시작한다
+     * (V44·V50·V51 과 같은 판단 — 모르는 값은 지어내지 않는다).
+     *
+     * <p>⚠ {@code V56} 으로 CHECK 제약을 함께 넓혔다.
+     */
+    NOTICE_CREATE(AuditTargetType.NOTICE),
+    NOTICE_UPDATE(AuditTargetType.NOTICE),
+    NOTICE_DELETE(AuditTargetType.NOTICE),
+    /**
+     * 문의 <b>답변 등록·수정</b> (2026-08-21, V56 — 감사 확대 4차).
+     *
+     * <p>⚠ <b>대상은 문의가 아니라 질문자</b>다 — {@link #INQUIRY_HIDE}(V44)와 같은 판단이라
+     * {@code target_type} 을 안 건드린다. 같은 회원의 «숨김» 과 «답변» 이 <b>한 target_id 로 묶인다.</b>
+     *
+     * <p>🔴 <b>이 조작은 고객에게 알림이 나간다</b>(B-15). 되돌릴 수 없는 것은 답변 자체가 아니라
+     * <b>알림</b>이다 — 답변은 고쳐 쓸 수 있지만 <b>이미 나간 알림은 회수할 수 없다.</b>
+     * 그래서 detail 에 <b>«첫 답변인가» 를 적는다</b>: 알림은 첫 답변에만 나가므로
+     * (수정마다 보내면 오타 고칠 때마다 알림이 간다), <b>그 한 글자가 «알림이 나갔나» 의 답</b>이다.
+     *
+     * <p><b>detail</b> 은 «문의 제목 · 첫 답변/답변 수정» 이다.
+     * ⚠ 제목은 <b>지금 값</b>이라 나중에 수정되면 어긋날 수 있는데, 그래도 id 보다 낫다
+     * ({@link #INQUIRY_HIDE} 가 같은 대가를 알고 제목을 넣었다).
+     *
+     * <p>⚠ <b>값이 하나다</b>(등록·수정을 안 가른다). 갈라도 얻는 것이 없어서다 —
+     * 궁금한 것은 «알림이 나갔나» 인데 그건 detail 이 이미 답하고, 그 답이 곧 «첫 답변인가» 다.
+     *
+     * <p>⚠ {@code V56} 으로 CHECK 제약을 함께 넓혔다.
+     */
+    INQUIRY_ANSWER(AuditTargetType.MEMBER);
 
     private final AuditTargetType targetType;
 

@@ -61,6 +61,27 @@ class AuditActionTargetTypeTest {
         assertThat(AuditAction.ORDER_SHIP.targetType()).isEqualTo(AuditTargetType.MEMBER);
         assertThat(AuditAction.REVIEW_HIDE.targetType()).isEqualTo(AuditTargetType.MEMBER);
         assertThat(AuditAction.INQUIRY_HIDE.targetType()).isEqualTo(AuditTargetType.MEMBER);
+        // 🔴 답변은 «숨김» 과 **같은 대상**이어야 한다 — 그래야 한 회원에게 무슨 일이 있었나가
+        //    한 target_id 로 묶인다(2026-08-21, V56).
+        assertThat(AuditAction.INQUIRY_ANSWER.targetType()).isEqualTo(AuditTargetType.MEMBER);
+    }
+
+    @DisplayName("🔴 카테고리·공지는 기존 셋 밖이다 — V53 틀이 «값을 더해» 확장된 첫 자리 (V56)")
+    @Test
+    void categoryAndNoticeGetOwnTargetTypes() {
+        // 이 단언이 2026-08-21 의 설계 결정 그 자체다. 접으려면 접을 수 있었다 —
+        // 카테고리를 PRODUCT 로(상품을 담는 그릇이니까), 공지를 MEMBER 로(author_id 가 있으니까).
+        // 🔴 접지 않은 이유: 접는 순간 「대상 종류」 필터가 **섞인 것을 보여주게 되고**,
+        //    그 필터의 존재 이유(회원 아닌 행을 갈라 본다)를 스스로 무너뜨린다.
+        assertThat(AuditAction.CATEGORY_CREATE.targetType()).isEqualTo(AuditTargetType.CATEGORY);
+        assertThat(AuditAction.CATEGORY_DELETE.targetType()).isEqualTo(AuditTargetType.CATEGORY);
+        assertThat(AuditAction.NOTICE_CREATE.targetType()).isEqualTo(AuditTargetType.NOTICE);
+        assertThat(AuditAction.NOTICE_UPDATE.targetType()).isEqualTo(AuditTargetType.NOTICE);
+        assertThat(AuditAction.NOTICE_DELETE.targetType()).isEqualTo(AuditTargetType.NOTICE);
+
+        // ⚠ 그리고 상품 쪽에 새어 들어가지 않았는지도 본다 — 위 넷과 갈리는 것이 요점이라서.
+        assertThat(AuditAction.CATEGORY_CREATE.targetType()).isNotEqualTo(AuditTargetType.PRODUCT);
+        assertThat(AuditAction.NOTICE_CREATE.targetType()).isNotEqualTo(AuditTargetType.MEMBER);
     }
 
     @DisplayName("⚠ action 이름은 20자를 넘을 수 없다 — DB 열이 VARCHAR2(20) 다")

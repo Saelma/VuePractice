@@ -59,15 +59,16 @@ public class NoticeControllerImpl implements NoticeController {
     @Override
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> update(
+            @LoginUser AuthUser user,
             @PathVariable UUID id, @Valid @RequestBody NoticeUpdateRequest request) {
-        commandService.update(id, request);
+        commandService.update(id, request, user);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
     @Override
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        commandService.delete(id);
+    public ResponseEntity<ApiResponse<Void>> delete(@LoginUser AuthUser user, @PathVariable UUID id) {
+        commandService.delete(id, user);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 

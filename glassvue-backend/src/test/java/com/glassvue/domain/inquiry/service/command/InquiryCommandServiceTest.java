@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
 import com.glassvue.domain.image.service.ImageService;
 import com.glassvue.domain.inquiry.dto.InquiryAnswerRequest;
@@ -19,6 +21,7 @@ import com.glassvue.domain.inquiry.entity.InquiryStatus;
 import com.glassvue.domain.inquiry.event.InquiryAnsweredEvent;
 import com.glassvue.domain.inquiry.repository.InquiryRepository;
 import com.glassvue.domain.member.entity.Role;
+import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
@@ -40,6 +43,7 @@ class InquiryCommandServiceTest {
     @Mock InquiryRepository inquiryRepository;
     @Mock ProductQueryService productQueryService;
     @Mock ImageService imageService;
+    @Mock MemberService memberService;
     @Mock ApplicationEventPublisher eventPublisher;
     @InjectMocks InquiryCommandService service;
 
@@ -53,6 +57,18 @@ class InquiryCommandServiceTest {
     private static void assertErrorCode(Runnable r, ErrorCode expected) {
         assertThatThrownBy(r::run).isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(expected);
+    }
+
+    /**
+     * 나간 이벤트 중 원하는 종류만 골라 온다.
+     *
+     * <p>⚠ <b>답변 하나가 이벤트 <b>둘</b>을 낸다</b>(2026-08-21, V56): 고객 알림({@code InquiryAnsweredEvent})
+     * 과 감사({@code AdminActionEvent}). 그래서 «한 번 발행됐다» 로는 못 세고 <b>종류로 갈라</b> 봐야 한다.
+     */
+    private <T> List<T> publishedEventsOf(Class<T> type) {
+        org.mockito.ArgumentCaptor<Object> captor = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, org.mockito.Mockito.atLeast(0)).publishEvent(captor.capture());
+        return captor.getAllValues().stream().filter(type::isInstance).map(type::cast).toList();
     }
 
     @Test
@@ -160,10 +176,9 @@ class InquiryCommandServiceTest {
 
         service.answer(UUID.randomUUID(), new InquiryAnswerRequest("네 답변드립니다"), admin);
 
-        org.mockito.ArgumentCaptor<InquiryAnsweredEvent> captor =
-                org.mockito.ArgumentCaptor.forClass(InquiryAnsweredEvent.class);
-        verify(eventPublisher).publishEvent(captor.capture());
-        InquiryAnsweredEvent event = captor.getValue();
+        List<InquiryAnsweredEvent> events = publishedEventsOf(InquiryAnsweredEvent.class);
+        assertThat(events).hasSize(1);
+        InquiryAnsweredEvent event = events.get(0);
         assertThat(event.authorId()).isEqualTo(user.id());        // 답변자(admin)가 아니라 **작성자**에게 간다
         assertThat(event.productId()).isEqualTo(q.getProductId());
         assertThat(event.inquiryTitle()).isEqualTo("t");          // 문구에 어느 문의인지가 있어야 쓸모가 있다
@@ -180,6 +195,32 @@ class InquiryCommandServiceTest {
 
         assertThat(q.getAnswer()).isEqualTo("고친 답변");            // 수정 자체는 된다
         verify(eventPublisher, never()).publishEvent(any(InquiryAnsweredEvent.class));
+        // 🔴 **알림은 안 가지만 원장에는 남는다**(2026-08-21, V56) — 그리고 그 줄이 스스로
+        //    «알림은 안 갔다» 를 말한다. 둘이 갈리는 자리라 여기서 못 박아 둔다.
+        List<AdminActionEvent> audits = publishedEventsOf(AdminActionEvent.class);
+        assertThat(audits).hasSize(1);
+        assertThat(audits.get(0).action()).isEqualTo(AuditAction.INQUIRY_ANSWER);
+        assertThat(audits.get(0).detail()).endsWith("· 답변 수정");
+    }
+
+    @Test
+    @DisplayName("🔴 답변: 원장의 대상은 답변자가 아니라 **질문자**다 — 숨김과 같은 target_id 로 묶인다")
+    void answer_recordsAuditTargetingAsker() {
+        Inquiry q = inquiryBy(user.id());
+        when(inquiryRepository.findById(any())).thenReturn(Optional.of(q));
+        when(memberService.loginIdOf(user.id())).thenReturn("kim1");
+
+        service.answer(UUID.randomUUID(), new InquiryAnswerRequest("네"), admin);
+
+        List<AdminActionEvent> audits = publishedEventsOf(AdminActionEvent.class);
+        assertThat(audits).hasSize(1);
+        AdminActionEvent audit = audits.get(0);
+        assertThat(audit.action()).isEqualTo(AuditAction.INQUIRY_ANSWER);
+        assertThat(audit.actorId()).isEqualTo(admin.id());
+        assertThat(audit.targetId()).isEqualTo(user.id());
+        assertThat(audit.targetLogin()).isEqualTo("kim1");
+        // 🔴 detail 이 «알림이 나갔나» 를 답한다 — 첫 답변에만 나가고 회수할 수 없다.
+        assertThat(audit.detail()).isEqualTo("t · 첫 답변");
     }
 
     @Test
@@ -192,5 +233,7 @@ class InquiryCommandServiceTest {
                 ErrorCode.INQUIRY_SELF_ANSWER);
 
         verify(eventPublisher, never()).publishEvent(any(InquiryAnsweredEvent.class));
+        // ⚠ 원장도 마찬가지다 — 막힌 요청은 「일어난 일」이 아니다(2026-08-21, V56).
+        verify(eventPublisher, never()).publishEvent(any(AdminActionEvent.class));
     }
 }
