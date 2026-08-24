@@ -208,7 +208,7 @@ function barsIn(weekStart, weekEnd) {
       <div v-if="!loading && alwaysOn.length" class="mb-3 rounded-card border border-line bg-canvas px-4 py-3">
         <p class="text-xs text-ink-500">이 달 내내 도는 상시 쿠폰</p>
         <ul class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-          <li v-for="c in alwaysOn" :key="c.couponId" class="text-sm text-ink-700">
+          <li v-for="c in alwaysOn" :key="c.id" class="text-sm text-ink-700">
             {{ c.name }}
             <span class="text-xs text-ink-500">
               · {{ c.label }}
