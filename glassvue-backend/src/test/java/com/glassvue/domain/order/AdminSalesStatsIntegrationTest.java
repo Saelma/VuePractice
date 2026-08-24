@@ -353,9 +353,15 @@ class AdminSalesStatsIntegrationTest {
         String statusList = com.glassvue.domain.order.entity.OrderStatus.revenueStatusNames().stream()
                 .map(s -> "'" + s + "'")
                 .collect(java.util.stream.Collectors.joining(","));
+        // 🔴 **부분 취소분을 뺀다**(2026-08-24, G-4). 상품매출은 원본이 아니라 «남은 것» 이다.
+        //    ⚠ 이 식을 안 따라오면 위 주석이 말한 그 사고가 **또** 난다 — 지금은 부분 취소된 주문이
+        //       전부 CANCELLED(매출 상태 아님)라 **우연히 통과**하지만, PAID 주문을 부분 취소하는
+        //       순간 갈린다. 🔴 «우연히 맞는 것» 과 «맞는 것» 은 다르다.
+        //    ⚠ 배송비는 안 뺀다 — 부분 취소로 움직이지 않는 값이다(G-4 결정 2).
         Object[] expected = (Object[]) entityManager.createNativeQuery("""
                 SELECT COUNT(*),
-                       NVL(SUM(o.total_price - o.coupon_discount), 0),
+                       NVL(SUM((o.total_price - o.cancelled_items_total)
+                             - (o.coupon_discount - o.cancelled_coupon_discount)), 0),
                        NVL(SUM(o.shipping_fee), 0)
                   FROM orders o
                  WHERE o.status IN (%s)

@@ -236,6 +236,28 @@ describe('OrderDetailView — 부분 취소 (G-4)', () => {
     expect(w.text()).toContain('결제 금액');
   });
 
+  it('🔴 전량이 빠진 주문은 「남은 결제 금액 0원」이고 환불액이 **배송비까지** 포함한다', async () => {
+    // 실측(`20260824-5297`)에서 여기가 「남은 결제 금액 3,000원」으로 나왔었다 — 취소된 주문에
+    // 배송비만 덩그러니 남은 모양이다. 서버가 0 을 주고 환불액에 배송비를 넣는다.
+    const w = await open(order({
+      status: 'CANCELLED',
+      totalPrice: 25_000, shippingFee: 3_000, couponDiscount: 5_000, usedPoint: 2_000,
+      cancelledItemsTotal: 25_000, refundedAmount: 21_000, cancelledPoint: 2_000,
+      payAmount: 0,
+      items: [
+        item({ orderItemId: 'i-a', productName: 'ZZ-A', price: 15_000, lineTotal: 15_000,
+               cancelledQuantity: 1, remainingQuantity: 0 }),
+        item({ orderItemId: 'i-b', productName: 'ZZ-B', price: 10_000, lineTotal: 10_000,
+               cancelledQuantity: 1, remainingQuantity: 0 }),
+      ],
+    }));
+
+    expect(w.text()).toContain('남은 결제 금액');
+    expect(w.text()).toContain('0원');
+    expect(w.text()).toContain('21,000원'); // 처음 결제한 금액이 전부 돌아왔다
+    expect(cancelButtons(w)).toHaveLength(0); // 뺄 것이 없다
+  });
+
   // ── 🔴 어느 경로로 보내나 (WA §2-3 — 소유 기준) ─────────────────
 
   it('🔴 본인 주문이면 **본인 경로**로 보낸다 — 관리자여도 그렇다', async () => {

@@ -33,6 +33,12 @@ import org.springframework.data.repository.query.Param;
  *       그건 환불이라 매출이 아니다.</li>
  *   <li><b>시각</b>: {@code created_at} 이 아니라 <b>{@code paid_at}</b>. 주문한 시점은 영영 결제되지 않을 수도
  *       있고, 매출은 돈이 들어온 시점에 잡는다.</li>
+ *   <li>🔴 <b>부분 취소는 매출에서 빠진다</b> (2026-08-24, G-4). 상품매출은 <b>원본이 아니라
+ *       «남은 것»</b> 이다 — {@code (total_price - cancelled_items_total) -
+ *       (coupon_discount - cancelled_coupon_discount)}. ⚠ 안 빼면 <b>PAID 주문을 부분 취소해도
+ *       매출이 그대로</b>다: 상태가 PAID 로 남고 {@code paid_at} 도 있어 이 쿼리에 계속 잡히는데
+ *       원본 금액을 읽기 때문이다. 전량이 빠지면 주문이 CANCELLED 로 떨어져 상태 필터에서 빠진다.
+ *       ⚠ <b>배송비는 안 뺀다</b> — 부분 취소로 움직이지 않는 값이다(G-4 결정 2).</li>
  *   <li><b>금액</b>: 상품매출({@code total_price - coupon_discount})과 배송비({@code shipping_fee})를
  *       <b>합치지 않는다</b>. 배송비는 그대로 택배비로 나가는 돈이라 상품매출과 섞으면
  *       장사가 잘되는지 알 수 없어진다(사용자 결정, 2026-07-24).</li>
@@ -57,9 +63,10 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
      */
     @Query(value = """
             SELECT COUNT(*),
-                   NVL(SUM(o.total_price - o.coupon_discount), 0),
+                   NVL(SUM((o.total_price - o.cancelled_items_total)
+                         - (o.coupon_discount - o.cancelled_coupon_discount)), 0),
                    NVL(SUM(o.shipping_fee), 0),
-                   NVL(SUM(o.coupon_discount), 0)
+                   NVL(SUM(o.coupon_discount - o.cancelled_coupon_discount), 0)
               FROM orders o
              WHERE o.status IN (:statuses)
                AND o.paid_at >= :from
@@ -83,7 +90,8 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
     @Query(value = """
             SELECT TO_CHAR(o.paid_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD'),
                    COUNT(*),
-                   NVL(SUM(o.total_price - o.coupon_discount), 0),
+                   NVL(SUM((o.total_price - o.cancelled_items_total)
+                         - (o.coupon_discount - o.cancelled_coupon_discount)), 0),
                    NVL(SUM(o.shipping_fee), 0)
               FROM orders o
              WHERE o.status IN (:statuses)

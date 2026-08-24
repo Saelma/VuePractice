@@ -305,6 +305,14 @@ public class Order extends BaseTimeEntity {
      * 고객이 손해 본 기분이 든다(2026-07-23 결정). 그래서 이 식의 순서가 곧 정책이다.
      */
     public long getPayAmount() {
+        // 🔴 **품목이 하나도 안 남으면 0 이다** (2026-08-24). 안 그러면 전량이 빠진 주문에
+        //    **배송비만 덩그러니** 남아 「남은 결제 금액 3,000원」으로 보인다 —
+        //    실측(`20260824-5297`)에서 그렇게 나왔다. 취소된 주문에 배송비를 받을 이유가 없다.
+        //    ⚠ 부분 취소를 한 적 없는 주문은 여기 안 걸린다(`cancelledQuantity` 가 전부 0) —
+        //       그래서 **기존 취소 주문의 표시는 안 바뀐다**(예전처럼 «결제했던 금액» 을 보여준다).
+        if (hasNoRemainingItems()) {
+            return 0;
+        }
         return remainingItemsTotal() - remainingCouponDiscount() - remainingUsedPoint() + shippingFee;
     }
 
@@ -332,12 +340,17 @@ public class Order extends BaseTimeEntity {
      * 돌아가지 돈으로 나가지 않는다. 고객이 되찾은 값어치의 합은 «이 값 + 되돌린 적립금» 이다.
      */
     public long refundedAmount() {
-        return cancelledItemsTotal - cancelledCouponDiscount - cancelledPoint;
+        // 전량이 빠졌으면 배송비도 돌아간다 — 위 {@link #getPayAmount()} 와 앞뒤가 맞아야 한다
+        // (돌려준 것 + 남은 것 = 처음 결제한 것).
+        return cancelledItemsTotal - cancelledCouponDiscount - cancelledPoint
+                + (hasNoRemainingItems() ? shippingFee : 0);
     }
 
     /** 품목이 하나도 안 남았나 — 부분 취소를 이어 하다 보면 여기 닿는다. */
     public boolean hasNoRemainingItems() {
-        return items.stream().allMatch(OrderItem::isFullyCancelled);
+        // ⚠ `allMatch` 는 빈 목록에 **참**이다. 주문에 품목이 없을 수는 없지만, 이 값이 지금은
+        //   `getPayAmount()` 를 0 으로 만드는 스위치라 빈 목록이 조용히 0 을 내지 않게 막는다.
+        return !items.isEmpty() && items.stream().allMatch(OrderItem::isFullyCancelled);
     }
 
     /**
@@ -536,7 +549,9 @@ public class Order extends BaseTimeEntity {
      * 배송비는 뺀다(운임은 소진됐다). 이 값과 적립 회수(earned_point)를 합쳐 순변동이 결정된다.
      */
     public long refundableAmount() {
-        return Math.max(0L, totalPrice - couponDiscount);
+        // ⚠ **남은 것 기준**(2026-08-24, G-4). 부분 취소로 이미 돌려준 몫을 반품에서 또 돌려주면
+        //   환불이 결제금액보다 커진다. 부분 취소가 없으면 예전과 같은 값이다.
+        return Math.max(0L, remainingItemsTotal() - remainingCouponDiscount());
     }
 
     public boolean isOwnedBy(UUID memberId) {

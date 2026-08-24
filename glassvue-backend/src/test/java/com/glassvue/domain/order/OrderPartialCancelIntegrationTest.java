@@ -289,6 +289,59 @@ class OrderPartialCancelIntegrationTest {
         assertThat(reload(o.getId()).getCancelledPoint()).isEqualTo(857);
     }
 
+    // ─────── 🔴 부분 취소 **뒤에** 「주문 취소」 (2026-08-24 운영 사고 회귀) ───────
+
+    @Test
+    @DisplayName("🔴 부분 취소 뒤 전체 취소해도 적립금은 **쓴 만큼만** 돌아온다 — 3,428 이 나갔던 자리")
+    void fullCancelAfterPartial_refundsPointOnlyOnce() throws Exception {
+        // 🔴 실측 사고(2026-08-24, `20260824-5296`): 적립금 2,000 을 쓴 주문에서 부분 취소가
+        //    857·571 을 돌려준 뒤 「주문 취소」가 **원본 2,000 을 또** 돌려줘 합계 3,428 이 나갔다.
+        //    ⚠ 단위 테스트로는 안 잡힌다 — **두 경로가 만나는 자리**라 실제로 둘을 이어 밟아야 한다.
+        Order o = order(null, 0, null, 2_000);
+        long before = pointService.balanceOf(userId);
+        String token = login(userLoginId);
+
+        cancelItem("/cancel-item", o.getId(), token, itemId(o, 1), 1).andExpect(status().isOk());
+        mockMvc.perform(post("/api/orders/" + o.getId() + "/cancel")
+                        .header("Authorization", token)).andExpect(status().isOk());
+
+        assertThat(reload(o.getId()).getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        // 쓴 것이 2,000 이면 돌아오는 것도 정확히 2,000 이다.
+        assertThat(pointService.balanceOf(userId)).isEqualTo(before + 2_000);
+    }
+
+    @Test
+    @DisplayName("🔴 부분 취소 뒤 전체 취소해도 재고는 **산 만큼만** 돌아온다 — 2개 주문에 3개가 돌아갔던 자리")
+    void fullCancelAfterPartial_restoresStockOnlyOnce() throws Exception {
+        Order o = order(null, 0, null, 0);
+        long before = variantRepository.sumStockByProduct(productId);
+        String token = login(userLoginId);
+
+        cancelItem("/cancel-item", o.getId(), token, itemId(o, 1), 1).andExpect(status().isOk());
+        mockMvc.perform(post("/api/orders/" + o.getId() + "/cancel")
+                        .header("Authorization", token)).andExpect(status().isOk());
+
+        // 품목 둘(각 1개) → 정확히 2개. 원본 수량으로 되돌리면 3개가 된다.
+        assertThat(variantRepository.sumStockByProduct(productId)).isEqualTo(before + 2);
+    }
+
+    @Test
+    @DisplayName("🔴 관리자 대행 취소도 같다 — 본인 취소와 같은 코드를 타야 하는 이유가 여기다")
+    void adminFullCancelAfterPartial_refundsOnce() throws Exception {
+        Order o = order(null, 0, null, 2_000);
+        long before = pointService.balanceOf(userId);
+
+        cancelItem("/cancel-item", o.getId(), login(userLoginId), itemId(o, 1), 1)
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/orders/" + o.getId() + "/admin-cancel")
+                        .header("Authorization", login(adminLoginId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"CS 대행\"}"))
+                .andExpect(status().isOk());
+
+        assertThat(pointService.balanceOf(userId)).isEqualTo(before + 2_000);
+    }
+
     // ────────────── 🔴 감사 — Oracle enum CHECK 트랩이 여기서 드러난다 ──────────────
 
     @Test

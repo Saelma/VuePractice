@@ -168,6 +168,64 @@ class OrderPartialCancelTest {
         assertThat(o.getMemberCouponId()).isNotNull(); // 복구 대상으로 남아 있다(전량 취소 때 쓴다)
     }
 
+    // ── 🔴 부분 취소 **뒤에** 오는 전체 취소 (2026-08-24 회귀) ─────────────
+
+    @Test
+    @DisplayName("🔴 부분 취소 뒤 전체 취소는 **남은 것만** 되돌릴 대상이다 — 원본으로 되돌리면 두 번 준다")
+    void remainingIsWhatFullCancelMustGiveBack() {
+        // 실측 사고(`20260824-5296`): 적립금 2,000 을 쓴 주문에서 부분 취소가 857·571 을 돌려준 뒤
+        // 「주문 취소」가 **원본 2,000 을 또** 돌려줘 합계 3,428 이 나갔다. 재고도 2개 주문에 3개가 돌아갔다.
+        Order o = order(5_000, 2_000, 0, 20_000, 15_000);
+        o.cancelItem(itemAt(o, 1), 1);
+
+        // 🔴 전체 취소가 읽어야 하는 값들 — 원본이 아니라 «남은 것» 이다.
+        assertThat(o.remainingUsedPoint()).isEqualTo(1_143);   // 원본 2,000 이 아니다
+        assertThat(itemAt(o, 1).remainingQuantity()).isZero(); // 이미 다 돌아갔다 — 또 넣으면 안 된다
+        assertThat(itemAt(o, 0).remainingQuantity()).isEqualTo(1);
+
+        // 되돌린 적립금(857) + 남은 것(1,143) = 쓴 것(2,000). 이 합이 안 맞으면 어딘가에서 새거나 겹친다.
+        assertThat(o.getCancelledPoint() + o.remainingUsedPoint()).isEqualTo(2_000);
+    }
+
+    @Test
+    @DisplayName("🔴 반품 환불액도 남은 것 기준이다 — PAID 에서 부분 취소한 뒤 발송·배송완료·반품이 가능하다")
+    void refundableFollowsRemaining() {
+        Order o = order(5_000, 0, 0, 20_000, 15_000);
+        assertThat(o.refundableAmount()).isEqualTo(30_000); // 35,000 − 5,000
+
+        o.cancelItem(itemAt(o, 1), 1);
+        // 남은 20,000 − 남은 쿠폰 2,858 = 17,142. 원본으로 세면 30,000 을 또 돌려준다.
+        assertThat(o.refundableAmount()).isEqualTo(17_142);
+    }
+
+    // ── 🔴 전량이 빠지면 배송비도 돌아간다 (2026-08-24 실측) ────────────────
+
+    @Test
+    @DisplayName("🔴 전량이 빠진 주문에 **배송비만 남지 않는다** — 「남은 결제 금액 3,000원」이 나왔었다")
+    void shippingDoesNotLingerOnAnEmptiedOrder() {
+        // 실측(`20260824-5297`): 25,000 주문(배송비 3,000)을 품목별로 다 뺐더니 payAmount 가 3,000 이었다.
+        Order o = order(5_000, 2_000, 3_000, 15_000, 10_000);
+        assertThat(o.getPayAmount()).isEqualTo(21_000); // 25,000 − 5,000 − 2,000 + 3,000
+
+        long r1 = o.cancelItem(itemAt(o, 0), 1);
+        long r2 = o.cancelItem(itemAt(o, 1), 1);
+
+        assertThat(o.hasNoRemainingItems()).isTrue();
+        assertThat(o.getPayAmount()).isZero();
+        // 돌려준 것 + 남은 것 = 처음 결제한 것. 배송비가 환불에 포함돼야 이 등식이 성립한다.
+        assertThat(o.refundedAmount()).isEqualTo(21_000);
+        assertThat(r1 + r2 + o.getShippingFee()).isEqualTo(21_000);
+    }
+
+    @Test
+    @DisplayName("부분 취소를 한 적 없는 주문은 이 스위치에 안 걸린다 — 기존 취소 주문의 표시가 안 바뀐다")
+    void untouchedOrderKeepsItsHistoricalAmount() {
+        Order o = order(5_000, 2_000, 3_000, 15_000, 10_000);
+        o.cancel(null);
+        assertThat(o.hasNoRemainingItems()).isFalse();
+        assertThat(o.getPayAmount()).isEqualTo(21_000); // 예전처럼 «결제했던 금액»
+    }
+
     // ── 적립 · 경계 ──────────────────────────────────────────────────────
 
     @Test

@@ -493,9 +493,20 @@ public class OrderService {
      * ⚠ 이 목록은 {@link #approveReturn} 과 <b>짝</b>이다. 한쪽에만 넣으면 그게 비대칭의 시작이다.
      */
     private void applyCancellation(Order order) {
-        order.getItems().forEach(it -> productCommandService.increaseStock(
-                it.getVariantId(), it.getQuantity(), StockChangeReason.CANCEL, order.getId()));
-        pointService.refundCancelledOrder(order.getMemberId(), order.getUsedPoint(), order.getId());
+        // 🔴 **«남은» 것만 되돌린다** (2026-08-24, G-4 회귀 수정). 부분 취소가 이미 되돌린 몫을
+        //    여기서 또 되돌리면 **재고와 돈이 두 번 돌아간다.**
+        //    ⚠ 실측(2026-08-24, `20260824-5296`): 적립금 2,000 을 쓴 주문에서 부분 취소가 857·571 을
+        //       돌려준 뒤 「주문 취소」가 **원본 2,000 을 또** 돌려줘 합계 3,428 이 나갔다.
+        //       재고도 지바 2개 주문에 3개가 복원됐다.
+        //    🔴 원인은 이 메서드가 **원본 스냅샷**(`getQuantity`·`getUsedPoint`)을 읽은 것이다 —
+        //       부분 취소가 생기기 전에는 «원본 = 남은 것» 이라 구별할 이유가 없었다.
+        //    ⚠ 이 주석이 위에서 말하는 «되돌릴 것들이 한 줄로 모여 있지 않으면 하나씩 빠진다» 의
+        //       **다른 얼굴**이다: 목록에는 다 있었는데 **양이 틀렸다.**
+        order.getItems().stream()
+                .filter(it -> it.remainingQuantity() > 0) // 0개를 복원하면 원장에 «안 변했다» 는 거짓 줄이 남는다
+                .forEach(it -> productCommandService.increaseStock(
+                        it.getVariantId(), it.remainingQuantity(), StockChangeReason.CANCEL, order.getId()));
+        pointService.refundCancelledOrder(order.getMemberId(), order.remainingUsedPoint(), order.getId());
         couponService.restore(order.getMemberCouponId());
         eventPublisher.publishEvent(OrderCancelledEvent.from(order));
     }
@@ -534,8 +545,13 @@ public class OrderService {
         order.approveReturn();
         // 물건이 돌아왔으니 재고 복원(취소와 동일 — 옵션 단위).
         // 재고 이력에서는 취소와 구분한다(B-19) — 원장에서 "왜 돌아왔는지"가 구분돼야 값이 있다.
-        order.getItems().forEach(it -> productCommandService.increaseStock(
-                it.getVariantId(), it.getQuantity(), StockChangeReason.RETURN, id));
+        // ⚠ **«남은» 수량만** (2026-08-24, G-4). PAID 에서 부분 취소한 주문도 발송·배송완료를 거쳐
+        //   여기 올 수 있다 — 그때 원본 수량으로 복원하면 이미 돌아온 것을 또 넣는다
+        //   ({@code applyCancellation} 이 같은 이유로 같이 고쳐졌다).
+        order.getItems().stream()
+                .filter(it -> it.remainingQuantity() > 0)
+                .forEach(it -> productCommandService.increaseStock(
+                        it.getVariantId(), it.remainingQuantity(), StockChangeReason.RETURN, id));
         // 환불 = 상품합계−쿠폰을 적립금으로, 배송완료 적립은 회수, 등급 기준에서도 차감.
         pointService.refundReturnedOrder(order.getMemberId(),
                 order.refundableAmount(), order.getEarnedPoint(), order.rewardableAmount(), id);
