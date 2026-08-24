@@ -2,6 +2,7 @@ package com.glassvue.domain.order.controller;
 
 import com.glassvue.domain.order.dto.AdminOrderCancelRequest;
 import com.glassvue.domain.order.dto.OrderCancelRequest;
+import com.glassvue.domain.order.dto.OrderItemCancelRequest;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.global.response.PageResponse;
@@ -73,6 +74,39 @@ public interface OrderController {
             """)
     ResponseEntity<ApiResponse<Void>> cancelByAdmin(@Parameter(hidden = true) AuthUser admin, UUID id,
             @Valid AdminOrderCancelRequest request);
+
+    @Operation(summary = "부분 취소 (본인, ORDERED·PAID만)", description = """
+            주문의 **품목 하나에서 수량만큼** 취소한다 (G-4, 2026-08-24).
+
+            **정산은 「금액 비례 · 내림」으로 나눈다** — 취소한 금액이 남은 상품합계에서 차지하는 비율만큼
+            쿠폰 할인과 사용 적립금을 회수하고, 나머지를 돌려준다. 버려진 잔돈은 주문에 남아 있다가
+            **다음 취소로 따라간다** — 품목을 하나씩 다 취소하면 환불 합계가 정확히 결제금액이 된다.
+
+            ⚠ **쿠폰 최소주문금액은 소급하지 않는다** — 부분 취소로 기준 미달이 되어도 쿠폰은 그대로 걸려 있다.
+            ⚠ **무료배송 기준도 소급하지 않는다** — 배송비(`shippingFee`)는 부분 취소로 움직이지 않는다.
+            (품목을 빼면 상품합계가 낮아지므로 이 값은 «0 → 3,000» 방향으로만 움직일 텐데, 그러면
+            「취소했더니 돈을 더 냈다」가 된다.)
+
+            🔴 **마지막 품목까지 빼면 주문 자체가 `CANCELLED` 로 떨어지고** 그때 쿠폰이 복구된다.
+
+            ⚠ **발송 이후는 못 한다**(전체 취소와 같다) — 그 자리는 반품이 맡는다.
+            ⚠ 응답의 `payAmount` 는 **지금 받을 금액**이다. 원본 `totalPrice`·`couponDiscount`·`usedPoint` 는
+            주문 시점 스냅샷이라 안 변하고, 빠진 몫은 `cancelledItemsTotal`·`refundedAmount`·`cancelledPoint` 로 온다.
+            """)
+    ResponseEntity<ApiResponse<Void>> cancelItem(@Parameter(hidden = true) AuthUser user, UUID id,
+            @Valid OrderItemCancelRequest request);
+
+    @Operation(summary = "부분 취소 — 관리자 대행 (ORDERED·PAID만)", description = """
+            CS 로 "이것만 빼 주세요" 가 들어왔을 때 관리자가 대신 뺀다 (G-4, 2026-08-24).
+
+            **본인 부분 취소와 같은 것**: 정산 배분 · 재고 복원 · 적립금 환불 · 전량이면 주문 취소.
+            **다른 것**: 원장에 `ORDER_ITEM_CANCEL` 로 남는다(주문번호 · 품목명 · 수량 · 환불액).
+
+            ⚠ **전체 취소(`admin-cancel`)와 원장 행동이 다르다** — 돈이 다르게 움직여서다.
+            전체 취소는 쿠폰까지 복구되지만 부분 취소는 쿠폰이 그대로 걸려 있다.
+            """)
+    ResponseEntity<ApiResponse<Void>> cancelItemByAdmin(@Parameter(hidden = true) AuthUser admin, UUID id,
+            @Valid OrderItemCancelRequest request);
 
     @Operation(summary = "반품 요청 (본인, DELIVERED만)",
             description = "관리자 승인 시 옵션 재고 복원 + 결제금액을 적립금으로 환불하고 그 주문의 적립을 회수한다.")

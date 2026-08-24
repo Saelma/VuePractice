@@ -56,6 +56,9 @@ export const AUDIT_ACTION_LABEL = {
   MEMBER_ROLE_CHANGE: '역할 변경',
   MEMBER_DELETE: '회원 강제 삭제',
   ORDER_CANCEL: '주문 취소(대행)',
+  // 🔴 전체 취소와 **갈라 적는다** — 돈이 다르게 움직인다(G-4). 전체 취소는 결제금액 전부가
+  //    돌아가고 쿠폰도 복구되지만, 부분 취소는 몫만 돌려주고 **쿠폰은 그대로 걸려 있다.**
+  ORDER_ITEM_CANCEL: '부분 취소(대행)',
   ORDER_SHIP: '발송 처리',
   ORDER_DELIVER: '배송완료 처리',
   ORDER_RETURN_APPROVE: '반품 승인',
@@ -112,6 +115,8 @@ export const AUDIT_ACTION_BADGE = {
   MEMBER_ROLE_CHANGE: 'badge-neutral',
   MEMBER_DELETE: 'badge-danger',
   ORDER_CANCEL: 'badge-danger',
+  // 부분 취소도 **돈이 나간다** — 전체보다 작을 뿐이라 무게를 낮추지 않는다.
+  ORDER_ITEM_CANCEL: 'badge-danger',
   ORDER_SHIP: 'badge-neutral',
   ORDER_DELIVER: 'badge-neutral',
   // 반품 승인은 **환불이 나간다** — 취소와 같은 무게다.

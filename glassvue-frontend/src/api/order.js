@@ -102,6 +102,30 @@ export function adminCancelOrder(id, reason) {
   return apiPost(`/api/orders/${id}/admin-cancel`, { reason });
 }
 
+/**
+ * 부분 취소 — 본인 (G-4, 2026-08-24).
+ *
+ * ⚠ **`orderItemId` 로 지목한다.** 같은 상품의 다른 옵션이 한 주문에 둘 이상 들어올 수 있어
+ * `productId` 로는 품목을 못 가린다. `variantId` 도 안전하지 않다 — 스냅샷이라 옵션이 지워지면
+ * null 이 될 수 있는 느슨한 참조다.
+ *
+ * ⚠ **수량은 「남은 수량」 이하여야 한다** — 이미 일부를 취소했으면 그만큼 줄어 있다.
+ * 화면은 `item.remainingQuantity` 를 상한으로 쓴다.
+ */
+export function cancelOrderItem(id, orderItemId, quantity) {
+  return apiPost(`/api/orders/${id}/cancel-item`, { orderItemId, quantity });
+}
+
+/**
+ * 부분 취소 — 관리자 대행 (G-4).
+ *
+ * ⚠ 경로가 본인 것(`/cancel-item`)과 **다르다** — `admin-cancel` 이 `/cancel` 과 갈린 것과 같은
+ * 이유다. 관리자가 본인 경로를 타면 원장에 안 남고, 그러면 「누가 뺐나」를 물을 방법이 없어진다.
+ */
+export function cancelOrderItemByAdmin(id, orderItemId, quantity) {
+  return apiPost(`/api/orders/${id}/admin-cancel-item`, { orderItemId, quantity });
+}
+
 /** 반품 요청(본인, DELIVERED만). 사유 필수. 승인 시 재고 복원 + 적립금 환불(2026-07-24 C-9). */
 export function requestReturn(id, reason) {
   return apiPost(`/api/orders/${id}/return-request`, { reason });

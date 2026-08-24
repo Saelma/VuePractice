@@ -36,6 +36,29 @@ public record OrderResponse(
         long usedPoint,
         long earnedPoint,
         long payAmount,
+
+        /*
+         * ─────────────────────── 부분 취소가 회수해 간 몫 (2026-08-24, G-4)
+         *
+         * 🔴 **위 네 값은 「주문 시점 원본」이고 아래 셋은 「그 뒤 빠진 것」이다.** payAmount 만
+         *    «지금» 을 말한다(뺄셈이 이미 들어 있다). 화면이 그 차이를 그릴 수 있게 둘 다 보낸다 —
+         *    부분 취소가 없으면 아래는 전부 0 이라 예전 화면과 똑같이 읽힌다.
+         */
+
+        /** 부분 취소로 빠진 상품금액 누적. 남은 상품합계 = {@code totalPrice - 이 값}. */
+        long cancelledItemsTotal,
+
+        /**
+         * 부분 취소로 지금까지 돌려준 <b>돈</b>의 누적.
+         *
+         * <p>⚠ 되돌린 적립금은 여기 안 들어간다 — 그건 계정으로 갔지 돈으로 나가지 않았다.
+         * 고객이 되찾은 값어치는 «이 값 + {@code cancelledPoint}» 다.
+         */
+        long refundedAmount,
+
+        /** 부분 취소로 계정에 되돌린 사용 적립금 누적. */
+        long cancelledPoint,
+
         List<OrderItemResponse> items,
         Instant createdAt,
         Instant paidAt,
@@ -94,6 +117,9 @@ public record OrderResponse(
                 o.getUsedPoint(),
                 o.getEarnedPoint(),
                 o.getPayAmount(),
+                o.getCancelledItemsTotal(),
+                o.refundedAmount(),
+                o.getCancelledPoint(),
                 o.getItems().stream().map(OrderItemResponse::from).toList(),
                 o.getCreatedAt(),
                 o.getPaidAt(),

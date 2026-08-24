@@ -7,6 +7,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -89,6 +90,28 @@ public class OrderItem extends BaseTimeEntity {
     @Column(nullable = false)
     private long lineTotal;
 
+    /**
+     * 🔴 <b>부분 취소된 수량</b> (2026-08-24, V57, BACKLOG G-4).
+     *
+     * <p>0 이면 안 취소, {@link #quantity} 와 같으면 이 품목은 전량 취소됐다. 그 사이면 일부만 빠졌다.
+     *
+     * <p>⚠ <b>{@code quantity} 를 깎지 않는다.</b> 주문 품목은 스냅샷이라 «몇 개를 샀나» 가 바뀌면
+     * 과거 주문의 숫자가 무엇인지 알 수 없어진다({@code orders.total_price} 주석과 같은 판단).
+     * 지금 살아 있는 수량은 {@link #remainingQuantity()} 로 <b>빼서</b> 얻는다.
+     */
+    @Column(name = "cancelled_quantity", nullable = false)
+    private long cancelledQuantity;
+
+    /**
+     * 마지막 부분 취소 시각 (V57).
+     *
+     * <p>⚠ <b>회차별 이력이 아니다</b> — 한 품목을 수량으로 나눠 여러 번 취소하면 앞선 시각은 덮인다.
+     * 이력이 필요해지면 <b>별도 테이블</b>이 답이지 컬럼을 늘리는 게 아니다({@code Order.requestReturn}
+     * 주석이 같은 자리에서 정한 것). 관리자 조작은 {@code admin_audit_log} 에 회차마다 남는다.
+     */
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
     private OrderItem(UUID productId, UUID variantId, String variantName,
                       String productName, String productImageUrl,
                       long price, Long regularPrice, Long listPrice, long quantity) {
@@ -113,5 +136,38 @@ public class OrderItem extends BaseTimeEntity {
 
     void assignOrder(Order order) {
         this.order = order;
+    }
+
+    /** 아직 취소되지 않은 수량. 정산은 전부 이 값에서 나온다. */
+    public long remainingQuantity() {
+        return quantity - cancelledQuantity;
+    }
+
+    /** 아직 살아 있는 금액 = 단가 × 남은 수량. {@code lineTotal} 은 원본이라 안 줄어든다. */
+    public long remainingAmount() {
+        return price * remainingQuantity();
+    }
+
+    /** 이 품목이 통째로 빠졌나 — 주문 전체가 취소로 넘어가야 하는지 판단할 때 쓴다. */
+    public boolean isFullyCancelled() {
+        return cancelledQuantity >= quantity;
+    }
+
+    /**
+     * 이 품목에서 {@code qty} 개를 취소한다 — <b>수량만</b> 옮기고 금액 배분은 {@link Order} 가 한다.
+     *
+     * <p>🔴 <b>남은 수량을 넘겨 취소할 수 없다.</b> 넘기면 환불이 결제금액보다 커진다 —
+     * DB {@code ck_order_item_cancelled_qty} 가 마지막으로 잡지만 여기서 먼저 막는다.
+     *
+     * @return 실제로 취소된 금액 (단가 × qty)
+     */
+    long cancel(long qty) {
+        if (qty <= 0 || qty > remainingQuantity()) {
+            throw new IllegalArgumentException(
+                    "취소 수량이 남은 수량을 벗어난다: qty=" + qty + ", remaining=" + remainingQuantity());
+        }
+        this.cancelledQuantity += qty;
+        this.cancelledAt = Instant.now();
+        return price * qty;
     }
 }

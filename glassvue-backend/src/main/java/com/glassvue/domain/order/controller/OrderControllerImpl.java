@@ -8,6 +8,7 @@ import com.glassvue.domain.order.dto.ReturnRequest;
 import com.glassvue.domain.order.service.OrderService;
 import com.glassvue.domain.order.dto.AdminOrderCancelRequest;
 import com.glassvue.domain.order.dto.OrderCancelRequest;
+import com.glassvue.domain.order.dto.OrderItemCancelRequest;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderShipRequest;
 import com.glassvue.global.response.ApiResponse;
@@ -94,6 +95,24 @@ public class OrderControllerImpl implements OrderController {
     public ResponseEntity<ApiResponse<Void>> cancelByAdmin(@LoginUser AuthUser admin, @PathVariable UUID id,
                                                            @Valid @RequestBody AdminOrderCancelRequest request) {
         orderService.cancelByAdmin(id, admin, request.reason());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    // 부분 취소(G-4). ⚠ 본인 경로는 인증만 — /api/orders/** 가 authenticated 로 덮는다.
+    @Override
+    @PostMapping("/{id}/cancel-item")
+    public ResponseEntity<ApiResponse<Void>> cancelItem(@LoginUser AuthUser user, @PathVariable UUID id,
+                                                        @Valid @RequestBody OrderItemCancelRequest request) {
+        orderService.cancelItem(id, user.id(), request.orderItemId(), request.quantity());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    // 관리자 대행 부분 취소는 관리자만 — SecurityConfig 의 /admin-cancel-item 매처가 막는다.
+    @Override
+    @PostMapping("/{id}/admin-cancel-item")
+    public ResponseEntity<ApiResponse<Void>> cancelItemByAdmin(@LoginUser AuthUser admin, @PathVariable UUID id,
+                                                               @Valid @RequestBody OrderItemCancelRequest request) {
+        orderService.cancelItemByAdmin(id, admin, request.orderItemId(), request.quantity());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 

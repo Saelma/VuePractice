@@ -25,11 +25,33 @@ public record OrderItemResponse(
         // 주문 시점 정가 스냅샷(V16). null이면 할인 없이 샀거나 정가 도입 이전 주문이다.
         Long listPrice,
         long quantity,
-        long lineTotal
+        long lineTotal,
+
+        /**
+         * 🔴 <b>이 품목을 가리키는 id</b> (2026-08-24, G-4). 부분 취소가 「어느 품목」을 지목해야 해서
+         * 처음으로 필요해졌다.
+         *
+         * <p>⚠ <b>{@code productId} 로는 지목할 수 없다</b> — 같은 상품의 다른 옵션이 한 주문에 둘 이상
+         * 들어올 수 있어서다({@code ZZ-세일검증} 의 「기본」·「L」이 그 모양이다). {@code variantId} 도
+         * 안전하지 않다: 스냅샷이라 옵션이 지워지면 {@code null} 이 될 수 있는 느슨한 참조다.
+         */
+        UUID orderItemId,
+
+        /** 부분 취소된 수량(G-4). 0 이면 안 빠졌고, {@code quantity} 와 같으면 통째로 빠졌다. */
+        long cancelledQuantity,
+
+        /**
+         * 아직 살아 있는 수량 = {@code quantity - cancelledQuantity}.
+         *
+         * <p>⚠ <b>{@code quantity} 를 깎아서 주지 않는다</b> — 화면이 «3개 중 1개 취소됨» 을 그리려면
+         * 둘 다 필요하다. 깎아서 주면 «원래 몇 개를 샀나» 가 응답에서 사라진다.
+         */
+        long remainingQuantity
 ) {
     public static OrderItemResponse from(OrderItem i) {
         return new OrderItemResponse(i.getProductId(), i.getVariantId(), i.getProductName(), i.getVariantName(),
                 i.getProductImageUrl(), i.getPrice(), i.getRegularPrice(), i.getListPrice(),
-                i.getQuantity(), i.getLineTotal());
+                i.getQuantity(), i.getLineTotal(),
+                i.getId(), i.getCancelledQuantity(), i.remainingQuantity());
     }
 }

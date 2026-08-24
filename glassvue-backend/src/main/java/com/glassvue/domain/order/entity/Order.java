@@ -235,6 +235,30 @@ public class Order extends BaseTimeEntity {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
+    /*
+     * ─────────────────────────── 부분 취소로 «회수된 몫» 누적 (2026-08-24, V57, BACKLOG G-4)
+     *
+     * 🔴 **원본 셋(total_price·coupon_discount·used_point)은 건드리지 않는다.** total_price 는 위에서
+     *    *"이 의미는 바꾸지 않는다"* 고 못박혀 있고 coupon_discount 는 아예 updatable = false 다.
+     *    → 지금 받을 금액은 **뺄셈으로** 얻는다(remainingXxx / getPayAmount).
+     *
+     * ⚠ **셋을 따로 두는 이유는 배분이 «경로 의존» 이기 때문이다.** 내림으로 나누므로 어느 품목을
+     *    먼저 취소했느냐에 따라 1원이 다른 자리에 남는다 — 남은 값에서 다시 계산하려면
+     *    «지금까지 얼마를 떼어 갔나» 가 실제로 저장돼 있어야 한다. 유도할 수 있는 값이 아니다.
+     */
+
+    /** 부분 취소로 빠진 상품금액 누적. 남은 상품합계 = {@code totalPrice - 이 값}. */
+    @Column(name = "cancelled_items_total", nullable = false)
+    private long cancelledItemsTotal;
+
+    /** 부분 취소로 회수된 쿠폰 할인 몫 누적(금액 비례·내림). */
+    @Column(name = "cancelled_coupon_discount", nullable = false)
+    private long cancelledCouponDiscount;
+
+    /** 부분 취소로 되돌린 사용 적립금 몫 누적(금액 비례·내림). */
+    @Column(name = "cancelled_point", nullable = false)
+    private long cancelledPoint;
+
     private Order(UUID memberId, String buyerNickname, String orderNo) {
         this.memberId = memberId;
         this.buyerNickname = buyerNickname;
@@ -281,7 +305,77 @@ public class Order extends BaseTimeEntity {
      * 고객이 손해 본 기분이 든다(2026-07-23 결정). 그래서 이 식의 순서가 곧 정책이다.
      */
     public long getPayAmount() {
-        return totalPrice - couponDiscount - usedPoint + shippingFee;
+        return remainingItemsTotal() - remainingCouponDiscount() - remainingUsedPoint() + shippingFee;
+    }
+
+    /* ─────────────────────────── 부분 취소 뒤의 «지금» 값 (G-4) ─────────────────────────── */
+
+    /** 아직 살아 있는 상품합계. 부분 취소가 없으면 {@code totalPrice} 와 같다. */
+    public long remainingItemsTotal() {
+        return totalPrice - cancelledItemsTotal;
+    }
+
+    /** 아직 걸려 있는 쿠폰 할인. 🔴 쿠폰 최소금액은 <b>소급하지 않는다</b>(G-4 결정 1). */
+    public long remainingCouponDiscount() {
+        return couponDiscount - cancelledCouponDiscount;
+    }
+
+    /** 아직 이 주문에 묶여 있는 사용 적립금. */
+    public long remainingUsedPoint() {
+        return usedPoint - cancelledPoint;
+    }
+
+    /**
+     * 부분 취소로 지금까지 돌려준 <b>돈</b>의 누적.
+     *
+     * <p>⚠ 적립금으로 돌아간 몫({@link #getCancelledPoint()})은 여기 안 들어간다 — 그건 계정으로
+     * 돌아가지 돈으로 나가지 않는다. 고객이 되찾은 값어치의 합은 «이 값 + 되돌린 적립금» 이다.
+     */
+    public long refundedAmount() {
+        return cancelledItemsTotal - cancelledCouponDiscount - cancelledPoint;
+    }
+
+    /** 품목이 하나도 안 남았나 — 부분 취소를 이어 하다 보면 여기 닿는다. */
+    public boolean hasNoRemainingItems() {
+        return items.stream().allMatch(OrderItem::isFullyCancelled);
+    }
+
+    /**
+     * 🔴 <b>품목 하나에서 {@code qty} 개를 취소하고 정산을 나눈다</b> (BACKLOG G-4).
+     *
+     * <p><b>배분식</b> — 규칙 원본은 BACKLOG G-4 「결정 (2026-08-24, 사용자 확정)」이다:
+     * <pre>
+     *   취소금액   = 단가 × qty
+     *   쿠폰 몫    = 남은쿠폰할인 × 취소금액 / 남은상품합계   (내림)
+     *   적립금 몫  = 남은적립금   × 취소금액 / 남은상품합계   (내림)
+     *   환불액     = 취소금액 − 쿠폰 몫 − 적립금 몫
+     * </pre>
+     *
+     * <p>🔴 <b>분모·분자가 «원본» 이 아니라 «지금 남은 값» 이다.</b> 그래서 내림으로 버려진 잔돈이
+     * 주문에 남아 있다가 <b>다음 취소로 따라간다</b> — 마지막 품목을 취소할 때는 분모와 분자가 같아져
+     * 남은 몫이 <b>전부</b> 넘어간다. 즉 <b>전액 수렴이 구조로 보장된다</b>: 품목을 하나씩 다 취소하면
+     * 환불 합계가 정확히 결제금액이 된다(G-4 검산 — 1,000원을 셋에 나누면 333·333·<b>334</b>).
+     *
+     * <p>⚠ <b>배송비는 손대지 않는다</b>(G-4 결정 2). 품목을 빼면 상품합계가 낮아지므로
+     * {@code feeFor} 는 «0 → 3,000» 방향으로만 움직인다 — 「취소했더니 돈을 더 냈다」를 만들지 않는다.
+     *
+     * @return 이 회차에 돌려줄 <b>돈</b>. 되돌릴 적립금은 {@code before/after} 차이로 호출부가 읽는다.
+     */
+    public long cancelItem(OrderItem item, long qty) {
+        long base = remainingItemsTotal();
+        if (base <= 0) {
+            throw new IllegalStateException("남은 품목이 없는 주문에서 부분 취소를 시도했다: " + orderNo);
+        }
+        long cancelledAmount = item.cancel(qty);
+        // ⚠ 내림이다(정수 나눗셈). 반올림하면 여러 품목에서 겹칠 때 합이 원래 할인액을 넘거나 모자라
+        //    전액 취소 시 결제금액과 어긋난다 — G-4 가 반올림을 고르지 않은 이유가 그것이다.
+        long couponShare = remainingCouponDiscount() * cancelledAmount / base;
+        long pointShare = remainingUsedPoint() * cancelledAmount / base;
+
+        this.cancelledItemsTotal += cancelledAmount;
+        this.cancelledCouponDiscount += couponShare;
+        this.cancelledPoint += pointShare;
+        return cancelledAmount - couponShare - pointShare;
     }
 
     public boolean isPayable() {
@@ -339,7 +433,10 @@ public class Order extends BaseTimeEntity {
      * 계산을 여기 두는 것은 <b>구독자가 주문 금액 규칙을 몰라도 되게</b> 하기 위해서다(도메인 경계).
      */
     public long rewardableAmount() {
-        return Math.max(0L, totalPrice - couponDiscount - usedPoint);
+        // ⚠ 부분 취소가 있었으면 **남은 것** 기준이다(G-4). 취소된 몫에 적립을 주면
+        //    돌려준 돈에 적립이 붙는다. 적립은 배송완료에 일어나고 부분 취소는 그전(ORDERED·PAID)
+        //    에만 되므로, 여기 닿을 때는 회수할 적립이 아직 없다 — **줄 것을 덜 주는 쪽**이다.
+        return Math.max(0L, remainingItemsTotal() - remainingCouponDiscount() - remainingUsedPoint());
     }
 
     /** 배송완료 적립이 실제로 얼마였는지 주문에 스냅샷한다. */

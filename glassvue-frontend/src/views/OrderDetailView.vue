@@ -6,6 +6,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   getOrder, payOrder, shipOrder, deliverOrder, cancelOrder,
+  cancelOrderItem, cancelOrderItemByAdmin,
   requestReturn, approveReturn, rejectReturn,
   orderStatusText, orderStatusClass, DELIVERY_CARRIERS,
 } from '../api/order';
@@ -61,6 +62,94 @@ async function submitCancel() {
   try {
     await cancelOrder(props.id, (cancelForm.value?.reason || '').trim());
     cancelForm.value = null;
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+// ─────────────────────────── 부분 취소 (G-4, 2026-08-24)
+//
+// 🔴 **전체 취소와 버튼을 갈라 둔다.** 「주문 취소」는 주문 전체를 되돌리고 쿠폰까지 복구되지만,
+//    부분 취소는 몫을 나눠 돌려주고 **쿠폰은 그대로 걸려 있다**(G-4 결정 1). 한 버튼에 담으면
+//    고객이 무엇을 누르는지 모른다.
+//
+// ⚠ **상한은 `remainingQuantity` 다.** `quantity`(원본 스냅샷)를 쓰면 이미 일부를 뺀 품목에서
+//    남은 것보다 많이 보낼 수 있고, 서버가 400 으로 돌려보낸다 — 왕복할 이유가 없다.
+const itemCancelForm = ref(null);
+
+function openItemCancelForm(item) {
+  itemCancelForm.value = { orderItemId: item.orderItemId, max: item.remainingQuantity, quantity: 1 };
+}
+
+/** 지금 취소할 수 있는 품목인가 — 상태 조건은 전체 취소와 **같다**(발송 뒤는 반품이 맡는다). */
+const canCancelItems = computed(() =>
+  !!order.value
+  && (order.value.status === 'ORDERED' || order.value.status === 'PAID')
+  && (isMine.value || isAdmin.value));
+
+/**
+ * 🔴 **환불 예정 금액** — 서버가 쓰는 배분식과 **같은 식**이다(BACKLOG G-4):
+ *
+ *     취소금액  = 단가 × 수량
+ *     쿠폰 몫   = 남은쿠폰할인 × 취소금액 / 남은상품합계   (내림)
+ *     적립금 몫 = 남은적립금   × 취소금액 / 남은상품합계   (내림)
+ *     환불액    = 취소금액 − 쿠폰 몫 − 적립금 몫
+ *
+ * ⚠ **분모·분자가 «원본» 이 아니라 «지금 남은 값» 이다.** `totalPrice`·`couponDiscount` 를 그대로
+ *    쓰면 두 번째 취소부터 서버와 갈린다 — 서버는 이미 떼어 간 몫을 빼고 계산한다.
+ *
+ * 🔴 ⚠ **같은 식이 서버와 화면 두 곳에 있다**(CLAUDE.md 가 경계하는 모양이다). 그래도 두는 이유는
+ *    «얼마 돌려받나» 를 누르기 **전에** 보여줘야 하기 때문이고, 미리보기 API 를 따로 파는 것보다
+ *    작다. **대신 어긋나면 잡히게 해 뒀다** — 뷰 테스트가 서버 테스트와 **같은 숫자**
+ *    (12,001 · 857)를 단언한다(`ProductDiscountAdminView` 의 반올림 단언과 같은 장치).
+ */
+const itemCancelPreview = computed(() => {
+  const f = itemCancelForm.value;
+  if (!f || !order.value) return null;
+  const item = order.value.items.find((i) => i.orderItemId === f.orderItemId);
+  const qty = Number(f.quantity);
+  if (!item || !Number.isInteger(qty) || qty < 1 || qty > item.remainingQuantity) return null;
+
+  const base = order.value.totalPrice - order.value.cancelledItemsTotal;
+  if (base <= 0) return null;
+  const amount = item.price * qty;
+  const couponShare = Math.floor((order.value.couponDiscount - couponTaken.value) * amount / base);
+  const pointShare = Math.floor((order.value.usedPoint - order.value.cancelledPoint) * amount / base);
+  return { amount, couponShare, pointShare, refund: amount - couponShare - pointShare };
+});
+
+/**
+ * 지금까지 회수된 쿠폰 몫. ⚠ 서버가 이 값을 따로 안 보낸다 — `refundedAmount` 가
+ * «취소금액 − 쿠폰몫 − 적립금몫» 이므로 **거꾸로 풀어서** 얻는다.
+ * (셋 다 응답에 있으니 새 필드를 요구하지 않고 있는 것으로 만든다.)
+ */
+const couponTaken = computed(() => order.value
+  ? order.value.cancelledItemsTotal - order.value.refundedAmount - order.value.cancelledPoint
+  : 0);
+
+/**
+ * 이번 취소로 **주문이 통째로 취소되나** — 남은 수량이 이 품목의 취소 수량뿐일 때다.
+ *
+ * 🔴 서버가 그때 주문을 `CANCELLED` 로 떨어뜨리고 쿠폰을 복구한다(G-4). 화면이 그걸 말하지 않으면
+ * 고객은 「품목 하나만 빼는 줄」 알고 누른다 — **되돌리기 어려운 조작을 조용히 하지 않는다.**
+ */
+const cancellingLastItem = computed(() => {
+  const f = itemCancelForm.value;
+  if (!f || !order.value) return false;
+  return order.value.items.every((i) => (i.orderItemId === f.orderItemId
+    ? i.remainingQuantity - Number(f.quantity) <= 0
+    : i.remainingQuantity === 0));
+});
+
+async function onCancelItem() {
+  const f = itemCancelForm.value;
+  try {
+    // ⚠ 관리자가 **남의** 주문을 뺄 때만 관리자 경로다. 본인 주문이면 관리자여도 본인 경로 —
+    //    백엔드가 소유 기준으로 가르는 것과 맞춘다(WA §2-3, 2026-07-20 의 그 버그).
+    const call = isMine.value ? cancelOrderItem : cancelOrderItemByAdmin;
+    await call(props.id, f.orderItemId, Number(f.quantity));
+    itemCancelForm.value = null;
     await load();
   } catch (e) {
     error.value = e.message;
@@ -318,7 +407,12 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
       <div class="card mt-6">
         <h2 class="section-title border-b border-line px-5 py-4">주문 품목</h2>
         <ul class="divide-y divide-line">
-          <li v-for="item in order.items" :key="item.variantId || item.productId" class="flex items-center gap-4 px-5 py-4">
+          <!--
+            ⚠ **key 가 `orderItemId` 다**(G-4 로 생겼다). 예전엔 `variantId || productId` 였는데
+            **같은 상품의 다른 옵션이 한 주문에 둘 이상** 들어오면 그것으로는 안 갈린다.
+            부분 취소가 품목을 지목해야 하면서 이 자리가 실제로 필요해졌다.
+          -->
+          <li v-for="item in order.items" :key="item.orderItemId" class="flex items-center gap-4 px-5 py-4">
             <ItemThumb :src="item.productImageUrl" :alt="item.productName" />
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-ink-900">{{ item.productName }}</p>
@@ -336,8 +430,33 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
                 {{ priceText(item.price) }} × {{ item.quantity }}
                 <span v-if="hasDiscount(item)" class="font-medium text-danger">{{ discountRate(item) }}%</span>
               </p>
+              <!--
+                부분 취소 흔적(G-4). ⚠ **원본 수량을 지우지 않고 그 옆에 적는다** — 「3개 중 1개
+                취소됨」이 읽히려면 둘 다 필요하다. 취소가 없으면 줄 자체가 안 그려진다.
+              -->
+              <p v-if="item.cancelledQuantity > 0" class="mt-1 text-xs text-danger">
+                <template v-if="item.remainingQuantity === 0">전량 취소됨</template>
+                <template v-else>{{ item.quantity }}개 중 <b>{{ item.cancelledQuantity }}개</b> 취소됨</template>
+              </p>
+              <!--
+                부분 취소 버튼. ⚠ 「주문 취소」와 **갈라 둔다** — 전체 취소는 쿠폰까지 복구되고
+                이건 안 된다(G-4 결정 1). 남은 수량이 0이면 뺄 것이 없어 안 그린다.
+              -->
+              <button
+                v-if="canCancelItems && item.remainingQuantity > 0 && !itemCancelForm"
+                type="button"
+                class="btn btn-secondary btn-sm mt-2"
+                @click="openItemCancelForm(item)"
+              >이 품목 취소</button>
             </div>
-            <span class="text-sm font-semibold tabular-nums text-ink-900">{{ priceText(item.lineTotal) }}</span>
+            <div class="text-right">
+              <span class="text-sm font-semibold tabular-nums"
+                    :class="item.remainingQuantity === 0 ? 'text-ink-400 line-through' : 'text-ink-900'"
+              >{{ priceText(item.lineTotal) }}</span>
+              <!-- 일부만 빠졌으면 «지금 살아 있는 금액» 을 아래 줄에 적는다. -->
+              <p v-if="item.cancelledQuantity > 0 && item.remainingQuantity > 0"
+                 class="muted tabular-nums">→ {{ priceText(item.price * item.remainingQuantity) }}</p>
+            </div>
           </li>
         </ul>
         <dl class="space-y-2 border-t border-line px-5 py-4 text-sm">
@@ -361,10 +480,87 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             </dd>
           </div>
         </dl>
-        <!-- 주문 시점에 실제로 받은 금액이다 — 정책이 바뀌어도 이 숫자는 안 바뀐다(스냅샷). -->
+        <!--
+          부분 취소로 되돌아간 것(G-4). ⚠ **위 네 줄은 주문 시점 원본이고 여기부터는 그 뒤에 빠진 것**이다.
+          부분 취소가 없으면 값이 0이라 줄이 아예 안 나온다 — 예전 화면과 똑같이 읽힌다.
+        -->
+        <dl v-if="order.cancelledItemsTotal > 0" class="space-y-2 border-t border-line px-5 py-4 text-sm">
+          <div class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">취소된 품목</dt>
+            <dd class="tabular-nums text-ink-700">−{{ priceText(order.cancelledItemsTotal) }}</dd>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">환불액</dt>
+            <dd class="tabular-nums font-medium text-emerald-700">{{ priceText(order.refundedAmount) }}</dd>
+          </div>
+          <!-- 적립금은 돈이 아니라 계정으로 돌아갔다 — 환불액과 갈라 적지 않으면 두 번 받은 것처럼 읽힌다. -->
+          <div v-if="order.cancelledPoint > 0" class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">돌려받은 적립금</dt>
+            <dd class="tabular-nums text-emerald-700">{{ priceText(order.cancelledPoint) }}</dd>
+          </div>
+        </dl>
+
+        <!--
+          주문 시점에 실제로 받은 금액이다 — 정책이 바뀌어도 이 숫자는 안 바뀐다(스냅샷).
+          ⚠ **부분 취소가 있었으면 이 값은 «지금 받을 금액» 이다**(서버가 뺄셈을 이미 했다).
+             그래서 그때는 이름도 바꿔 단다 — 「결제 금액」이라고 하면 처음 낸 금액으로 읽힌다.
+        -->
         <div class="flex items-end justify-between gap-4 border-t border-line px-5 py-4">
-          <span class="text-sm font-medium text-ink-700">결제 금액</span>
+          <span class="text-sm font-medium text-ink-700">
+            {{ order.cancelledItemsTotal > 0 ? '남은 결제 금액' : '결제 금액' }}
+          </span>
           <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(order.payAmount) }}</span>
+        </div>
+
+        <!--
+          부분 취소 폼(G-4). 품목 줄의 「이 품목 취소」가 연다 — 합계 카드 아래에 두는 이유는
+          **환불 예정 금액이 위 숫자들과 나란히 읽혀야** 하기 때문이다.
+        -->
+        <div v-if="itemCancelForm" class="border-t border-line px-5 py-4">
+          <p class="text-sm font-medium text-ink-900">이 품목을 몇 개 취소할까요?</p>
+          <div class="mt-3 flex flex-wrap items-center gap-3">
+            <input
+              v-model.number="itemCancelForm.quantity"
+              type="number"
+              min="1"
+              :max="itemCancelForm.max"
+              class="ipt w-24 tabular-nums"
+              aria-label="취소 수량"
+            />
+            <span class="muted">남은 수량 {{ itemCancelForm.max }}개</span>
+          </div>
+
+          <!--
+            🔴 **환불 예정 금액을 누르기 전에 말한다.** 2026-08-07 에 취소 폼이 적립금 환불을
+            «말하지 않아서» 고객이 «안 해 주는 줄» 알았던 것의 같은 자리다 — 돈이 움직이는데
+            화면이 침묵하면 사용자는 최악을 가정한다.
+            ⚠ 값이 안 나오면(수량이 범위 밖) 문장을 **안 그린다** — 반쪽 문장이 더 헷갈린다.
+          -->
+          <p v-if="itemCancelPreview" class="mt-3 text-sm text-ink-700">
+            <b class="tabular-nums">{{ priceText(itemCancelPreview.refund) }}</b>을 환불해요.
+            <span v-if="itemCancelPreview.pointShare > 0" class="muted">
+              (적립금 {{ priceText(itemCancelPreview.pointShare) }}은 계정으로 돌아가요)
+            </span>
+          </p>
+          <!--
+            🔴 **쿠폰 몫이 빠진다는 것을 말한다** — 이게 이 화면에서 가장 놀랄 만한 숫자다.
+            «15,000원짜리를 뺐는데 왜 12,001원만 오나» 에 답하지 않으면 문의가 된다.
+          -->
+          <p v-if="itemCancelPreview && itemCancelPreview.couponShare > 0" class="muted mt-1">
+            쿠폰 할인 중 {{ priceText(itemCancelPreview.couponShare) }}은 이 품목 몫이라 환불에서 빠져요.
+            <b class="text-ink-700">쿠폰은 그대로 남은 주문에 걸려 있어요.</b>
+          </p>
+          <!-- ⚠ 마지막 품목이면 주문 자체가 취소된다 — 「품목 하나만 빼는 줄」 알고 눌러선 안 된다. -->
+          <p v-if="cancellingLastItem" class="alert-error mt-3">
+            마지막 품목이에요. 취소하면 <b>주문 전체가 취소</b>되고 쓴 쿠폰도 돌아와요.
+          </p>
+
+          <div class="mt-4 flex gap-2">
+            <button type="button" class="btn btn-danger" :disabled="!itemCancelPreview" @click="onCancelItem">
+              취소하기
+            </button>
+            <button type="button" class="btn btn-secondary" @click="itemCancelForm = null">그만두기</button>
+          </div>
         </div>
 
         <!-- 적립은 배송완료 시점이라, 그 전에는 "받을 예정"이 아니라 아무 말도 하지 않는다.

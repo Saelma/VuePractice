@@ -119,6 +119,13 @@ public enum ErrorCode {
     UNAVAILABLE_ITEM("ORDER-400U", HttpStatus.BAD_REQUEST, "구매할 수 없는 상품(품절·판매중지)이 포함되어 있습니다."),
     ORDER_NOT_FOUND("ORDER-404", HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."),
     ORDER_NOT_CANCELLABLE("ORDER-400C", HttpStatus.BAD_REQUEST, "취소할 수 없는 주문입니다(발송 완료·취소된 주문)."),
+    ORDER_ITEM_NOT_FOUND("ORDER-404I", HttpStatus.NOT_FOUND, "그 주문에 없는 품목입니다."),
+    // 🔴 «남은 수량» 기준이다 — 이미 일부를 취소한 품목은 처음 산 수량만큼 다시 못 뺀다(G-4).
+    ORDER_ITEM_QUANTITY_INVALID("ORDER-400IQ", HttpStatus.BAD_REQUEST,
+            "취소 수량이 남은 수량을 벗어났습니다."),
+    // ⚠ 마지막 품목까지 빼면 주문이 통째로 취소되므로, «남은 게 없는데 또 빼는» 상태는 도달 불가여야 한다.
+    //   그래도 코드를 둔다 — 도달하면 그건 배분식이 어긋났다는 신호다.
+    ORDER_NO_REMAINING_ITEM("ORDER-400IR", HttpStatus.BAD_REQUEST, "취소할 품목이 남아 있지 않습니다."),
     ORDER_NOT_PAYABLE("ORDER-400P", HttpStatus.BAD_REQUEST, "결제할 수 없는 주문입니다(이미 결제·취소됨)."),
     ORDER_NOT_SHIPPABLE("ORDER-400H", HttpStatus.BAD_REQUEST, "발송할 수 없는 주문입니다(결제 완료 상태만 발송 가능)."),
     ORDER_NOT_DELIVERABLE("ORDER-400D", HttpStatus.BAD_REQUEST, "배송완료 처리할 수 없는 주문입니다(발송된 주문만 가능)."),

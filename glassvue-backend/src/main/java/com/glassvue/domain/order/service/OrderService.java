@@ -351,6 +351,109 @@ public class OrderService {
     }
 
     /**
+     * 🔴 <b>부분 취소 — 본인 주문</b> (2026-08-24, BACKLOG G-4).
+     *
+     * <p>정산 규칙의 원본은 BACKLOG G-4 「결정 (2026-08-24, 사용자 확정)」이고, 배분식 자체는
+     * {@link Order#cancelItem} 에 있다. 여기서 하는 일은 <b>되돌리는 것들을 순서대로 부르는 것</b>이다.
+     *
+     * <p>⚠ <b>허용 상태는 전체 취소와 같다</b>({@code ORDERED}·{@code PAID}). 발송 이후는 물건이 나가
+     * 있어 회수 절차가 필요하고, 그 자리는 반품이 맡는다({@code cancelByAdmin} 주석과 같은 판단).
+     */
+    @Transactional
+    public void cancelItem(UUID orderId, UUID memberId, UUID orderItemId, long quantity) {
+        Order order = orderRepository.findByIdAndMemberId(orderId, memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        applyItemCancellation(order, orderItemId, quantity);
+    }
+
+    /**
+     * 🔴 <b>부분 취소 — 관리자 대행</b> (2026-08-24, BACKLOG G-4).
+     *
+     * <p>⚠ <b>본인 취소와 다른 것은 「누구의 주문을 찾는가」와 「원장에 남기는가」 둘뿐이다</b> —
+     * {@link #cancel} 과 {@link #cancelByAdmin} 이 {@link #applyCancellation} 을 함께 타는 것과
+     * 같은 모양이다. 정산은 {@link #applyItemCancellation} 하나만 탄다.
+     */
+    @Transactional
+    public void cancelItemByAdmin(UUID orderId, AuthUser actor, UUID orderItemId, long quantity) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        OrderItem item = findItem(order, orderItemId);
+        String itemName = item.getProductName()
+                + (item.getVariantName() == null ? "" : " (" + item.getVariantName() + ")");
+
+        long refund = applyItemCancellation(order, orderItemId, quantity);
+
+        // ⚠ 「무엇을 몇 개 빼고 얼마를 돌려줬나」 — AuditAction.ORDER_ITEM_CANCEL 주석이 정한 내용이다.
+        publishAudit(AuditAction.ORDER_ITEM_CANCEL, actor, order,
+                itemName + " " + quantity + "개 취소 / 환불 " + refund + "원");
+    }
+
+    /**
+     * 🔴 <b>부분 취소가 확정된 뒤 따라와야 하는 일 전부</b> — 정산 → 재고 → 적립금 → (전량이면 주문 취소).
+     *
+     * <p>⚠ <b>{@link #applyCancellation} 과 같은 규약을 따른다</b>: 되돌리는 것들은 전부 앞에 오고
+     * 이벤트만 뒤에 온다. 그 메서드 주석이 못박은 것 — *"«주문에 붙는 것»(할인·혜택·차감)을 새로
+     * 만들면 여기에 되돌리는 줄이 있는지 먼저 본다"* — 이 그대로 적용된다.
+     *
+     * <p>🔴 <b>여기서 되돌리는 것과 안 되돌리는 것을 갈라 둔다</b>(G-4 결정):
+     * <ul>
+     *   <li><b>재고</b> — 되돌린다. 취소한 수량만큼만.</li>
+     *   <li><b>적립금(사용분)</b> — 되돌린다. 배분된 몫만큼 계정으로.</li>
+     *   <li><b>쿠폰</b> — 🔴 <b>안 되돌린다.</b> 쿠폰은 여전히 이 주문에 걸려 있다(결정 1).
+     *       마지막 품목까지 빠져 주문이 통째로 취소될 때 {@link #applyCancellation} 이 복구한다.</li>
+     *   <li><b>배송비</b> — 안 건드린다(결정 2). 부분 취소로 움직일 수 없는 값이다.</li>
+     *   <li><b>적립(earn)</b> — 회수 대상이 아니다. 적립은 {@code deliver()} 에서 일어나는데
+     *       부분 취소는 {@code ORDERED}·{@code PAID} 에서만 되므로 <b>아직 적립이 없다</b>.</li>
+     * </ul>
+     *
+     * <p>🔴 <b>마지막 품목이 빠지면 주문을 {@code CANCELLED} 로 떨어뜨린다.</b> 「품목이 다 빠졌는데
+     * 상태는 {@code PAID}」인 주문을 만들지 않는다 — 그런 주문은 매출에도 잡히고 발송 대기로도 보인다.
+     * ⚠ 그때 {@link #applyCancellation} 을 부르지 <b>않는다</b>: 재고·적립금은 이미 품목별로 되돌렸으니
+     * 또 부르면 <b>두 번 돌려준다</b>. 대신 아직 안 한 것 둘만 한다 — <b>쿠폰 복구</b>와 <b>알림</b>.
+     *
+     * @return 이 회차에 돌려준 돈
+     */
+    private long applyItemCancellation(Order order, UUID orderItemId, long quantity) {
+        requireCancellable(order);
+        OrderItem item = findItem(order, orderItemId);
+        if (quantity <= 0 || quantity > item.remainingQuantity()) {
+            throw new BusinessException(ErrorCode.ORDER_ITEM_QUANTITY_INVALID);
+        }
+        if (order.remainingItemsTotal() <= 0) {
+            throw new BusinessException(ErrorCode.ORDER_NO_REMAINING_ITEM);
+        }
+
+        long pointBefore = order.getCancelledPoint();
+        long refund = order.cancelItem(item, quantity);
+        long refundedPoint = order.getCancelledPoint() - pointBefore;
+
+        productCommandService.increaseStock(
+                item.getVariantId(), quantity, StockChangeReason.CANCEL, order.getId());
+        if (refundedPoint > 0) {
+            pointService.refundCancelledOrder(order.getMemberId(), refundedPoint, order.getId());
+        }
+
+        if (order.hasNoRemainingItems()) {
+            // 🔴 남은 게 없으면 주문 자체가 취소다. 재고·적립금은 위에서 이미 되돌렸다 —
+            //    여기서 applyCancellation 을 부르면 **두 번** 돌려준다.
+            order.cancel(null);
+            couponService.restore(order.getMemberCouponId());
+            eventPublisher.publishEvent(OrderCancelledEvent.from(order));
+            log.info("Order fully cancelled by item cancellations: {}", order.getOrderNo());
+        }
+        log.info("Order item cancelled: {} item={} qty={} refund={} refundedPoint={}",
+                order.getOrderNo(), orderItemId, quantity, refund, refundedPoint);
+        return refund;
+    }
+
+    private OrderItem findItem(Order order, UUID orderItemId) {
+        return order.getItems().stream()
+                .filter(i -> i.getId().equals(orderItemId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_ITEM_NOT_FOUND));
+    }
+
+    /**
      * 관리자 주문 조작을 원장에 남긴다 (2026-08-14, V51 — 취소 하나였던 자리를 다섯으로 넓히며 뽑았다).
      *
      * <p>⚠ <b>대상은 «주문» 이 아니라 «주문자» 다</b> — 감사 테이블의 target 은 회원이라 모양이 맞는다.

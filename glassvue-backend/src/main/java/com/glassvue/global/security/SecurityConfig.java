@@ -89,6 +89,9 @@ public class SecurityConfig {
                         // 관리자 대행 취소(B-25, 2026-08-10). ⚠ 본인 취소 /api/orders/*/cancel 과 **경로가 달라야** 한다 —
                         // 같은 경로에 역할로 분기하면 «본인 취소» 가 관리자에게도 열려 취소자 기록이 비는 행이 생긴다.
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/admin-cancel").hasRole("ADMIN")
+                        // 관리자 대행 **부분** 취소(G-4, 2026-08-24). ⚠ 본인 경로(/cancel-item)와 갈라 둔다 —
+                        //    admin-cancel 이 /cancel 과 갈린 것과 같은 이유다(한 경로에 두 권한을 담지 않는다).
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/admin-cancel-item").hasRole("ADMIN")
                         .requestMatchers("/api/orders/**").authenticated()
                         // 이미지 업로드는 로그인만 — 포토 리뷰(2026-07-20)부터 일반 사용자도 올린다.
                         // 원래 ADMIN 전용이었지만 그건 상품 이미지가 유일한 용도였을 때 얘기다.
