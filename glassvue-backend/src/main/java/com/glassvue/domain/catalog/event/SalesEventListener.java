@@ -2,6 +2,7 @@ package com.glassvue.domain.catalog.event;
 
 import com.glassvue.domain.catalog.service.command.SalesSyncHandler;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
+import com.glassvue.domain.order.event.OrderItemCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,18 @@ public class SalesEventListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrderCancelled(OrderCancelledEvent event) {
+        salesSyncHandler.decrease(event.lines());
+    }
+
+    /**
+     * 부분 취소 (2026-08-25, G-10). 🔴 <b>전체 취소와 «둘 다» 있어야 한다</b> — 부분 취소는
+     * {@code OrderCancelledEvent} 를 전량이 빠질 때만 내므로, 이 구독이 없으면 부분 취소한 만큼
+     * 판매량이 안 줄어든다. 반품 쪽은 {@code OrderReturnedEvent} 하나가 부분·전체를 다 덮는다
+     * (승인이 한 경로뿐이라 갈릴 자리가 없다).
+     */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderItemCancelled(OrderItemCancelledEvent event) {
         salesSyncHandler.decrease(event.lines());
     }
 

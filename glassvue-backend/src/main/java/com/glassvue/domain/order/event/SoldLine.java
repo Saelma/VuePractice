@@ -17,13 +17,52 @@ import java.util.UUID;
  */
 public record SoldLine(UUID productId, long quantity) {
 
-    /** 주문의 품목을 상품 단위로 합산한다(옵션이 여러 개여도 상품 하나로 묶임). */
-    public static List<SoldLine> from(Order order) {
+    /**
+     * 주문의 품목을 <b>원본 수량</b>으로 합산한다 — <b>주문 시점 전용</b>이다({@code OrderPlacedEvent}).
+     *
+     * <p>🔴 <b>되돌릴 때는 쓰면 안 된다</b> (2026-08-25, G-10에서 발견). 주문 시점에는
+     * «원본 = 남은 것» 이라 구별할 이유가 없지만, 부분 취소·부분 반품이 생기면 <b>이미 되돌린 몫을
+     * 또 되돌린다.</b> 되돌리는 쪽은 {@link #remaining(Order)} 나 {@link #of(OrderItem, long)} 을 쓴다.
+     * ⚠ WA §1-2-1 이 «읽는 값이 원본인지 남은 것인지 대조하라» 는 자리가 정확히 여기였다.
+     */
+    public static List<SoldLine> ordered(Order order) {
+        return sum(order, OrderItem::getQuantity);
+    }
+
+    /**
+     * 주문에 <b>아직 살아 있는</b> 수량으로 합산한다 — 전체 취소·전체 반품이 되돌릴 양이다.
+     *
+     * <p>부분 취소·부분 반품이 이미 자기 몫을 되돌렸으므로, 남은 것만 빼야 «+주문 / −되돌림» 이
+     * 정확히 상쇄된다. 부분이 한 번도 없었으면 원본과 같은 값이다.
+     */
+    public static List<SoldLine> remaining(Order order) {
+        return sum(order, OrderItem::remainingQuantity);
+    }
+
+    /**
+     * <b>지금 반품 «요청된»</b> 수량으로 합산한다 (G-10).
+     *
+     * <p>⚠ <b>반드시 승인 정산 «전»에 불러야 한다</b> — {@code applyRequestedReturns()} 가 요청 수량을
+     * {@code returnedQuantity} 로 옮기면서 0 으로 지우기 때문이다. 정산 뒤에 부르면 빈 목록이 나오고,
+     * <b>판매량이 조용히 안 줄어든다.</b>
+     */
+    public static List<SoldLine> ofRequestedReturn(Order order) {
+        return sum(order, OrderItem::getReturnRequestedQuantity);
+    }
+
+    /** 품목 하나에서 {@code qty} 개만 되돌린다 — 부분 취소 한 회차의 몫. */
+    public static List<SoldLine> of(OrderItem item, long qty) {
+        return qty <= 0 ? List.of() : List.of(new SoldLine(item.getProductId(), qty));
+    }
+
+    private static List<SoldLine> sum(Order order, java.util.function.ToLongFunction<OrderItem> qty) {
         return order.getItems().stream()
                 .collect(java.util.stream.Collectors.groupingBy(
                         OrderItem::getProductId,
-                        java.util.stream.Collectors.summingLong(OrderItem::getQuantity)))
+                        java.util.stream.Collectors.summingLong(qty)))
                 .entrySet().stream()
+                // ⚠ 0 줄은 버린다 — 「갱신 대상 없음」 로그만 남기고 아무 일도 안 하는 줄이다.
+                .filter(e -> e.getValue() != 0)
                 .map(e -> new SoldLine(e.getKey(), e.getValue()))
                 .toList();
     }

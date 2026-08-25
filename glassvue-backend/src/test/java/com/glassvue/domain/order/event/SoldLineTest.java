@@ -25,7 +25,7 @@ class SoldLineTest {
                         OrderItem.of(productB, UUID.randomUUID(), null, "마우스", null, 5_000, 5_000L, null, 4)),
                 "수령인", "010-1234-5678", "06134", "서울시 강남구 1", "3층", null, 3_000, "20260101-0001", null, 0L, null, 0L);
 
-        List<SoldLine> lines = SoldLine.from(order);
+        List<SoldLine> lines = SoldLine.ordered(order);
 
         assertThat(lines).hasSize(2);
         assertThat(lines).anySatisfy(l -> {

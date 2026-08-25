@@ -131,6 +131,12 @@ public enum ErrorCode {
     ORDER_NOT_DELIVERABLE("ORDER-400D", HttpStatus.BAD_REQUEST, "배송완료 처리할 수 없는 주문입니다(발송된 주문만 가능)."),
     ORDER_NOT_RETURNABLE("ORDER-400R", HttpStatus.BAD_REQUEST, "반품할 수 없는 주문입니다(배송완료된 주문만 요청 가능)."),
     ORDER_NOT_RETURN_PENDING("ORDER-400RP", HttpStatus.BAD_REQUEST, "반품 요청 상태가 아닙니다."),
+    // 🔴 취소와 코드를 나눈다 (2026-08-25, G-10). 문구가 «취소 수량» 이라 반품에 그대로 쓰면
+    //    고객이 «취소한 적 없는데?» 를 보게 된다. 같은 모양의 규칙이라도 **말은 갈려야 한다.**
+    ORDER_RETURN_QUANTITY_INVALID("ORDER-400RQ", HttpStatus.BAD_REQUEST,
+            "반품 수량이 남은 수량을 벗어났습니다."),
+    // ⚠ 품목·수량을 하나도 안 고르고 요청하면 «반품을 요청했는데 아무것도 안 돌아오는» 주문이 된다.
+    ORDER_RETURN_ITEM_REQUIRED("ORDER-400RI", HttpStatus.BAD_REQUEST, "반품할 품목을 하나 이상 골라야 합니다."),
 
     // 리뷰
     REVIEW_NOT_FOUND("REVIEW-404", HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없습니다."),

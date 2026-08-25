@@ -19,12 +19,15 @@ import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
 import com.glassvue.domain.order.entity.OrderStatus;
+import com.glassvue.domain.order.entity.ReturnSettlement;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderDeliveredEvent;
+import com.glassvue.domain.order.event.OrderItemCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
 import com.glassvue.domain.order.event.OrderReturnRequestedEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
+import com.glassvue.domain.order.event.SoldLine;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
@@ -36,9 +39,10 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -432,8 +436,14 @@ public class OrderService {
         if (refundedPoint > 0) {
             pointService.refundCancelledOrder(order.getMemberId(), refundedPoint, order.getId());
         }
+        // 🔴 **판매량도 되돌린다** (2026-08-25, G-10 착수 중 발견한 G-4 구멍). 이 줄이 없으면
+        //    «부분 취소하고 그대로 두는» 정상 경로에서 `product.sold_count` 가 안 줄어 인기순이 틀어진다.
+        //    ⚠ 전량이 빠져 아래 OrderCancelledEvent 가 나가는 경우에도 **겹치지 않는다** —
+        //       그쪽은 «남은 수량» 을 싣는데 여기서 이미 뺐으므로 그때 남은 것은 0 이다.
+        eventPublisher.publishEvent(new OrderItemCancelledEvent(
+                order.getId(), order.getMemberId(), SoldLine.of(item, quantity)));
 
-        if (order.hasNoRemainingItems()) {
+        if (order.isFullyCancelledByItems()) {
             // 🔴 남은 게 없으면 주문 자체가 취소다. 재고·적립금은 위에서 이미 되돌렸다 —
             //    여기서 applyCancellation 을 부르면 **두 번** 돌려준다.
             order.cancel(null);
@@ -516,13 +526,14 @@ public class OrderService {
      * 아직 환불·재고 복원은 하지 않는다 — 관리자 승인 때 한다.
      */
     @Transactional
-    public void requestReturn(UUID id, UUID memberId, String reason) {
+    public void requestReturn(UUID id, UUID memberId, String reason, Map<UUID, Long> quantitiesByItemId) {
         Order order = orderRepository.findByIdAndMemberId(id, memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!order.isReturnRequestable()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_RETURNABLE);
         }
-        order.requestReturn(reason);
+        validateReturnRequest(order, quantitiesByItemId);
+        order.requestReturn(reason, quantitiesByItemId);
         log.info("Return requested: {} by {}", id, memberId);
         // 관리자에게 알린다(2026-08-12, 08-11 이월). ⚠ 승인·거절과 달리 **받는 쪽이 관리자**라
         // 구독자가 AdminOrderEventListener 다 — 이벤트는 대상을 모르고 «무슨 일이 있었나» 만 싣는다.
@@ -530,10 +541,45 @@ public class OrderService {
     }
 
     /**
-     * 반품 승인(관리자) — 옵션 재고 복원 + 적립금 환불. 요청된 반품만 승인할 수 있다.
+     * 반품 요청 검증 (2026-08-25, G-10 결정 2 — 고객이 품목·수량을 고른다).
+     *
+     * <p>🔴 <b>세 가지를 본다</b>: ①그 주문의 품목인가 ②하나 이상 골랐나 ③남은 수량 안인가.
+     * ⚠ ②가 없으면 «반품을 요청했는데 아무것도 안 돌아오는» 주문이 생긴다 — 상태만 바뀌고
+     * 승인해도 정산이 0 이라, 화면에는 «반품 요청됨» 이 떠 있는데 실제로는 <b>빈 요청</b>이다.
+     */
+    private void validateReturnRequest(Order order, Map<UUID, Long> quantitiesByItemId) {
+        Map<UUID, OrderItem> byId = order.getItems().stream()
+                .collect(Collectors.toMap(OrderItem::getId, it -> it));
+        long total = 0;
+        for (Map.Entry<UUID, Long> e : quantitiesByItemId.entrySet()) {
+            OrderItem item = byId.get(e.getKey());
+            if (item == null) {
+                throw new BusinessException(ErrorCode.ORDER_ITEM_NOT_FOUND);
+            }
+            long qty = e.getValue() == null ? 0L : e.getValue();
+            if (qty < 0 || qty > item.remainingQuantity()) {
+                throw new BusinessException(ErrorCode.ORDER_RETURN_QUANTITY_INVALID);
+            }
+            total += qty;
+        }
+        if (total <= 0) {
+            throw new BusinessException(ErrorCode.ORDER_RETURN_ITEM_REQUIRED);
+        }
+    }
+
+    /**
+     * 반품 승인(관리자) — <b>요청된 품목·수량만</b> 재고 복원 + 적립금 환불 (2026-08-25, G-10).
      *
      * <p>재고 복원은 취소와 같고, 환불은 point 도메인 공개 API 로만 한다(도메인 경계).
      * 한 트랜잭션이라 재고·환불·상태가 함께 커밋되거나 함께 롤백된다.
+     *
+     * <p>🔴 <b>«요청된 것» 을 정산보다 먼저 읽어 둔다.</b> {@link Order#applyRequestedReturns()} 가
+     * 요청 수량을 {@code returnedQuantity} 로 옮기면서 0 으로 지우기 때문이다 — 정산 뒤에 읽으면
+     * <b>재고도 판매량도 조용히 0 이 된다.</b> 순서가 규약인 자리다.
+     *
+     * <p>🔴 <b>정산이 낸 값을 그대로 쓴다.</b> 예전에는 {@code order.refundableAmount()} 와
+     * {@code order.getEarnedPoint()} 를 다시 읽었는데, 그건 «전량을 반품하면 얼마» 이지
+     * «이번에 얼마» 가 아니다 — <b>부분이 생기면 갈린다</b>(WA §1-2-1: 목록이 맞아도 «양»이 틀린다).
      */
     @Transactional
     public void approveReturn(UUID id, AuthUser actor) {
@@ -542,29 +588,54 @@ public class OrderService {
         if (!order.isReturnPending()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_RETURN_PENDING);
         }
-        order.approveReturn();
+
+        // ── 정산 전에 «이번 회차» 를 읽어 둔다 (위 주석의 순서 규약)
+        List<OrderItem> requested = order.getItems().stream()
+                .filter(it -> it.getReturnRequestedQuantity() > 0)
+                .toList();
+        if (requested.isEmpty()) {
+            throw new BusinessException(ErrorCode.ORDER_RETURN_ITEM_REQUIRED);
+        }
+        List<StockRestore> restores = requested.stream()
+                .map(it -> new StockRestore(it.getVariantId(), it.getReturnRequestedQuantity()))
+                .toList();
+        List<SoldLine> lines = SoldLine.ofRequestedReturn(order);
+        String returnedDetail = requested.stream()
+                .map(it -> it.getProductName()
+                        + (it.getVariantName() == null ? "" : " (" + it.getVariantName() + ")")
+                        + " " + it.getReturnRequestedQuantity() + "개")
+                .collect(Collectors.joining(", "));
+
+        ReturnSettlement settlement = order.applyRequestedReturns();
+
         // 물건이 돌아왔으니 재고 복원(취소와 동일 — 옵션 단위).
         // 재고 이력에서는 취소와 구분한다(B-19) — 원장에서 "왜 돌아왔는지"가 구분돼야 값이 있다.
-        // ⚠ **«남은» 수량만** (2026-08-24, G-4). PAID 에서 부분 취소한 주문도 발송·배송완료를 거쳐
-        //   여기 올 수 있다 — 그때 원본 수량으로 복원하면 이미 돌아온 것을 또 넣는다
-        //   ({@code applyCancellation} 이 같은 이유로 같이 고쳐졌다).
-        order.getItems().stream()
-                .filter(it -> it.remainingQuantity() > 0)
-                .forEach(it -> productCommandService.increaseStock(
-                        it.getVariantId(), it.remainingQuantity(), StockChangeReason.RETURN, id));
-        // 환불 = 상품합계−쿠폰을 적립금으로, 배송완료 적립은 회수, 등급 기준에서도 차감.
-        pointService.refundReturnedOrder(order.getMemberId(),
-                order.refundableAmount(), order.getEarnedPoint(), order.rewardableAmount(), id);
+        // ⚠ **이번에 반품된 수량만** (G-10). 예전의 «남은 수량» 은 전량 반품 시절에만 맞던 값이다.
+        restores.forEach(r -> productCommandService.increaseStock(
+                r.variantId(), r.quantity(), StockChangeReason.RETURN, id));
+        // 환불 = 반품금액−쿠폰몫을 적립금으로, 배송완료 적립은 **비례** 회수, 등급 기준에서도 그만큼 차감.
+        pointService.refundReturnedOrder(order.getMemberId(), settlement.refundAmount(),
+                settlement.earnedToReverse(), settlement.purchaseToRemove(), id);
         // 🔴 쿠폰도 되돌린다 (2026-08-11) — 취소와 **같은 목록**이어야 한다(applyCancellation 참조).
         // ⚠ 환불액이 «상품합계−쿠폰» 인 것과 앞뒤가 맞는다: 할인받은 만큼은 돈으로 안 돌려주니
         //   그 할인의 근거였던 쿠폰을 돌려줘야 고객이 손해를 안 본다. 둘 중 하나만 하면 어느 쪽이든 틀린다.
-        couponService.restore(order.getMemberCouponId());
+        // 🔴 **남은 것이 있으면 아직 복구하지 않는다** (G-10) — 쿠폰은 여전히 이 주문에 걸려 있다.
+        //   부분 취소가 «마지막 품목이 빠질 때만» 복구하는 것과 같은 규칙이다.
+        if (order.hasNothingLeft()) {
+            couponService.restore(order.getMemberCouponId());
+        }
         // 판매량 되돌림은 catalog 가 구독한다 — 환불(동기)이 끝난 뒤 결과 알림(주문 취소와 같은 규약).
-        eventPublisher.publishEvent(OrderReturnedEvent.from(order));
-        // ⚠ 원장에는 **환불액**을 적는다 — 「상품합계−쿠폰」이고, 적립 회수는 그 뒤에 따라오는 정산이다.
+        eventPublisher.publishEvent(OrderReturnedEvent.of(order, settlement.refundAmount(), lines));
+        // ⚠ 원장에는 **무엇을 몇 개 되돌리고 얼마를 돌려줬나** 를 적는다. 부분 반품이 생기면서
+        //   금액만으로는 «어느 품목이 빠졌나» 를 못 되짚는다(ORDER_ITEM_CANCEL 이 같은 자리에서 정한 것).
         publishAudit(AuditAction.ORDER_RETURN_APPROVE, actor, order,
-                "환불 " + order.refundableAmount() + "원");
-        log.info("Return approved: {} admin={}", id, actor.id());
+                returnedDetail + " 반품 / 환불 " + settlement.refundAmount() + "원");
+        log.info("Return approved: {} items={} refund={} earnedReversed={} admin={}",
+                id, requested.size(), settlement.refundAmount(), settlement.earnedToReverse(), actor.id());
+    }
+
+    /** 반품 승인이 복원할 재고 한 줄 — 정산이 요청 수량을 지우기 전에 떠 둔 스냅샷이다(G-10). */
+    private record StockRestore(UUID variantId, long quantity) {
     }
 
     /**

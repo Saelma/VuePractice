@@ -18,6 +18,6 @@ public record OrderPlacedEvent(UUID orderId, UUID memberId, long totalPrice, int
 
     public static OrderPlacedEvent from(Order order) {
         return new OrderPlacedEvent(order.getId(), order.getMemberId(), order.getTotalPrice(),
-                order.getItems().size(), SoldLine.from(order));
+                order.getItems().size(), SoldLine.ordered(order));
     }
 }

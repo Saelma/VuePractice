@@ -23,8 +23,18 @@ import java.util.UUID;
 public record OrderReturnedEvent(UUID orderId, UUID memberId, long refundedPoint, List<SoldLine> lines)
         implements DomainEvent {
 
-    public static OrderReturnedEvent from(Order order) {
-        return new OrderReturnedEvent(order.getId(), order.getMemberId(),
-                order.refundableAmount(), SoldLine.from(order));
+    /**
+     * 🔴 <b>이번 회차에 실제로 되돌린 것만 싣는다</b> (2026-08-25, G-10).
+     *
+     * <p>⚠ 예전에는 {@code order.refundableAmount()} 와 원본 수량을 실었다. 전량 반품뿐이던
+     * 시절엔 그게 «이번에 되돌린 것» 과 같은 값이었지만, <b>부분이 생기면 갈린다</b> —
+     * 알림은 안 돌려준 금액을 말하고 판매량은 안 빠진 수량을 뺀다.
+     * 그래서 호출부({@code OrderService.approveReturn})가 <b>정산이 실제로 낸 값</b>을 넘긴다.
+     *
+     * @param refundedPoint 이번 회차에 적립금으로 돌려준 금액 ({@code ReturnSettlement.refundAmount})
+     * @param lines         이번 회차에 반품된 상품·수량
+     */
+    public static OrderReturnedEvent of(Order order, long refundedPoint, List<SoldLine> lines) {
+        return new OrderReturnedEvent(order.getId(), order.getMemberId(), refundedPoint, lines);
     }
 }

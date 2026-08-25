@@ -326,7 +326,7 @@ class OrderServiceTest {
         order.pay();
         order.ship(DeliveryCarrier.CJ, "123");
         order.deliver();
-        order.requestReturn("ZZ-반품사유");
+        requestFullReturn(order, "ZZ-반품사유");
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
 
         orderService.approveReturn(order.getId(), admin);
@@ -334,8 +334,12 @@ class OrderServiceTest {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURNED);
         // 재고 이력은 취소와 **구분**된다(B-19) — 원장에서 «왜 돌아왔는지» 가 보여야 값이 있다.
         verify(productCommandService).increaseStock(p1, 2, StockChangeReason.RETURN, order.getId());
-        verify(pointService).refundReturnedOrder(eq(memberId), eq(order.refundableAmount()),
-                eq(order.getEarnedPoint()), eq(order.rewardableAmount()), eq(order.getId()));
+        // 🔴 **글자 그대로 숫자를 적는다** (2026-08-25, G-10). 예전엔 `order.refundableAmount()` 를
+        //    호출 **뒤에** 다시 읽어 기대값으로 썼는데, 그 값들은 이제 반품이 반영돼 **전부 0** 이다 —
+        //    즉 «0 을 넘겼는지» 를 «0 과» 비교하는 테스트라 무엇을 넘기든 통과했을 자리다.
+        //    ⚠ 엔티티에서 기대값을 다시 읽으면 그 테스트는 코드와 함께 낡는다(WA §1-2-1 세 번째 줄).
+        //    상품 20,000 − 쿠폰 5,000 = 환불 15,000 · 적립은 아직 0 · 등급 기준도 15,000.
+        verify(pointService).refundReturnedOrder(memberId, 15_000L, 0L, 15_000L, order.getId());
         // 🔴 취소와 같은 줄 — 한쪽에만 넣으면 그게 다음 비대칭의 시작이다.
         verify(couponService).restore(memberCouponId);
         // 🔴 알림 (2026-08-11) — 이벤트 발행까지 봐야 한다. 2026-08-11 변형 M14 에서 «발행을 지워도
@@ -345,7 +349,16 @@ class OrderServiceTest {
         OrderReturnedEvent returnedEvent = capturePublished(OrderReturnedEvent.class);
         assertThat(returnedEvent.memberId()).isEqualTo(memberId);
         // 환불액이 실려야 알림 문구가 «○○원이 환불되었습니다» 를 말할 수 있다(핸들러는 주문을 못 본다).
-        assertThat(returnedEvent.refundedPoint()).isEqualTo(order.refundableAmount());
+        // 🔴 여기도 숫자를 그대로 적는다 — `order.refundableAmount()` 는 승인 뒤 0 이라 자기 자신과
+        //    비교하는 셈이 된다(위 refundReturnedOrder 단언과 같은 이유, 2026-08-25).
+        assertThat(returnedEvent.refundedPoint()).isEqualTo(15_000L);
+        // 🔴 판매량 되돌림은 **이번에 반품된 수량**이어야 한다 (G-10) — 예전엔 원본 수량을 실었다.
+        //    전량 반품이면 둘이 같지만, 부분이 생기면 갈린다(WA §1-2-1: 목록이 맞아도 «양»이 틀린다).
+        assertThat(returnedEvent.lines()).singleElement()
+                .satisfies(line -> {
+                    assertThat(line.productId()).isEqualTo(p1);
+                    assertThat(line.quantity()).isEqualTo(2);
+                });
     }
 
     /**
@@ -369,7 +382,7 @@ class OrderServiceTest {
         order.pay();
         order.ship(DeliveryCarrier.CJ, "123");
         order.deliver();
-        order.requestReturn("ZZ-반품사유");
+        requestFullReturn(order, "ZZ-반품사유");
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
 
         orderService.rejectReturn(order.getId(), admin, "ZZ-거절사유");
@@ -459,7 +472,9 @@ class OrderServiceTest {
 
         AdminActionEvent e = captureAudit();
         assertThat(e.action()).isEqualTo(AuditAction.ORDER_RETURN_APPROVE);
-        assertThat(e.detail()).isEqualTo("20260101-0020 / 환불 " + order.refundableAmount() + "원");
+        // 🔴 **무엇을 몇 개** 가 함께 남는다 (2026-08-25, G-10) — 부분 반품이 생기면서 금액만으로는
+        //    «어느 품목이 빠졌나» 를 못 되짚는다(ORDER_ITEM_CANCEL 이 같은 자리에서 정한 것).
+        assertThat(e.detail()).isEqualTo("20260101-0020 / 지바 2개 반품 / 환불 20000원");
     }
 
     /**
@@ -483,7 +498,7 @@ class OrderServiceTest {
         assertThat(e.detail()).isEqualTo("20260101-0021 / ZZ-사용 흔적이 있습니다");
 
         // 🔴 여기가 요점이다: 재요청이 주문의 사유를 지워도 **원장의 줄은 그대로다**.
-        order.requestReturn("ZZ-그래도 반품해 주세요");
+        requestFullReturn(order, "ZZ-그래도 반품해 주세요");
         assertThat(order.getReturnRejectedReason()).isNull();
         assertThat(e.detail()).contains("ZZ-사용 흔적이 있습니다");
     }
@@ -498,7 +513,7 @@ class OrderServiceTest {
         order.pay();
         order.ship(DeliveryCarrier.CJ, "123");
         order.deliver();
-        order.requestReturn("ZZ-반품사유");
+        requestFullReturn(order, "ZZ-반품사유");
         return order;
     }
 
@@ -514,11 +529,11 @@ class OrderServiceTest {
         order.pay();
         order.ship(DeliveryCarrier.CJ, "123");
         order.deliver();
-        order.requestReturn("ZZ-첫요청");
+        requestFullReturn(order, "ZZ-첫요청");
         order.rejectReturn("ZZ-거절사유");
         assertThat(order.getReturnRejectedReason()).isNotNull();   // 전제 확인
 
-        order.requestReturn("ZZ-다시요청");
+        requestFullReturn(order, "ZZ-다시요청");
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURN_REQUESTED);
         assertThat(order.getReturnReason()).isEqualTo("ZZ-다시요청");
@@ -546,7 +561,7 @@ class OrderServiceTest {
         order.deliver();
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
 
-        orderService.requestReturn(orderId, memberId, "ZZ-사이즈가 안 맞아요");
+        orderService.requestReturn(orderId, memberId, "ZZ-사이즈가 안 맞아요", fullReturnOf(order));
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURN_REQUESTED);
 
@@ -572,7 +587,7 @@ class OrderServiceTest {
         order.pay(); // 아직 배송완료가 아니다
         when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
 
-        assertErrorCode(() -> orderService.requestReturn(orderId, memberId, "ZZ-사유"),
+        assertErrorCode(() -> orderService.requestReturn(orderId, memberId, "ZZ-사유", fullReturnOf(order)),
                 ErrorCode.ORDER_NOT_RETURNABLE);
 
         verify(eventPublisher, never()).publishEvent(any());
@@ -753,5 +768,22 @@ class OrderServiceTest {
         when(cartService.getCart(memberId)).thenReturn(cartWith(soldOut));
         assertErrorCode(() -> orderService.checkout(buyer, SHIP), ErrorCode.UNAVAILABLE_ITEM);
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    /**
+     * 전량 반품 요청 — 부분 반품(2026-08-25, G-10)이 생기면서 <b>«무엇을 몇 개»를 말해야</b> 한다.
+     *
+     * <p>⚠ <b>«비면 전량» 같은 기본값을 두지 않았다</b>(G-10 결정 2 주석) — 그래서 옛 호출부가
+     * 전부 컴파일 에러로 드러났고, 여기서 «전량» 이라고 <b>명시</b>하게 됐다.
+     */
+    private static void requestFullReturn(Order order, String reason) {
+        order.requestReturn(reason, order.getItems().stream()
+                .collect(java.util.stream.Collectors.toMap(OrderItem::getId, OrderItem::remainingQuantity)));
+    }
+
+    /** 서비스 호출용 — 남은 수량 전부를 담은 요청 맵. */
+    private static java.util.Map<UUID, Long> fullReturnOf(Order order) {
+        return order.getItems().stream()
+                .collect(java.util.stream.Collectors.toMap(OrderItem::getId, OrderItem::remainingQuantity));
     }
 }

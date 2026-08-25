@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -259,6 +260,43 @@ public class Order extends BaseTimeEntity {
     @Column(name = "cancelled_point", nullable = false)
     private long cancelledPoint;
 
+    /* ───────────────────── 부분 반품으로 회수된 몫 (2026-08-25, V58, BACKLOG G-10) ─────────────────────
+     *
+     * 🔴 위 `cancelled_*` 셋과 **칸을 나눈 이유**는 G-10 결정 1 이다 — 취소와 반품은 돈이 다르게
+     *    움직인다. 취소 환불은 «쓴 적립금만» 계정으로 돌아가고(돈은 seam), 반품 환불은
+     *    «현금결제분 + 사용적립금» 을 **함께** 적립금으로 준다. 합치면 주문만 보고 못 가른다.
+     */
+
+    /** 반품으로 빠진 상품금액 누적. 남은 상품합계 = {@code totalPrice - cancelledItemsTotal - 이 값}. */
+    @Column(name = "returned_items_total", nullable = false)
+    private long returnedItemsTotal;
+
+    /** 반품으로 회수된 쿠폰 할인 몫 누적(금액 비례·내림). */
+    @Column(name = "returned_coupon_discount", nullable = false)
+    private long returnedCouponDiscount;
+
+    /**
+     * 반품으로 회수된 사용 적립금 몫 누적(금액 비례·내림).
+     *
+     * <p>🔴 <b>환불 계산에는 안 쓰인다</b> — 반품 환불액(«상품합계 − 쿠폰»)에 이 몫이 <b>이미
+     * 들어 있다.</b> 그런데도 누적하는 이유는 {@link #remainingUsedPoint()} 를 낮춰야 다음 회차의
+     * 분모와 {@link #rewardableAmount()} 가 맞기 때문이다.
+     * ⚠ <b>취소 쪽 {@code cancelledPoint} 와 쓰임이 다르다</b> — 그쪽은 실제로 계정에 돌려줄 금액이다.
+     */
+    @Column(name = "returned_point", nullable = false)
+    private long returnedPoint;
+
+    /**
+     * 반품으로 회수한 <b>배송완료 적립</b> 누적 (V58).
+     *
+     * <p>🔴 <b>왜 칸이 필요한가</b> — 전량 반품이던 시절엔 {@link #earnedPoint} 전액을 회수하면 됐지만,
+     * 부분이 생기면 «지금까지 얼마 회수했나» 를 알아야 다음 회차를 계산할 수 있다.
+     * ⚠ 내림 배분은 <b>경로 의존</b>이라 어느 품목을 먼저 반품했느냐에 따라 1원이 다른 자리에 남는다 —
+     * <b>유도할 수 있는 값이 아니다.</b> {@code cancelledPoint} 를 둔 것과 글자 그대로 같은 이유다.
+     */
+    @Column(name = "reversed_earned_point", nullable = false)
+    private long reversedEarnedPoint;
+
     private Order(UUID memberId, String buyerNickname, String orderNo) {
         this.memberId = memberId;
         this.buyerNickname = buyerNickname;
@@ -310,7 +348,13 @@ public class Order extends BaseTimeEntity {
         //    실측(`20260824-5297`)에서 그렇게 나왔다. 취소된 주문에 배송비를 받을 이유가 없다.
         //    ⚠ 부분 취소를 한 적 없는 주문은 여기 안 걸린다(`cancelledQuantity` 가 전부 0) —
         //       그래서 **기존 취소 주문의 표시는 안 바뀐다**(예전처럼 «결제했던 금액» 을 보여준다).
-        if (hasNoRemainingItems()) {
+        // 🔴 **반품으로 비워진 주문은 여기 안 걸린다** (2026-08-25, G-10). 그때는 아래 식이
+        //    남은 값 전부 0 + 배송비 = **배송비만** 낸다 — 그리고 **그게 맞다**: 반품은 배송비를
+        //    안 돌려주므로(G-10 결정 3, 물건이 이미 나갔다) 고객이 실제로 낸 것이 배송비뿐이다.
+        //    ⚠ 취소는 반대다. 물건이 안 나갔으니 배송비를 받을 이유가 없어 0 이다.
+        //    ⚠ **기존 전체 반품 주문의 표시는 안 바뀐다** — `returned_quantity` 가 0 이라
+        //       `remainingItemsTotal()` 이 그대로다(V57 이 «기존 취소 주문은 안 바뀐다» 로 간 것과 같다).
+        if (isFullyCancelledByItems()) {
             return 0;
         }
         return remainingItemsTotal() - remainingCouponDiscount() - remainingUsedPoint() + shippingFee;
@@ -318,19 +362,29 @@ public class Order extends BaseTimeEntity {
 
     /* ─────────────────────────── 부분 취소 뒤의 «지금» 값 (G-4) ─────────────────────────── */
 
-    /** 아직 살아 있는 상품합계. 부분 취소가 없으면 {@code totalPrice} 와 같다. */
+    /**
+     * 아직 살아 있는 상품합계. 부분 취소·부분 반품이 없으면 {@code totalPrice} 와 같다.
+     *
+     * <p>🔴 <b>되돌리는 경로 «둘» 을 다 뺀다</b> (2026-08-25, G-10). 한쪽만 빼면 이미 나간 물건이
+     * 아직 있는 것처럼 보인다 — WA §1-2-1 이 «읽는 값이 원본인지 남은 것인지» 를 대조하라는 자리다.
+     */
     public long remainingItemsTotal() {
-        return totalPrice - cancelledItemsTotal;
+        return totalPrice - cancelledItemsTotal - returnedItemsTotal;
     }
 
-    /** 아직 걸려 있는 쿠폰 할인. 🔴 쿠폰 최소금액은 <b>소급하지 않는다</b>(G-4 결정 1). */
+    /** 아직 걸려 있는 쿠폰 할인. 🔴 쿠폰 최소금액은 <b>소급하지 않는다</b>(G-4 결정 1 · G-10 동일). */
     public long remainingCouponDiscount() {
-        return couponDiscount - cancelledCouponDiscount;
+        return couponDiscount - cancelledCouponDiscount - returnedCouponDiscount;
     }
 
     /** 아직 이 주문에 묶여 있는 사용 적립금. */
     public long remainingUsedPoint() {
-        return usedPoint - cancelledPoint;
+        return usedPoint - cancelledPoint - returnedPoint;
+    }
+
+    /** 아직 회수하지 않은 배송완료 적립. 부분 반품의 회수 몫은 여기서 비례로 떼어 간다(G-10). */
+    public long remainingEarnedPoint() {
+        return earnedPoint - reversedEarnedPoint;
     }
 
     /**
@@ -343,14 +397,36 @@ public class Order extends BaseTimeEntity {
         // 전량이 빠졌으면 배송비도 돌아간다 — 위 {@link #getPayAmount()} 와 앞뒤가 맞아야 한다
         // (돌려준 것 + 남은 것 = 처음 결제한 것).
         return cancelledItemsTotal - cancelledCouponDiscount - cancelledPoint
-                + (hasNoRemainingItems() ? shippingFee : 0);
+                + (isFullyCancelledByItems() ? shippingFee : 0);
     }
 
-    /** 품목이 하나도 안 남았나 — 부분 취소를 이어 하다 보면 여기 닿는다. */
-    public boolean hasNoRemainingItems() {
+    /** 반품으로 적립금으로 돌려준 금액의 누적 = 반품 상품금액 − 회수한 쿠폰 몫 (G-10). */
+    public long returnRefundedAmount() {
+        return returnedItemsTotal - returnedCouponDiscount;
+    }
+
+    /**
+     * 품목이 <b>전부 취소로</b> 빠졌나 — <b>배송비 환불 스위치</b>다.
+     *
+     * <p>🔴 <b>반품은 안 센다</b> (2026-08-25, G-10). 이름을 {@code hasNoRemainingItems} 에서 바꾼
+     * 이유가 그것이다 — 옛 이름은 «남은 게 없다» 라고 읽히는데 실제로 세는 것은 <b>취소분뿐</b>이라,
+     * 반품이 생기는 순간 <b>이름이 거짓말을 시작한다.</b> 배송비를 돌려주는 것은 취소일 때뿐이고
+     * (G-10 결정 3), 여기에 반품을 더하면 «반품했더니 배송비까지 돌아오는» 동작이 조용히 생긴다.
+     * <p>남은 것이 하나도 없는지는 {@link #hasNothingLeft()} 가 답한다.
+     */
+    public boolean isFullyCancelledByItems() {
         // ⚠ `allMatch` 는 빈 목록에 **참**이다. 주문에 품목이 없을 수는 없지만, 이 값이 지금은
         //   `getPayAmount()` 를 0 으로 만드는 스위치라 빈 목록이 조용히 0 을 내지 않게 막는다.
         return !items.isEmpty() && items.stream().allMatch(OrderItem::isFullyCancelled);
+    }
+
+    /**
+     * 남은 것이 하나도 없나 — <b>취소든 반품이든</b> 빠진 것을 다 센다 (G-10).
+     *
+     * <p>반품 승인이 주문을 {@code RETURNED} 로 떨어뜨릴지 {@code DELIVERED} 로 되돌릴지 이 값이 정한다.
+     */
+    public boolean hasNothingLeft() {
+        return !items.isEmpty() && items.stream().allMatch(OrderItem::isFullyGone);
     }
 
     /**
@@ -492,9 +568,16 @@ public class Order extends BaseTimeEntity {
         this.cancelledByName = adminName;
     }
 
-    /** 배송완료 주문만 반품 요청할 수 있다(운송 중·미결제 주문은 취소로 처리). */
+    /**
+     * 배송완료 주문만 반품 요청할 수 있다(운송 중·미결제 주문은 취소로 처리).
+     *
+     * <p>🔴 <b>남은 것이 있어야 한다</b> (2026-08-25, G-10). 부분 반품 승인은 주문을 {@code DELIVERED}
+     * 로 되돌리므로 <b>상태만 보면 이미 다 반품된 주문도 다시 요청할 수 있는 것처럼 보인다.</b>
+     * 실제로는 {@code hasNothingLeft()} 면 {@code RETURNED} 로 떨어져 여기 안 오지만, 이 가드가
+     * 상태와 수량 <b>둘 다</b>를 보게 해서 그 둘이 어긋나도 조용히 통과하지 않는다.
+     */
     public boolean isReturnRequestable() {
-        return status == OrderStatus.DELIVERED;
+        return status == OrderStatus.DELIVERED && !hasNothingLeft();
     }
 
     /** 요청된 반품만 승인·거절할 수 있다. */
@@ -512,7 +595,12 @@ public class Order extends BaseTimeEntity {
      * ({@code returnReason} 도 덮어쓴다) 여기서만 특별히 쌓아 둘 수 없다 —
      * 이력이 필요해지면 <b>별도 테이블</b>이 답이지 컬럼을 늘리는 게 아니다.
      */
-    public void requestReturn(String reason) {
+    public void requestReturn(String reason, Map<UUID, Long> quantitiesByItemId) {
+        // ⚠ **고르지 않은 품목은 0 으로 덮는다**(누적이 아니다). 거절 뒤 다시 요청할 때 이전 회차의
+        //    수량이 남아 있으면 «안 고른 품목이 따라 반품되는» 일이 생긴다.
+        for (OrderItem item : items) {
+            item.requestReturn(quantitiesByItemId.getOrDefault(item.getId(), 0L));
+        }
         this.status = OrderStatus.RETURN_REQUESTED;
         this.returnReason = reason;
         this.returnRequestedAt = Instant.now();
@@ -520,10 +608,106 @@ public class Order extends BaseTimeEntity {
         this.returnRejectedAt = null;
     }
 
-    /** 관리자 승인 — 재고 복원·환불은 서비스가 하고, 여기선 상태·시각만 남긴다. */
-    public void approveReturn() {
-        this.status = OrderStatus.RETURNED;
-        this.returnedAt = Instant.now();
+    /**
+     * 🔴 <b>요청된 반품을 확정하고 정산을 나눈다</b> (2026-08-25, BACKLOG G-10).
+     *
+     * <p><b>배분식</b> — 규칙 원본은 BACKLOG G-10 이다. {@link #cancelItem} 과 <b>같은 모양</b>이고
+     * 분모·분자가 «지금 남은 값» 인 것도 같다(그래서 전액 수렴이 구조로 보장된다):
+     * <pre>
+     *   반품금액   = 단가 × 확정수량
+     *   쿠폰 몫    = 남은쿠폰할인 × 반품금액 / 남은상품합계                      (내림)
+     *   적립금 몫  = 남은적립금   × 반품금액 / 남은상품합계                      (내림)
+     *   환불액     = 반품금액 − 쿠폰 몫                                          ← 🔴 취소와 다르다
+     *   적립 회수  = 남은적립 × (반품금액 − 쿠폰몫 − 적립금몫) / 남은적립기준액  (내림)
+     *   등급 차감  = 반품금액 − 쿠폰 몫 − 적립금 몫
+     * </pre>
+     *
+     * <p>🔴 <b>환불액에 «적립금 몫» 이 들어 있다.</b> 반품은 «결제금액을 적립금으로» 돌려주는 것이라
+     * 현금결제분과 사용적립금을 <b>함께</b> 적립금으로 준다({@code PointService.refundReturnedOrder}).
+     * ⚠ 그래서 {@code pointShare} 는 환불 계산에 안 쓰이지만 <b>여전히 누적한다</b> —
+     * {@link #remainingUsedPoint()} 를 낮춰야 다음 회차의 분모와 {@link #rewardableAmount()} 가 맞는다.
+     * <b>취소({@code cancelItem})와 헷갈리기 가장 쉬운 자리다.</b>
+     *
+     * <p>✅ <b>수렴</b>: 전량을 부분 반품으로 다 빼면 Σ환불액 = {@code refundableAmount()} 처음 값,
+     * Σ적립회수 = {@code earnedPoint}, Σ등급차감 = {@code rewardableAmount()} 처음 값이 된다 —
+     * 즉 <b>지금의 전체 반품과 글자 그대로 같은 값</b>이다. 그게 이 설계의 안전 조건이다.
+     */
+    public ReturnSettlement applyRequestedReturns() {
+        return settleRequestedReturns(true);
+    }
+
+    /**
+     * 지금 요청된 반품을 <b>승인하면 얼마인가</b> — 아무것도 바꾸지 않는다 (G-10).
+     *
+     * <p>🔴 <b>«누르기 전에 보여주려고» 있다.</b> 08-24 가 부분 취소에서 같은 것을 화면에 두면서
+     * 배분식이 두 벌이 됐는데, 여기서는 <b>서버가 한 벌만 갖는다</b> — {@link #applyRequestedReturns()}
+     * 와 <b>글자 그대로 같은 코드</b>를 타고 마지막에 쓰기만 안 한다. 어긋날 자리가 없다.
+     */
+    public ReturnSettlement previewRequestedReturns() {
+        return settleRequestedReturns(false);
+    }
+
+    /**
+     * 🔴 <b>배분 본체 — «미리 보기» 와 «확정» 이 같은 코드를 탄다.</b>
+     *
+     * <p>⚠ 회차 안에서 품목을 여러 개 처리하므로 <b>«이번 회차에 이미 뗀 몫»({@code d*})을 빼 가며</b>
+     * 분모·분자를 다시 만든다. 필드를 바로 더해 버리면 미리 보기가 상태를 오염시키고, 반대로
+     * 루프 밖에서 한 번만 잡으면 두 번째 품목부터 «이미 빠진 것» 을 분모에 넣는다.
+     * <b>내림 배분이 경로 의존인 이유이자, 마지막 품목이 잔돈을 전부 흡수하는 이유다.</b>
+     *
+     * @param apply {@code false} 면 계산만 한다 — 엔티티도 품목도 안 건드린다
+     */
+    private ReturnSettlement settleRequestedReturns(boolean apply) {
+        long dItems = 0L;
+        long dCoupon = 0L;
+        long dPoint = 0L;
+        long dEarn = 0L;
+        long refund = 0L;
+        long purchaseToRemove = 0L;
+
+        for (OrderItem item : items) {
+            long qty = item.getReturnRequestedQuantity();
+            if (qty <= 0) {
+                continue;
+            }
+            long base = remainingItemsTotal() - dItems;
+            if (base <= 0) {
+                throw new IllegalStateException("남은 품목이 없는 주문에서 반품을 확정하려 했다: " + orderNo);
+            }
+            long remCoupon = remainingCouponDiscount() - dCoupon;
+            long remPoint = remainingUsedPoint() - dPoint;
+            long remEarn = remainingEarnedPoint() - dEarn;
+            // 적립 기준액 = 남은상품합계 − 남은쿠폰 − 남은적립금 (= 이 시점의 rewardableAmount()).
+            long rewardBase = base - remCoupon - remPoint;
+
+            long amount = item.getPrice() * qty;
+            long couponShare = remCoupon * amount / base;
+            long pointShare = remPoint * amount / base;
+            long share = amount - couponShare - pointShare;
+            // ⚠ 적립 기준액이 0 인 주문이 있다(쿠폰·적립금으로 전액을 낸 경우). 그때는 적립도 0 이라
+            //    회수할 것이 없다 — 0 나눗셈을 막는 동시에 «없는 것을 뺀다» 도 막는다.
+            long earnShare = rewardBase <= 0 ? 0L : remEarn * share / rewardBase;
+
+            dItems += amount;
+            dCoupon += couponShare;
+            dPoint += pointShare;
+            dEarn += earnShare;
+            refund += amount - couponShare;
+            purchaseToRemove += share;
+        }
+
+        if (apply) {
+            items.forEach(OrderItem::confirmReturn);
+            this.returnedItemsTotal += dItems;
+            this.returnedCouponDiscount += dCoupon;
+            this.returnedPoint += dPoint;
+            this.reversedEarnedPoint += dEarn;
+            this.returnedAt = Instant.now();
+            // 🔴 남은 것이 있으면 **배송완료로 되돌린다** — 다시 반품을 요청할 수 있어야 한다.
+            //    「품목이 다 빠졌는데 상태는 DELIVERED」인 주문을 만들지 않는다(G-4 가 PAID 에서 정한 것과 같다).
+            this.status = hasNothingLeft() ? OrderStatus.RETURNED : OrderStatus.DELIVERED;
+        }
+        return new ReturnSettlement(refund, dEarn, purchaseToRemove);
     }
 
     /**
@@ -539,14 +723,22 @@ public class Order extends BaseTimeEntity {
      * <p>⚠ 재고·적립금·쿠폰은 <b>건드리지 않는다</b> — 승인하지 않았으므로 되돌릴 것이 없다.
      */
     public void rejectReturn(String reason) {
+        // 🔴 **요청 수량도 지운다** (2026-08-25, G-10). 안 지우면 다음에 다른 품목을 요청했을 때
+        //    이전 회차의 수량이 남아 **안 고른 품목이 따라 반품된다.** 승인을 안 했으니 되돌릴 것은
+        //    이것뿐이다 — 수량·돈은 아직 안 움직였다.
+        items.forEach(OrderItem::clearReturnRequest);
         this.status = OrderStatus.DELIVERED;
         this.returnRejectedReason = reason;
         this.returnRejectedAt = Instant.now();
     }
 
     /**
-     * 반품 환불액 = 상품합계 − 쿠폰할인. 사용했던 적립금 + 현금분을 한꺼번에 적립금으로 돌려준다.
-     * 배송비는 뺀다(운임은 소진됐다). 이 값과 적립 회수(earned_point)를 합쳐 순변동이 결정된다.
+     * <b>지금 전량을 반품하면</b> 돌려줄 금액 = 남은 상품합계 − 남은 쿠폰할인. 사용했던 적립금 +
+     * 현금분을 한꺼번에 적립금으로 돌려준다. 배송비는 뺀다(운임은 소진됐다 — G-10 결정 3).
+     *
+     * <p>⚠ <b>실제 환불은 이 값이 아니라 {@link #applyRequestedReturns()} 가 낸다</b>(2026-08-25, G-10) —
+     * 부분 반품은 요청된 품목의 몫만 돌려주기 때문이다. 이 메서드는 이제 <b>화면이 «전량 반품하면
+     * 얼마»를 미리 보여주는</b> 용도이고, 전량을 나눠 반품하면 그 합이 정확히 이 값이 된다(수렴).
      */
     public long refundableAmount() {
         // ⚠ **남은 것 기준**(2026-08-24, G-4). 부분 취소로 이미 돌려준 몫을 반품에서 또 돌려주면

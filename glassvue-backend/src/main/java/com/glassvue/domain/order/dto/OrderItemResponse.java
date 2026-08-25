@@ -41,17 +41,36 @@ public record OrderItemResponse(
         long cancelledQuantity,
 
         /**
-         * 아직 살아 있는 수량 = {@code quantity - cancelledQuantity}.
+         * 반품 승인으로 빠진 수량(G-10). 🔴 <b>취소분과 칸이 다르다</b> — 화면이
+         * «1개 취소 · 1개 반품» 을 갈라 그릴 수 있어야 한다(합쳐 주면 그 구분이 응답에서 사라진다).
+         */
+        long returnedQuantity,
+
+        /** 고객이 반품 요청한 수량(G-10). 아직 확정 아님 — 승인 대기 중인 몫이다. */
+        long returnRequestedQuantity,
+
+        /**
+         * 아직 살아 있는 수량 = {@code quantity - cancelledQuantity - returnedQuantity}.
          *
          * <p>⚠ <b>{@code quantity} 를 깎아서 주지 않는다</b> — 화면이 «3개 중 1개 취소됨» 을 그리려면
          * 둘 다 필요하다. 깎아서 주면 «원래 몇 개를 샀나» 가 응답에서 사라진다.
          */
-        long remainingQuantity
+        long remainingQuantity,
+
+        /**
+         * 지금 반품 요청을 걸 수 있는 최대 수량 = {@code remainingQuantity - returnRequestedQuantity} (G-10).
+         *
+         * <p>🔴 <b>화면이 이 값을 «따로 계산하지 않게» 준다.</b> 08-24 가 배분식을 화면과 서버에 두 벌
+         * 두면서 «어긋나면 잡히게» 해 둔 자리와 같은 판단이다 — 상한만큼은 아예 서버가 정한다.
+         */
+        long returnableQuantity
 ) {
     public static OrderItemResponse from(OrderItem i) {
         return new OrderItemResponse(i.getProductId(), i.getVariantId(), i.getProductName(), i.getVariantName(),
                 i.getProductImageUrl(), i.getPrice(), i.getRegularPrice(), i.getListPrice(),
                 i.getQuantity(), i.getLineTotal(),
-                i.getId(), i.getCancelledQuantity(), i.remainingQuantity());
+                i.getId(), i.getCancelledQuantity(),
+                i.getReturnedQuantity(), i.getReturnRequestedQuantity(),
+                i.remainingQuantity(), i.returnableQuantity());
     }
 }

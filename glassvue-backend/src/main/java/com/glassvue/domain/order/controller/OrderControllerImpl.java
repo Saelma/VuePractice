@@ -120,7 +120,7 @@ public class OrderControllerImpl implements OrderController {
     @PostMapping("/{id}/return-request")
     public ResponseEntity<ApiResponse<Void>> requestReturn(
             @LoginUser AuthUser user, @PathVariable UUID id, @Valid @RequestBody ReturnRequest request) {
-        orderService.requestReturn(id, user.id(), request.reason());
+        orderService.requestReturn(id, user.id(), request.reason(), request.quantitiesByItemId());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 

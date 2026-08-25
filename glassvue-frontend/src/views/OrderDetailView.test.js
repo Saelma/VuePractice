@@ -49,6 +49,8 @@ function order(overrides = {}) {
     usedPoint: 2_000, earnedPoint: 0,
     payAmount: 28_000,
     cancelledItemsTotal: 0, refundedAmount: 0, cancelledPoint: 0,
+    // 반품이 회수해 간 몫(G-10). 취소 쪽 셋과 **짝**이라 픽스처에서도 나란히 둔다.
+    returnedItemsTotal: 0, returnedCouponDiscount: 0, returnedPoint: 0, refundAmount: 0,
     items: [
       item({ orderItemId: 'i-a', productName: 'ZZ-A', price: 20_000, lineTotal: 20_000 }),
       item({ orderItemId: 'i-b', productName: 'ZZ-B', price: 15_000, lineTotal: 15_000 }),
@@ -59,14 +61,18 @@ function order(overrides = {}) {
 }
 
 function item(o = {}) {
-  return {
+  const merged = {
     productId: 'p1', variantId: 'v1', orderItemId: 'i-x', productName: 'ZZ상품',
     optionName: null, productImageUrl: null,
     price: 10_000, regularPrice: null, listPrice: null,
     quantity: 1, lineTotal: 10_000,
     cancelledQuantity: 0, remainingQuantity: 1,
+    returnedQuantity: 0, returnRequestedQuantity: 0,
     ...o,
   };
+  // ⚠ `returnableQuantity` 는 **서버가 계산해 보내는** 값이다(G-10). 픽스처도 서버가 낼 값을
+  //    그대로 흉내 낸다 — 손으로 따로 적으면 화면이 «서버가 안 주는 값» 에 기대게 된다.
+  return { returnableQuantity: merged.remainingQuantity - merged.returnRequestedQuantity, ...merged };
 }
 
 describe('OrderDetailView — 부분 취소 (G-4)', () => {

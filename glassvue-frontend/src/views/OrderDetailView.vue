@@ -157,22 +157,98 @@ async function onCancelItem() {
 }
 
 // 반품(2026-07-24 C-9). 요청은 사유 입력이 필요해 인라인 폼으로 받는다(취소·발송과 같은 이유).
+//
+// ─────────────────────────── 부분 반품 (G-10, 2026-08-25)
+//
+// 🔴 **고객이 품목·수량을 고른다**(G-10 결정 2) — 승인은 «요청한 대로 해 준다» 라 관리자가
+//    정하면 그 규약이 깨진다. 기본값은 «남은 것 전부» 다: 전량 반품이 가장 흔하고, 기본값이
+//    고르는 수고를 없앤다. ⚠ 그래도 **비워 보낼 수는 없다**(서버가 items 를 필수로 받는다).
 const returnForm = ref(null);
-function openReturnForm() { returnForm.value = { reason: '' }; }
+
+/** 지금 반품 요청을 걸 수 있는 품목 — `returnableQuantity` 는 서버가 계산해 준다(화면이 안 센다). */
+const returnableItems = computed(() =>
+  (order.value?.items || []).filter((i) => i.returnableQuantity > 0));
+
+function openReturnForm() {
+  returnForm.value = {
+    reason: '',
+    quantities: Object.fromEntries(returnableItems.value.map((i) => [i.orderItemId, i.returnableQuantity])),
+  };
+}
+
+/**
+ * 🔴 **환불 예정 금액** — 서버가 쓰는 배분식과 **같은 식**이다(BACKLOG G-10):
+ *
+ *     반품금액 = 단가 × 수량
+ *     쿠폰 몫  = 남은쿠폰할인 × 반품금액 / 남은상품합계   (내림)
+ *     환불액   = 반품금액 − 쿠폰 몫
+ *
+ * ⚠ **취소와 다르다** — 적립금 몫을 빼지 않는다. 반품은 «현금결제분 + 사용적립금» 을 **함께**
+ *    적립금으로 돌려주기 때문이다(그래서 적립금 몫이 환불액 안에 이미 들어 있다).
+ *
+ * ⚠ **품목마다 «이번 회차에 이미 뗀 몫» 을 빼 가며** 분모·분자를 다시 만든다. 한 번만 잡으면
+ *    두 번째 품목부터 서버와 갈린다 — 내림 배분이 경로 의존이라 그렇다.
+ * ⚠ **순서가 서버와 같아야 한다** — 서버는 `order.getItems()` 순으로 도는데 그 순서가 곧
+ *    `order.items` 순이다. 화면이 정렬을 바꾸면 잔돈 1원이 다른 자리에 붙는다.
+ *
+ * 🔴 ⚠ **같은 식이 서버와 화면 두 곳에 있다**(부분 취소와 같은 자리, CLAUDE.md 가 경계하는 모양).
+ *    두는 이유도 같다 — «얼마 돌려받나» 를 누르기 **전에** 보여줘야 한다.
+ *    **대신 어긋나면 잡히게 해 뒀다**: 뷰 테스트가 서버 테스트와 **글자 그대로 같은 숫자**를 단언한다.
+ */
+const returnPreview = computed(() => {
+  const f = returnForm.value;
+  const o = order.value;
+  if (!f || !o) return null;
+  let dItems = 0;
+  let dCoupon = 0;
+  let refund = 0;
+  for (const item of o.items) {
+    const qty = Number(f.quantities[item.orderItemId] || 0);
+    if (!Number.isInteger(qty) || qty <= 0) continue;
+    if (qty > item.returnableQuantity) return null;
+    const base = o.totalPrice - o.cancelledItemsTotal - o.returnedItemsTotal - dItems;
+    if (base <= 0) return null;
+    const remCoupon = o.couponDiscount - couponTaken.value - o.returnedCouponDiscount - dCoupon;
+    const amount = item.price * qty;
+    const couponShare = Math.floor((remCoupon * amount) / base);
+    dItems += amount;
+    dCoupon += couponShare;
+    refund += amount - couponShare;
+  }
+  return refund > 0 || dItems > 0 ? { amount: dItems, couponShare: dCoupon, refund } : null;
+});
+
+/**
+ * 이번 요청이 **주문을 통째로 비우나** — 그때만 서버가 `RETURNED` 로 떨어뜨리고 **쿠폰을 복구**한다.
+ * 부분 취소의 `cancellingLastItem` 과 같은 자리다: 되돌리기 어려운 조작을 조용히 하지 않는다.
+ */
+const returningEverything = computed(() => {
+  const f = returnForm.value;
+  if (!f || !order.value) return false;
+  return order.value.items.every(
+    (i) => i.remainingQuantity - Number(f.quantities[i.orderItemId] || 0) <= 0);
+});
+
 async function submitReturn() {
   const reason = (returnForm.value?.reason || '').trim();
   if (!reason) { error.value = '반품 사유를 입력하세요.'; return; }
+  const items = Object.entries(returnForm.value.quantities)
+    .map(([orderItemId, quantity]) => ({ orderItemId, quantity: Number(quantity) }))
+    .filter((l) => Number.isInteger(l.quantity) && l.quantity > 0);
+  // ⚠ 서버도 막지만 여기서 먼저 막는다 — 왕복할 이유가 없고, 문구를 이 자리에서 더 정확히 말할 수 있다.
+  if (items.length === 0) { error.value = '반품할 품목을 하나 이상 골라 주세요.'; return; }
   error.value = '';
   try {
-    await requestReturn(props.id, reason);
+    await requestReturn(props.id, reason, items);
     returnForm.value = null;
     await load();
   } catch (e) {
     error.value = e.message;
   }
 }
+// ⚠ 문구가 «결제금액» 에서 «요청된 품목» 으로 바뀌었다(G-10) — 부분 반품이 생기면서 전량이 아닐 수 있다.
 const onApproveReturn = () => act(approveReturn,
-  '반품을 승인할까요? 재고가 복원되고 결제금액이 적립금으로 환불됩니다(적립·등급은 회수).');
+  '반품을 승인할까요? 요청된 품목의 재고가 복원되고 그 몫이 적립금으로 환불됩니다(적립·등급도 그만큼 회수).');
 
 /**
  * 반품 카드의 상태 문구. 세 갈래다 — ⚠ **거절이 세 번째로 뒤늦게 생겼다**(2026-08-11).
@@ -435,8 +511,20 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
                 취소됨」이 읽히려면 둘 다 필요하다. 취소가 없으면 줄 자체가 안 그려진다.
               -->
               <p v-if="item.cancelledQuantity > 0" class="mt-1 text-xs text-danger">
-                <template v-if="item.remainingQuantity === 0">전량 취소됨</template>
+                <template v-if="item.remainingQuantity === 0 && item.returnedQuantity === 0">전량 취소됨</template>
                 <template v-else>{{ item.quantity }}개 중 <b>{{ item.cancelledQuantity }}개</b> 취소됨</template>
+              </p>
+              <!--
+                부분 반품 흔적(G-10). 🔴 **취소와 «줄을 나눈다»** — 「1개 취소 · 1개 반품」이 한 줄에
+                합쳐지면 무엇이 왜 빠졌는지 못 읽는다(그래서 서버도 칸을 나눴다, G-10 결정 1).
+              -->
+              <p v-if="item.returnedQuantity > 0" class="mt-1 text-xs text-danger">
+                <template v-if="item.remainingQuantity === 0 && item.cancelledQuantity === 0">전량 반품됨</template>
+                <template v-else>{{ item.quantity }}개 중 <b>{{ item.returnedQuantity }}개</b> 반품됨</template>
+              </p>
+              <!-- 승인 대기 중인 요청. ⚠ **아직 안 빠진 것**이라 위 둘과 색을 갈라 둔다. -->
+              <p v-if="item.returnRequestedQuantity > 0" class="muted mt-1 text-xs">
+                <b>{{ item.returnRequestedQuantity }}개</b> 반품 요청됨 (승인 대기)
               </p>
               <!--
                 부분 취소 버튼. ⚠ 「주문 취소」와 **갈라 둔다** — 전체 취소는 쿠폰까지 복구되고
@@ -454,7 +542,7 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
                     :class="item.remainingQuantity === 0 ? 'text-ink-400 line-through' : 'text-ink-900'"
               >{{ priceText(item.lineTotal) }}</span>
               <!-- 일부만 빠졌으면 «지금 살아 있는 금액» 을 아래 줄에 적는다. -->
-              <p v-if="item.cancelledQuantity > 0 && item.remainingQuantity > 0"
+              <p v-if="(item.cancelledQuantity > 0 || item.returnedQuantity > 0) && item.remainingQuantity > 0"
                  class="muted tabular-nums">→ {{ priceText(item.price * item.remainingQuantity) }}</p>
             </div>
           </li>
@@ -652,18 +740,68 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
         </div>
       </div>
 
-      <!-- 반품 요청 폼(구매자). 사유가 필요해 인라인 폼으로 받는다. -->
+      <!--
+        반품 요청 폼(구매자). 사유가 필요해 인라인 폼으로 받는다.
+        🔴 **품목·수량을 여기서 고른다**(G-10 결정 2) — 승인은 «요청한 대로» 해 주므로 고객이 말해야 한다.
+      -->
       <div v-if="returnForm" class="card mt-4 p-5">
         <h2 class="section-title">반품 요청</h2>
         <p class="muted mt-1">
-          관리자 승인 시 상품 금액이 <strong>적립금으로 환불</strong>됩니다(배송비 제외).
-          이 주문으로 받은 적립금과 등급 반영분은 회수됩니다.
+          관리자 승인 시 <strong>요청한 품목의 금액</strong>이 <strong>적립금으로 환불</strong>됩니다(배송비 제외).
+          그 몫만큼 적립금과 등급 반영분도 회수됩니다.
         </p>
+
+        <!-- 품목별 수량. ⚠ 상한은 서버가 준 `returnableQuantity` 다 — 화면이 다시 세지 않는다. -->
+        <ul class="mt-4 divide-y divide-line border-y border-line">
+          <li v-for="item in returnableItems" :key="item.orderItemId" class="flex items-center gap-3 py-3">
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm text-ink-900">{{ item.productName }}</p>
+              <p v-if="item.optionName" class="muted truncate">{{ item.optionName }}</p>
+              <p class="muted tabular-nums">{{ priceText(item.price) }} · 반품 가능 {{ item.returnableQuantity }}개</p>
+            </div>
+            <input
+              v-model.number="returnForm.quantities[item.orderItemId]"
+              type="number"
+              min="0"
+              :max="item.returnableQuantity"
+              class="field w-20 text-right tabular-nums"
+            />
+          </li>
+        </ul>
+        <!-- ⚠ 0 으로 내려 두면 그 품목은 빠진다 — 「전부 반품」이 기본이고 «빼는» 방식이다. -->
+        <p class="muted mt-2">돌려보내지 않을 품목은 수량을 <b>0</b> 으로 두세요.</p>
+
         <label class="field mt-3">
           <span class="field-label">사유</span>
           <input v-model="returnForm.reason" class="field" placeholder="예: 단순 변심, 상품 불량" />
         </label>
-        <div class="mt-3 flex gap-2">
+
+        <!--
+          환불 예정 금액. 🔴 **누르기 전에 보여준다** — 부분 취소와 같은 자리·같은 이유다.
+        -->
+        <dl v-if="returnPreview" class="mt-4 space-y-1 border-t border-line pt-3 text-sm">
+          <div class="flex justify-between gap-4">
+            <dt class="text-ink-500">반품 상품 금액</dt>
+            <dd class="tabular-nums text-ink-900">{{ priceText(returnPreview.amount) }}</dd>
+          </div>
+          <div v-if="returnPreview.couponShare > 0" class="flex justify-between gap-4">
+            <dt class="text-ink-500">회수되는 쿠폰 할인 몫</dt>
+            <dd class="tabular-nums text-ink-900">− {{ priceText(returnPreview.couponShare) }}</dd>
+          </div>
+          <div class="flex justify-between gap-4 font-medium">
+            <dt class="text-ink-900">환불 예정 적립금</dt>
+            <dd class="tabular-nums text-ink-900">{{ priceText(returnPreview.refund) }}</dd>
+          </div>
+        </dl>
+        <!--
+          🔴 **주문이 통째로 비는 경우를 말한다** — 그때만 쿠폰이 돌아온다. 부분 취소의 같은 안내와
+             짝이다: 되돌리기 어려운 조작을 조용히 하지 않는다.
+        -->
+        <p v-if="returningEverything" class="mt-3 text-sm text-danger">
+          남은 품목이 전부 빠집니다 — 주문이 <b>반품 완료</b>로 바뀌고 사용한 쿠폰이 돌아옵니다.
+        </p>
+
+        <div class="mt-4 flex gap-2">
           <button type="button" class="btn btn-primary" @click="submitReturn">반품 요청</button>
           <button type="button" class="btn btn-secondary" @click="returnForm = null">닫기</button>
         </div>
@@ -712,8 +850,14 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <dt class="text-ink-500">거절 사유</dt>
             <dd class="text-ink-900">{{ order.returnRejectedReason }}</dd>
           </div>
-          <div v-if="order.status === 'RETURNED'" class="flex justify-between gap-4">
-            <dt class="text-ink-500">환불 적립금</dt>
+          <!--
+            🔴 **요청 중에도 보여준다**(G-10) — 서버가 «승인하면 얼마인가» 를 계산해 보내므로
+               관리자가 누르기 전에 금액을 본다. 승인 뒤에는 «지금까지 실제로 돌려준 누적» 이다.
+          -->
+          <div v-if="order.refundAmount > 0" class="flex justify-between gap-4">
+            <dt class="text-ink-500">
+              {{ order.status === 'RETURN_REQUESTED' ? '환불 예정 적립금' : '환불 적립금' }}
+            </dt>
             <dd class="tabular-nums text-ink-900">{{ priceText(order.refundAmount) }}</dd>
           </div>
         </dl>

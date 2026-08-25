@@ -112,6 +112,41 @@ public class OrderItem extends BaseTimeEntity {
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
 
+    /**
+     * 🔴 <b>반품 승인으로 빠진 수량</b> (2026-08-25, V58, BACKLOG G-10).
+     *
+     * <p>⚠ <b>{@link #cancelledQuantity} 와 칸을 나눈 이유가 있다</b>(G-10 결정 1) — 취소와 반품은
+     * <b>돈이 다르게 움직이는</b> 사건이다. 취소 환불은 «쓴 적립금만» 계정으로 돌아가고 돈은 seam 인데,
+     * 반품 환불은 «현금결제분 + 사용적립금» 을 <b>함께</b> 적립금으로 준다. 한 칸에 합치면
+     * 주문만 보고 그 둘을 못 가른다.
+     *
+     * <p>⚠ 둘은 <b>합쳐서</b> {@link #quantity} 를 넘을 수 없다 — 한쪽만 검사하면 «1개를 취소하고
+     * 같은 1개를 반품하는» 조합이 통과해 재고가 두 번 돌아간다(2026-08-24 사고 ②와 같은 모양).
+     * DB {@code ck_order_item_returned_qty} 가 마지막으로 잡는다.
+     */
+    @Column(name = "returned_quantity", nullable = false)
+    private long returnedQuantity;
+
+    /**
+     * 고객이 <b>반품 요청한</b> 수량 (V58, G-10 결정 2).
+     *
+     * <p>🔴 <b>«확정된 것» 이 아니라 «요청된 것» 이다.</b> 승인은 «고객이 요청한 대로 해 준다» 라
+     * ({@code ReturnRejectRequest} 주석이 정한 규약) 요청과 승인 사이에 이 값을 들고 있어야 한다.
+     * 승인되면 {@link #returnedQuantity} 로 옮겨가고, <b>거절되면 0 으로 지워진다</b>
+     * ({@code returnRejectedReason} 이 요청을 지우는 것과 같은 자리).
+     */
+    @Column(name = "return_requested_quantity", nullable = false)
+    private long returnRequestedQuantity;
+
+    /**
+     * 마지막 반품 승인 시각 (V58).
+     *
+     * <p>⚠ {@link #cancelledAt} 과 같다 — <b>회차별 이력이 아니다.</b> 여러 번 나눠 반품하면 앞선
+     * 시각은 덮인다. 이력이 필요해지면 별도 테이블이 답이지 컬럼을 늘리는 게 아니다.
+     */
+    @Column(name = "returned_at")
+    private Instant returnedAt;
+
     private OrderItem(UUID productId, UUID variantId, String variantName,
                       String productName, String productImageUrl,
                       long price, Long regularPrice, Long listPrice, long quantity) {
@@ -138,9 +173,21 @@ public class OrderItem extends BaseTimeEntity {
         this.order = order;
     }
 
-    /** 아직 취소되지 않은 수량. 정산은 전부 이 값에서 나온다. */
+    /**
+     * 아직 살아 있는 수량. 정산은 전부 이 값에서 나온다.
+     *
+     * <p>🔴 <b>취소분과 반품분을 둘 다 뺀다</b> (2026-08-25, G-10). 반품이 생기기 전에는
+     * «남은 것 = 원본 − 취소분» 이었는데, 되돌리는 경로가 둘이 되면서 <b>한쪽만 빼면 이미 나간
+     * 물건이 아직 있는 것처럼 보인다.</b> WA §1-2-1 이 «읽는 값이 원본인지 남은 것인지» 를
+     * 대조하라고 하는 자리가 여기다.
+     */
     public long remainingQuantity() {
-        return quantity - cancelledQuantity;
+        return quantity - cancelledQuantity - returnedQuantity;
+    }
+
+    /** 지금 반품 요청을 걸 수 있는 최대 수량 — 이미 요청 중인 몫은 뺀다(두 번 요청 금지). */
+    public long returnableQuantity() {
+        return remainingQuantity() - returnRequestedQuantity;
     }
 
     /** 아직 살아 있는 금액 = 단가 × 남은 수량. {@code lineTotal} 은 원본이라 안 줄어든다. */
@@ -148,9 +195,21 @@ public class OrderItem extends BaseTimeEntity {
         return price * remainingQuantity();
     }
 
-    /** 이 품목이 통째로 빠졌나 — 주문 전체가 취소로 넘어가야 하는지 판단할 때 쓴다. */
+    /**
+     * 이 품목이 <b>취소로</b> 통째로 빠졌나.
+     *
+     * <p>🔴 <b>반품은 안 센다 — 이름 그대로 «취소» 만이다</b> (2026-08-25, G-10).
+     * 이 값이 {@code Order.isFullyCancelledByItems()} 를 거쳐 <b>배송비 환불 스위치</b>가 되는데,
+     * 배송비를 돌려주는 것은 <b>취소일 때뿐</b>이다(G-10 결정 3 — 반품은 물건이 이미 나갔다).
+     * 여기에 반품을 더하면 «반품했더니 배송비까지 돌아오는» 동작이 조용히 생긴다.
+     */
     public boolean isFullyCancelled() {
         return cancelledQuantity >= quantity;
+    }
+
+    /** 이 품목에 남은 것이 하나도 없나 — 취소든 반품이든 빠진 것을 다 센다. */
+    public boolean isFullyGone() {
+        return remainingQuantity() <= 0;
     }
 
     /**
@@ -168,6 +227,46 @@ public class OrderItem extends BaseTimeEntity {
         }
         this.cancelledQuantity += qty;
         this.cancelledAt = Instant.now();
+        return price * qty;
+    }
+
+    /**
+     * 고객이 이 품목 {@code qty} 개의 반품을 요청한다 (V58, G-10).
+     *
+     * <p>⚠ 요청은 <b>덮어쓴다</b>(누적이 아니다). 반품 사이클은 한 번에 하나뿐이라
+     * ({@code Order.requestReturn} 주석) 새 요청이 오면 그것이 지금 요청이다.
+     */
+    void requestReturn(long qty) {
+        if (qty < 0 || qty > remainingQuantity()) {
+            throw new IllegalArgumentException(
+                    "반품 요청 수량이 남은 수량을 벗어난다: qty=" + qty + ", remaining=" + remainingQuantity());
+        }
+        this.returnRequestedQuantity = qty;
+    }
+
+    /** 반품이 거절됐다 — 요청을 지운다. 되돌릴 것이 이것뿐이다(승인 안 했으니 수량·돈은 안 움직였다). */
+    void clearReturnRequest() {
+        this.returnRequestedQuantity = 0;
+    }
+
+    /**
+     * 요청된 반품을 확정한다 — <b>수량만</b> 옮기고 금액 배분은 {@link Order} 가 한다
+     * ({@link #cancel} 과 같은 역할 분담).
+     *
+     * @return 실제로 반품된 금액 (단가 × 확정 수량). 요청이 없었으면 0
+     */
+    long confirmReturn() {
+        long qty = returnRequestedQuantity;
+        if (qty <= 0) {
+            return 0L;
+        }
+        if (qty > remainingQuantity()) {
+            throw new IllegalStateException(
+                    "반품 확정 수량이 남은 수량을 벗어난다: qty=" + qty + ", remaining=" + remainingQuantity());
+        }
+        this.returnedQuantity += qty;
+        this.returnRequestedQuantity = 0;
+        this.returnedAt = Instant.now();
         return price * qty;
     }
 }

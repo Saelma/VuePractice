@@ -59,6 +59,25 @@ public record OrderResponse(
         /** 부분 취소로 계정에 되돌린 사용 적립금 누적. */
         long cancelledPoint,
 
+        /*
+         * ─────────────────────── 부분 반품이 회수해 간 몫 (2026-08-25, G-10)
+         *
+         * 🔴 **위 셋과 «짝»이다** — 취소분만 보내고 반품분을 안 보내면 화면이 «남은 값» 을 못 만든다.
+         *    WA §1-2-1: 한쪽을 손댈 때 반대쪽을 열어 나란히 놓는다.
+         * ⚠ **쿠폰 몫을 «직접» 보낸다** — 취소 쪽은 화면이 `cancelledItemsTotal − refundedAmount −
+         *    cancelledPoint` 로 **거꾸로 풀어** 쓰고 있는데(OrderDetailView `couponTaken`),
+         *    반품은 환불액에 적립금 몫이 포함돼 있어 그 역산이 성립하지 않는다. 있는 값을 보낸다.
+         */
+
+        /** 반품으로 빠진 상품금액 누적. 남은 상품합계 = {@code totalPrice - cancelledItemsTotal - 이 값}. */
+        long returnedItemsTotal,
+
+        /** 반품으로 회수된 쿠폰 할인 몫 누적(금액 비례·내림). */
+        long returnedCouponDiscount,
+
+        /** 반품으로 회수된 사용 적립금 몫 누적. ⚠ 환불액에 이미 포함돼 있다 — 남은 적립금 계산용이다. */
+        long returnedPoint,
+
         List<OrderItemResponse> items,
         Instant createdAt,
         Instant paidAt,
@@ -82,6 +101,16 @@ public record OrderResponse(
         // 이 필드가 생기기 전에는 거절 후 반품 이야기가 화면에서 통째로 사라졌다(오늘 사용자 지적).
         String returnRejectedReason,
         Instant returnRejectedAt,
+        /**
+         * 반품 환불액 — <b>단계에 따라 뜻이 다르다</b> (2026-08-25, G-10에서 갈렸다):
+         * <ul>
+         *   <li>{@code RETURN_REQUESTED} — <b>승인하면 얼마인가</b>(요청된 품목의 몫). 관리자가
+         *       누르기 전에 본다.</li>
+         *   <li>그 밖 — <b>지금까지 실제로 돌려준 누적</b>. 부분 반품을 여러 번 하면 쌓인다.</li>
+         * </ul>
+         * ⚠ <b>기존 전체 반품 주문은 예전 값 그대로다</b> — {@code returned_quantity} 가 0 이라
+         * 누적이 0 이고, 그때만 {@code refundableAmount()} 로 되돌아간다({@link #returnRefundOf}).
+         */
         long refundAmount,
         // 배송지 스냅샷(주문 시점). 배송지 도입(V11) 이전 주문은 전부 null이다.
         String shipRecipient,
@@ -120,6 +149,9 @@ public record OrderResponse(
                 o.getCancelledItemsTotal(),
                 o.refundedAmount(),
                 o.getCancelledPoint(),
+                o.getReturnedItemsTotal(),
+                o.getReturnedCouponDiscount(),
+                o.getReturnedPoint(),
                 o.getItems().stream().map(OrderItemResponse::from).toList(),
                 o.getCreatedAt(),
                 o.getPaidAt(),
@@ -133,9 +165,7 @@ public record OrderResponse(
                 o.getReturnedAt(),
                 o.getReturnRejectedReason(),
                 o.getReturnRejectedAt(),
-                (o.getStatus() == com.glassvue.domain.order.entity.OrderStatus.RETURNED
-                        || o.getStatus() == com.glassvue.domain.order.entity.OrderStatus.RETURN_REQUESTED)
-                        ? o.refundableAmount() : 0L,
+                returnRefundOf(o),
                 o.getShipRecipient(),
                 o.getShipPhone(),
                 o.getShipZipcode(),
@@ -146,5 +176,27 @@ public record OrderResponse(
                 o.getShipCarrier() == null ? null : o.getShipCarrier().getDisplayName(),
                 o.getShipTrackingNo(),
                 trackingUrl);
+    }
+
+    /**
+     * 🔴 <b>세 갈래다</b> (2026-08-25, G-10).
+     *
+     * <p>①요청 중이면 «승인하면 얼마» 를 미리 계산해 준다. ②실제로 돌려준 누적이 있으면 그 값이다.
+     * ③둘 다 아닌데 {@code RETURNED} 이면 <b>부분 반품이 생기기 전에 반품된 옛 주문</b>이라
+     * 예전과 같은 값({@code refundableAmount()})을 그대로 보여준다.
+     *
+     * <p>⚠ ③이 없으면 <b>기존 반품 주문의 환불액이 전부 0 으로 바뀐다</b> — 새 코드에서
+     * {@code refundableAmount()} 는 «남은 것» 기준인데 옛 주문은 {@code returned_quantity} 가 0 이라
+     * 남은 것이 그대로 살아 있어서다. V57 이 «기존 취소 주문의 표시는 안 바뀐다» 로 간 것과 같은 자리다.
+     */
+    private static long returnRefundOf(com.glassvue.domain.order.entity.Order o) {
+        if (o.getStatus() == com.glassvue.domain.order.entity.OrderStatus.RETURN_REQUESTED) {
+            return o.previewRequestedReturns().refundAmount();
+        }
+        if (o.returnRefundedAmount() > 0) {
+            return o.returnRefundedAmount();
+        }
+        return o.getStatus() == com.glassvue.domain.order.entity.OrderStatus.RETURNED
+                ? o.refundableAmount() : 0L;
     }
 }

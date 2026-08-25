@@ -18,6 +18,8 @@ public record OrderCancelledEvent(UUID orderId, UUID memberId, long totalPrice, 
 
     public static OrderCancelledEvent from(Order order) {
         return new OrderCancelledEvent(order.getId(), order.getMemberId(), order.getTotalPrice(),
-                order.getItems().size(), SoldLine.from(order));
+                // 🔴 **«남은» 수량이다** (2026-08-25, G-10). 부분 취소가 이미 자기 몫을 되돌렸으므로
+                //    여기서 원본을 빼면 판매량이 **두 번** 줄어든다 — 08-24 의 재고·적립금 사고와 같은 모양.
+                order.getItems().size(), SoldLine.remaining(order));
     }
 }

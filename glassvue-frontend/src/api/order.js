@@ -126,9 +126,17 @@ export function cancelOrderItemByAdmin(id, orderItemId, quantity) {
   return apiPost(`/api/orders/${id}/admin-cancel-item`, { orderItemId, quantity });
 }
 
-/** 반품 요청(본인, DELIVERED만). 사유 필수. 승인 시 재고 복원 + 적립금 환불(2026-07-24 C-9). */
-export function requestReturn(id, reason) {
-  return apiPost(`/api/orders/${id}/return-request`, { reason });
+/**
+ * 반품 요청(본인, DELIVERED만). 사유 **필수** + 반품할 **품목·수량 필수**(2026-08-25, G-10).
+ *
+ * 🔴 **«비면 전량» 이 아니다.** 서버가 items 를 필수로 받는다 — 화면이 품목을 못 실어 보낸 버그가
+ *    «전부 반품» 이라는 조용한 동작이 되면 안 되기 때문이다(돈이 걸린 쪽엔 그런 기본값을 두지 않는다).
+ *    ⚠ 그래서 **계약이 바뀌었다**: 이 함수와 백엔드는 **같이** 배포해야 한다.
+ *
+ * @param items [{ orderItemId, quantity }] — 수량은 각 품목의 `returnableQuantity` 이하
+ */
+export function requestReturn(id, reason, items) {
+  return apiPost(`/api/orders/${id}/return-request`, { reason, items });
 }
 
 export function approveReturn(id) {

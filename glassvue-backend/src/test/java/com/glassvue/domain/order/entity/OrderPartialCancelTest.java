@@ -68,7 +68,7 @@ class OrderPartialCancelTest {
         assertThat(refundB + refundA).isEqualTo(28_000);
         assertThat(o.getPayAmount()).isZero();
         assertThat(o.refundedAmount()).isEqualTo(28_000);
-        assertThat(o.hasNoRemainingItems()).isTrue();
+        assertThat(o.isFullyCancelledByItems()).isTrue();
     }
 
     @Test
@@ -121,7 +121,7 @@ class OrderPartialCancelTest {
         }
         assertThat(total).isEqualTo(29_000);
         assertThat(itemAt(o, 0).remainingQuantity()).isZero();
-        assertThat(o.hasNoRemainingItems()).isTrue();
+        assertThat(o.isFullyCancelledByItems()).isTrue();
     }
 
     @Test
@@ -210,7 +210,7 @@ class OrderPartialCancelTest {
         long r1 = o.cancelItem(itemAt(o, 0), 1);
         long r2 = o.cancelItem(itemAt(o, 1), 1);
 
-        assertThat(o.hasNoRemainingItems()).isTrue();
+        assertThat(o.isFullyCancelledByItems()).isTrue();
         assertThat(o.getPayAmount()).isZero();
         // 돌려준 것 + 남은 것 = 처음 결제한 것. 배송비가 환불에 포함돼야 이 등식이 성립한다.
         assertThat(o.refundedAmount()).isEqualTo(21_000);
@@ -222,7 +222,7 @@ class OrderPartialCancelTest {
     void untouchedOrderKeepsItsHistoricalAmount() {
         Order o = order(5_000, 2_000, 3_000, 15_000, 10_000);
         o.cancel(null);
-        assertThat(o.hasNoRemainingItems()).isFalse();
+        assertThat(o.isFullyCancelledByItems()).isFalse();
         assertThat(o.getPayAmount()).isEqualTo(21_000); // 예전처럼 «결제했던 금액»
     }
 
@@ -287,6 +287,6 @@ class OrderPartialCancelTest {
         assertThat(o.refundedAmount()).isZero();
         assertThat(o.remainingItemsTotal()).isEqualTo(o.getTotalPrice());
         assertThat(o.getPayAmount()).isEqualTo(10_000 - 5_000 - 2_000 + 3_000);
-        assertThat(o.hasNoRemainingItems()).isFalse();
+        assertThat(o.isFullyCancelledByItems()).isFalse();
     }
 }

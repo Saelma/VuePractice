@@ -74,11 +74,11 @@ class OrderRepositoryIntegrationTest {
             case CANCELLED -> o -> o.cancel(null); // 사유는 선택(B-17) — 여기선 상태만 본다
             case RETURN_REQUESTED -> o -> {
                 o.pay(); o.ship(DeliveryCarrier.CJ, "123"); o.deliver();
-                o.requestReturn("ZZ-반품검증");
+                requestFullReturn(o, "ZZ-반품검증");
             };
             case RETURNED -> o -> {
                 o.pay(); o.ship(DeliveryCarrier.CJ, "123"); o.deliver();
-                o.requestReturn("ZZ-반품검증"); o.approveReturn();
+                requestFullReturn(o, "ZZ-반품검증"); o.applyRequestedReturns();
             };
         };
     }
@@ -176,4 +176,15 @@ class OrderRepositoryIntegrationTest {
         return "20260101-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
+
+    /**
+     * 전량 반품 요청 — 부분 반품(2026-08-25, G-10)이 생기면서 <b>«무엇을 몇 개»를 말해야</b> 한다.
+     *
+     * <p>⚠ <b>«비면 전량» 같은 기본값을 두지 않았다</b>(G-10 결정 2 주석) — 그래서 옛 호출부가
+     * 전부 컴파일 에러로 드러났고, 여기서 «전량» 이라고 <b>명시</b>하게 됐다.
+     */
+    private static void requestFullReturn(Order order, String reason) {
+        order.requestReturn(reason, order.getItems().stream()
+                .collect(java.util.stream.Collectors.toMap(OrderItem::getId, OrderItem::remainingQuantity)));
+    }
 }
