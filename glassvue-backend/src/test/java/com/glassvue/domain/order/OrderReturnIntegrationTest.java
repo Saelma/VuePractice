@@ -116,8 +116,38 @@ class OrderReturnIntegrationTest {
 
     private void requestReturn(String buyer, String orderId, String reason) throws Exception {
         mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
-                .contentType(JSON).content("{\"reason\":\"" + reason + "\"}")).andExpect(status().isOk());
+                .contentType(JSON).content(fullReturnBody(buyer, orderId, reason))).andExpect(status().isOk());
     }
+
+    /**
+     * 반품 요청 본문 — <b>남은 것 전부</b>를 담는다 (2026-08-25, G-10).
+     *
+     * <p>🔴 <b>«비면 전량» 같은 기본값을 안 뒀다</b>(G-10 결정 2) — 화면이 품목을 못 실어 보낸 버그가
+     * «전부 반품» 이라는 조용한 동작이 되면 안 되기 때문이다. 그래서 <b>계약이 바뀌었고</b>
+     * 옛 호출부가 전부 400 으로 드러났다. 여기서 «전량» 이라고 <b>명시</b>한다.
+     *
+     * <p>⚠ 수량은 주문 응답의 {@code remainingQuantity} 에서 읽는다 — 손으로 적으면 부분 취소가
+     * 섞인 주문에서 어긋난다.
+     */
+    private String fullReturnBody(String token, String orderId, String reason) throws Exception {
+        String order = mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", token))
+                .andReturn().getResponse().getContentAsString();
+        List<String> ids = JsonPath.read(order, "$.data.items[*].orderItemId");
+        List<Integer> remaining = JsonPath.read(order, "$.data.items[*].remainingQuantity");
+        StringBuilder items = new StringBuilder();
+        for (int i = 0; i < ids.size(); i++) {
+            if (remaining.get(i) <= 0) {
+                continue;
+            }
+            if (!items.isEmpty()) {
+                items.append(',');
+            }
+            items.append("{\"orderItemId\":\"").append(ids.get(i))
+                 .append("\",\"quantity\":").append(remaining.get(i)).append('}');
+        }
+        return "{\"reason\":\"" + reason + "\",\"items\":[" + items + "]}";
+    }
+
 
     private long balance() {
         entityManager.flush();
@@ -338,8 +368,10 @@ class OrderReturnIntegrationTest {
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         String orderId = JsonPath.read(body, "$.data");
 
+        // ⚠ **품목은 제대로 실어 보낸다** — 안 그러면 «품목이 없어서» 400 이 나고, 여기서 보려는
+        //    «배송완료가 아니라서» 400 과 구분되지 않는다(WA §3-3: 0/실패에는 이유가 둘 있다).
         mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
-                        .contentType(JSON).content("{\"reason\":\"변심\"}"))
+                        .contentType(JSON).content(fullReturnBody(buyer, orderId, "변심")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("ORDER-400R"));
     }

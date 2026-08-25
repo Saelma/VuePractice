@@ -16,6 +16,7 @@ import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.jayway.jsonpath.JsonPath;
+import java.util.List;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -234,7 +235,7 @@ class AdminSalesStatsIntegrationTest {
         deliver(admin, orderId);
         mockMvc.perform(post("/api/orders/" + orderId + "/return-request")
                         .header("Authorization", buyer).contentType(JSON)
-                        .content("{\"reason\":\"ZZ-반품요청\"}"))
+                        .content(fullReturnBody(buyer, orderId, "ZZ-반품요청")))
                 .andExpect(status().isOk());
 
         // 🔴 요청만으로는 매출이 그대로여야 한다.
@@ -259,7 +260,7 @@ class AdminSalesStatsIntegrationTest {
         deliver(admin, orderId);
         mockMvc.perform(post("/api/orders/" + orderId + "/return-request")
                         .header("Authorization", buyer).contentType(JSON)
-                        .content("{\"reason\":\"ZZ-반품요청\"}"))
+                        .content(fullReturnBody(buyer, orderId, "ZZ-반품요청")))
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/orders/" + orderId + "/return-approve").header("Authorization", admin))
                 .andExpect(status().isOk());
@@ -529,5 +530,34 @@ class AdminSalesStatsIntegrationTest {
         mockMvc.perform(get(URL).header("Authorization", admin))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.allTime.itemSales").value(before + expectedDelta));
+    }
+
+    /**
+     * 반품 요청 본문 — <b>남은 것 전부</b>를 담는다 (2026-08-25, G-10).
+     *
+     * <p>🔴 <b>«비면 전량» 같은 기본값을 안 뒀다</b>(G-10 결정 2) — 화면이 품목을 못 실어 보낸 버그가
+     * «전부 반품» 이라는 조용한 동작이 되면 안 되기 때문이다. 그래서 <b>계약이 바뀌었고</b>
+     * 옛 호출부가 전부 400 으로 드러났다. 여기서 «전량» 이라고 <b>명시</b>한다.
+     *
+     * <p>⚠ 수량은 주문 응답의 {@code remainingQuantity} 에서 읽는다 — 손으로 적으면 부분 취소가
+     * 섞인 주문에서 어긋난다.
+     */
+    private String fullReturnBody(String token, String orderId, String reason) throws Exception {
+        String order = mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", token))
+                .andReturn().getResponse().getContentAsString();
+        List<String> ids = JsonPath.read(order, "$.data.items[*].orderItemId");
+        List<Integer> remaining = JsonPath.read(order, "$.data.items[*].remainingQuantity");
+        StringBuilder items = new StringBuilder();
+        for (int i = 0; i < ids.size(); i++) {
+            if (remaining.get(i) <= 0) {
+                continue;
+            }
+            if (!items.isEmpty()) {
+                items.append(',');
+            }
+            items.append("{\"orderItemId\":\"").append(ids.get(i))
+                 .append("\",\"quantity\":").append(remaining.get(i)).append('}');
+        }
+        return "{\"reason\":\"" + reason + "\",\"items\":[" + items + "]}";
     }
 }

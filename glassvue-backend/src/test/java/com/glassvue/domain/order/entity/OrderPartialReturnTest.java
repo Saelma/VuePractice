@@ -111,6 +111,39 @@ class OrderPartialReturnTest {
     }
 
     @Test
+    @DisplayName("🔴 **한 회차에 두 품목** — 회차 안에서도 «이미 뗀 몫» 을 빼 가며 계산한다")
+    void twoItemsInOneRound() {
+        // 🔴 **이 테스트는 변형 주입이 찾아낸 구멍이다** (2026-08-25). 나머지 테스트가 전부
+        //    «한 회차에 품목 하나» 라서, 분모에서 회차 누적(dItems)을 빼는 줄을 지워도
+        //    **아무도 안 빨개졌다.** 그런데 실제 흐름은 고객이 여러 품목을 한 번에 고르는 것이다.
+        Order o = delivered(280, 5_000, 2_000, 20_000, 15_000);
+        o.requestReturn("ZZ-사유", Map.of(itemAt(o, 0).getId(), 1L, itemAt(o, 1).getId(), 1L));
+
+        ReturnSettlement s = o.applyRequestedReturns();
+
+        // ⚠ **한 회차 안에서도 분모가 줄어든다**: A 는 35,000 을, B 는 남은 15,000 을 분모로 쓴다.
+        //    A: 쿠폰 5000×20000/35000 = 2857.1 → 2857 · 적립금 2000×20000/35000 = 1142.8 → 1142
+        //    B: 쿠폰 2143×15000/15000 = 2143   · 적립금 858×15000/15000 = 858 (남은 몫이 전부 넘어간다)
+        assertThat(o.getReturnedCouponDiscount()).isEqualTo(5_000);
+        assertThat(o.getReturnedPoint()).isEqualTo(2_000);
+
+        // 🔴 합계는 회차를 어떻게 쪼개든 같다 — 전액 수렴이 구조로 보장된다는 주장의 핵심이다.
+        assertThat(s.refundAmount()).isEqualTo(30_000);      // 17,143 + 12,857
+        assertThat(s.earnedToReverse()).isEqualTo(280);      // 160 + 120
+        assertThat(s.purchaseToRemove()).isEqualTo(28_000);  // 16,001 + 11,999
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.RETURNED);
+
+        // ⚠ **품목별 몫은 순서에 따라 다르다**(내림이라 경로 의존이다). 두 회차로 나눠 B 를 먼저
+        //    빼면 B 가 2,142/857 을 가져가는데, 한 회차로 A 부터 돌면 B 가 2,143/858 을 가져간다.
+        //    🔴 합계만 같고 자리는 다르다 — 그래서 회수 몫을 **저장**한다(유도할 수 없는 값이다).
+        Order twoRounds = delivered(280, 5_000, 2_000, 20_000, 15_000);
+        request(twoRounds, 1, 1);
+        twoRounds.applyRequestedReturns();
+        assertThat(twoRounds.getReturnedCouponDiscount()).isEqualTo(2_142);
+        assertThat(twoRounds.getReturnedPoint()).isEqualTo(857);
+    }
+
+    @Test
     @DisplayName("🔴 잔돈이 가장 고약한 경우 — 1,000원을 10,000원짜리 셋에 나눠도 합이 정확히 1,000")
     void remainderIsAbsorbedByTheLastItem() {
         Order o = delivered(0, 1_000, 0, 10_000, 10_000, 10_000);
@@ -124,6 +157,38 @@ class OrderPartialReturnTest {
         assertThat(o.getReturnedCouponDiscount()).isEqualTo(1_000);
         assertThat(refund).isEqualTo(29_000);
         assertThat(o.remainingCouponDiscount()).isZero();
+    }
+
+    @Test
+    @DisplayName("🔴 한 품목 3개를 세 번에 나눠 반품 — 8,334 · 8,333 · 8,333 (합 25,000)")
+    void sameItemAcrossThreeRounds() {
+        // ⚠ 회차마다 **분모가 줄어** 쿠폰 몫이 1,666 → 1,667 → 1,667 로 갈린다.
+        //    화면 미리보기가 이 값을 그대로 내야 한다(뷰 테스트가 8,333 을 단언한다).
+        Order o = delivered(0, 5_000, 0, 10_000);
+        // 위 헬퍼는 품목 하나에 수량 1 이라 수량 3 짜리를 직접 만든다.
+        Order three = Order.create(UUID.randomUUID(), "구매자닉",
+                List.of(OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null, "지바", null,
+                        10_000, 10_000L, null, 3)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
+                0, "20260825-0003", "쿠폰", 5_000L, UUID.randomUUID(), 0L);
+        three.pay();
+        three.ship(DeliveryCarrier.CJ, "123");
+        three.deliver();
+        assertThat(o.getOrderNo()).isNotEqualTo(three.getOrderNo());   // 표본이 섞이지 않았다
+
+        request(three, 0, 1);
+        assertThat(three.applyRequestedReturns().refundAmount()).isEqualTo(8_334);
+        assertThat(three.getReturnedCouponDiscount()).isEqualTo(1_666);
+
+        // 🔴 **여기가 화면 미리보기와 맞물리는 자리다** — 두 번째 회차의 분모는 20,000 이다.
+        request(three, 0, 1);
+        assertThat(three.previewRequestedReturns().refundAmount()).isEqualTo(8_333);
+        assertThat(three.applyRequestedReturns().refundAmount()).isEqualTo(8_333);
+
+        request(three, 0, 1);
+        assertThat(three.applyRequestedReturns().refundAmount()).isEqualTo(8_333);
+        assertThat(three.getReturnedCouponDiscount()).isEqualTo(5_000);   // 수렴
+        assertThat(three.getStatus()).isEqualTo(OrderStatus.RETURNED);
     }
 
     // ── ⚠ 미리 보기 = 확정 ──────────────────────────────────────────────

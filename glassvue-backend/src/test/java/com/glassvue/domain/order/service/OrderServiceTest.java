@@ -30,6 +30,7 @@ import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
+import com.glassvue.domain.order.event.OrderItemCancelledEvent;
 import com.glassvue.domain.order.event.OrderReturnRequestedEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
@@ -38,6 +39,7 @@ import com.glassvue.global.policy.ShippingPolicy;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -785,5 +787,160 @@ class OrderServiceTest {
     private static java.util.Map<UUID, Long> fullReturnOf(Order order) {
         return order.getItems().stream()
                 .collect(java.util.stream.Collectors.toMap(OrderItem::getId, OrderItem::remainingQuantity));
+    }
+
+    // ─────────────────── 부분 반품 (2026-08-25, BACKLOG G-10) ───────────────────
+
+    /** 배송완료까지 밀고 적립을 스냅샷한 주문 하나 — 반품은 그 적립을 회수한다. */
+    private Order deliveredOrder(UUID productId, long unitPrice, long qty, long earned) {
+        Order order = orderWith(OrderItem.of(productId, productId, null, "지바", null,
+                unitPrice, unitPrice, null, qty));
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        order.deliver();
+        order.recordEarnedPoint(earned);
+        return order;
+    }
+
+    /**
+     * 🔴 <b>부분 반품 승인 — 되돌리는 것이 «요청된 몫만»이다.</b>
+     *
+     * <p>⚠ 예전 코드는 «남은 수량 전부» 를 복원하고 {@code refundableAmount()} 전액을 환불했다.
+     * 전량 반품뿐이던 시절엔 그게 같은 값이었지만 <b>부분이 생기면 갈린다</b> — 1개만 요청했는데
+     * 2개가 창고로 돌아가고 돈도 두 배로 나간다. 2026-08-24 사고와 <b>정확히 같은 모양</b>이다.
+     */
+    @Test
+    @DisplayName("🔴 부분 반품 승인: 요청한 1개만 재고 복원 · 그 몫만 환불 · **쿠폰은 안 돌려준다**")
+    void approvePartialReturn_onlyRequestedShare() {
+        UUID p1 = UUID.randomUUID();
+        UUID memberCouponId = UUID.randomUUID();
+        Order order = Order.create(memberId, "구매자닉",
+                List.of(OrderItem.of(p1, p1, null, "지바", null, 10_000, 10_000L, null, 2)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
+                0, "20260825-0010", "쿠폰", 4_000L, memberCouponId, 0L);
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        order.deliver();
+        order.recordEarnedPoint(160);
+        order.requestReturn("ZZ-한 개만", Map.of(order.getItems().get(0).getId(), 1L));
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+
+        orderService.approveReturn(order.getId(), admin);
+
+        // 재고는 **요청한 1개만**. 남은 수량(2개)이 아니다.
+        verify(productCommandService).increaseStock(p1, 1, StockChangeReason.RETURN, order.getId());
+        // 반품금액 10,000 − 쿠폰 몫(4000×10000/20000 = 2,000) = 환불 8,000
+        // 등급 차감 8,000 · 적립 회수 160×8000/16000 = 80
+        verify(pointService).refundReturnedOrder(memberId, 8_000L, 80L, 8_000L, order.getId());
+        // 🔴 **쿠폰은 아직 이 주문에 걸려 있다** — 남은 1개가 그 할인을 쓰고 있다(G-10, G-4 와 같은 규칙).
+        verify(couponService, never()).restore(any());
+        // ⚠ 다시 요청할 수 있어야 하므로 배송완료로 되돌아간다.
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(order.getItems().get(0).remainingQuantity()).isEqualTo(1);
+
+        // 판매량도 **1개만** 되돌린다.
+        OrderReturnedEvent event = capturePublished(OrderReturnedEvent.class);
+        assertThat(event.refundedPoint()).isEqualTo(8_000L);
+        assertThat(event.lines()).singleElement()
+                .satisfies(l -> assertThat(l.quantity()).isEqualTo(1));
+    }
+
+    @Test
+    @DisplayName("🔴 마지막 남은 것까지 반품하면 RETURNED 로 떨어지고 **그때 쿠폰을 복구한다**")
+    void approveReturn_lastItemRestoresCoupon() {
+        UUID p1 = UUID.randomUUID();
+        UUID memberCouponId = UUID.randomUUID();
+        Order order = Order.create(memberId, "구매자닉",
+                List.of(OrderItem.of(p1, p1, null, "지바", null, 10_000, 10_000L, null, 2)),
+                "수령인", "010-1234-5678", "06134", "서울시 강남구 테헤란로 1", "3층", null,
+                0, "20260825-0011", "쿠폰", 4_000L, memberCouponId, 0L);
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        order.deliver();
+        order.requestReturn("ZZ-전부", Map.of(order.getItems().get(0).getId(), 2L));
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+
+        orderService.approveReturn(order.getId(), admin);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURNED);
+        verify(couponService).restore(memberCouponId);
+    }
+
+    @Test
+    @DisplayName("⚠ 반품 요청 검증: 품목을 하나도 안 고르면 거부한다 (빈 요청을 만들지 않는다)")
+    void requestReturn_requiresItems() {
+        Order order = deliveredOrder(UUID.randomUUID(), 10_000, 2, 0);
+        when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
+
+        assertErrorCode(() -> orderService.requestReturn(orderId, memberId, "ZZ-사유", Map.of()),
+                ErrorCode.ORDER_RETURN_ITEM_REQUIRED);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("🔴 반품 요청 검증: 남은 수량을 넘기면 거부한다 — **취소와 코드가 갈린다**")
+    void requestReturn_rejectsTooMuch() {
+        Order order = deliveredOrder(UUID.randomUUID(), 10_000, 2, 0);
+        UUID itemId = order.getItems().get(0).getId();
+        when(orderRepository.findByIdAndMemberId(orderId, memberId)).thenReturn(Optional.of(order));
+
+        // ⚠ 문구가 «취소 수량» 이면 고객이 «취소한 적 없는데?» 를 본다 — 그래서 코드를 나눴다.
+        assertErrorCode(() -> orderService.requestReturn(orderId, memberId, "ZZ-사유", Map.of(itemId, 3L)),
+                ErrorCode.ORDER_RETURN_QUANTITY_INVALID);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    // ─────── 🔴 판매량 되돌림 — G-10 착수 중 찾은 G-4 구멍 (2026-08-25) ───────
+
+    /**
+     * 🔴 <b>부분 취소도 판매량을 되돌린다.</b>
+     *
+     * <p>⚠ 이 줄이 없으면 «부분 취소하고 그대로 두는» 정상 경로에서 {@code product.sold_count} 가
+     * 안 줄어 <b>인기순이 틀어진다</b>. 부분 취소는 {@code OrderCancelledEvent} 를 <b>전량이 빠질
+     * 때만</b> 내기 때문이다.
+     *
+     * <p>🔴 <b>발견 시점에 어긋난 값은 없었다</b> — 08-24 검증의 세 주문이 전부 {@code CANCELLED} 로
+     * 끝나 «+전량 / −전량» 이 상쇄됐다. <b>즉 우연히 맞았다</b>(08-24 §5-4 매출 집계와 같은 모양).
+     */
+    @Test
+    @DisplayName("🔴 부분 취소: 판매량을 **취소한 수량만큼만** 되돌린다 (G-4 가 두고 간 자리)")
+    void cancelItem_reversesSalesByCancelledQuantityOnly() {
+        UUID p1 = UUID.randomUUID();
+        Order order = orderWith(OrderItem.of(p1, p1, null, "지바", null, 10_000, 10_000L, null, 3));
+        order.pay();
+        when(orderRepository.findByIdAndMemberId(order.getId(), memberId)).thenReturn(Optional.of(order));
+
+        orderService.cancelItem(order.getId(), memberId, order.getItems().get(0).getId(), 1);
+
+        OrderItemCancelledEvent event = capturePublished(OrderItemCancelledEvent.class);
+        assertThat(event.lines()).singleElement().satisfies(l -> {
+            assertThat(l.productId()).isEqualTo(p1);
+            assertThat(l.quantity()).isEqualTo(1);   // 3 이 아니다
+        });
+        // ⚠ **«주문이 취소되었습니다» 알림은 안 나간다** — 1개만 뺐는데 그렇게 말하면 거짓이다.
+        verify(eventPublisher, never()).publishEvent(any(OrderCancelledEvent.class));
+    }
+
+    /**
+     * 🔴 <b>부분 취소 뒤 전체 취소 — 판매량이 «두 번» 줄면 안 된다.</b>
+     *
+     * <p>주문 시점에 +3 이 올라갔고 부분 취소가 −1 을 했으므로, 전체 취소는 <b>남은 2</b> 만 빼야
+     * 정확히 상쇄된다. 원본 3 을 빼면 합계 −4 로 <b>안 판 것보다 더 줄어든다.</b>
+     * ⚠ 2026-08-24 의 재고·적립금 사고와 <b>같은 모양</b>이다 — 원본을 읽느냐 남은 것을 읽느냐.
+     */
+    @Test
+    @DisplayName("🔴 부분 취소 뒤 전체 취소: 판매량은 **남은 수량**만 되돌린다 (+3 −1 −2 = 0)")
+    void cancelAfterPartial_reversesRemainingOnly() {
+        UUID p1 = UUID.randomUUID();
+        Order order = orderWith(OrderItem.of(p1, p1, null, "지바", null, 10_000, 10_000L, null, 3));
+        order.pay();
+        when(orderRepository.findByIdAndMemberId(order.getId(), memberId)).thenReturn(Optional.of(order));
+        orderService.cancelItem(order.getId(), memberId, order.getItems().get(0).getId(), 1);
+
+        orderService.cancel(order.getId(), memberId, null);
+
+        OrderCancelledEvent cancelled = capturePublished(OrderCancelledEvent.class);
+        assertThat(cancelled.lines()).singleElement()
+                .satisfies(l -> assertThat(l.quantity()).isEqualTo(2));
     }
 }
