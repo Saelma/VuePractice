@@ -33,18 +33,53 @@ import org.springframework.data.repository.query.Param;
  *       그건 환불이라 매출이 아니다.</li>
  *   <li><b>시각</b>: {@code created_at} 이 아니라 <b>{@code paid_at}</b>. 주문한 시점은 영영 결제되지 않을 수도
  *       있고, 매출은 돈이 들어온 시점에 잡는다.</li>
- *   <li>🔴 <b>부분 취소는 매출에서 빠진다</b> (2026-08-24, G-4). 상품매출은 <b>원본이 아니라
- *       «남은 것»</b> 이다 — {@code (total_price - cancelled_items_total) -
- *       (coupon_discount - cancelled_coupon_discount)}. ⚠ 안 빼면 <b>PAID 주문을 부분 취소해도
- *       매출이 그대로</b>다: 상태가 PAID 로 남고 {@code paid_at} 도 있어 이 쿼리에 계속 잡히는데
- *       원본 금액을 읽기 때문이다. 전량이 빠지면 주문이 CANCELLED 로 떨어져 상태 필터에서 빠진다.
- *       ⚠ <b>배송비는 안 뺀다</b> — 부분 취소로 움직이지 않는 값이다(G-4 결정 2).</li>
+ *   <li>🔴 <b>금액</b>: 판정은 {@link #ITEM_SALES} <b>한 곳</b>에 있다 — <b>여기에도, 테스트에도
+ *       옮겨 적지 않는다.</b> 상품매출은 원본이 아니라 <b>«남은 것»</b> 이고, 취소분과 반품분을 둘 다 뺀다.
+ *       ⚠ 안 빼면 <b>부분 취소·부분 반품을 해도 매출이 그대로</b>다: 부분 취소된 주문은 {@code PAID} 로,
+ *       부분 반품된 주문은 <b>{@code DELIVERED} 로 되돌아가</b> 둘 다 매출 상태에 남기 때문이다.
+ *       전량이 빠져야 {@code CANCELLED}·{@code RETURNED} 로 떨어져 상태 필터에서 빠진다.
+ *       ⚠ 상태 목록에서 겪은 사고가 <b>금액 식에서 되풀이됐다</b>(2026-08-25, §I-1) —
+ *       <b>복사본이 있으면 그 복사본이 낡는다.</b></li>
  *   <li><b>금액</b>: 상품매출({@code total_price - coupon_discount})과 배송비({@code shipping_fee})를
  *       <b>합치지 않는다</b>. 배송비는 그대로 택배비로 나가는 돈이라 상품매출과 섞으면
  *       장사가 잘되는지 알 수 없어진다(사용자 결정, 2026-07-24).</li>
  * </ul>
  */
 public interface OrderStatsRepository extends Repository<Order, UUID> {
+
+    /* ═══════════ 🔴 매출의 «금액» 정의 — 여기 한 곳에만 적는다 (2026-08-25, BACKLOG §I-1) ═══════════
+     *
+     * ⚠ **상태 목록을 `OrderStatus.isRevenue()` 한 곳에 둔 것과 같은 이유**다. 2026-08-11 에 상태를
+     *   여러 곳에 적어 뒀다가 «다 안 자란» 사고가 났고, 그때는 **상태만** 옮겼다 —
+     *   **금액 식은 계속 손으로 베낀 채였다.**
+     *
+     * 🔴 **그래서 같은 사고가 금액 식에서 되풀이됐다**: 08-24 가 부분 취소분을 빼며 이 식을 손으로
+     *   넣었고(쿼리 둘 + 클래스 주석 + 통합 테스트 = **사본 넷**), 08-25 가 부분 반품(`returned_*`)을
+     *   만들면서 **그 넷을 안 열었다.** 운영 매출이 **56,000원 부풀려진 채** 돌았다.
+     *   ⚠ 더 나쁜 것: 테스트 사본도 **같이** 틀려서 **아무것도 안 빨개졌다.**
+     *   WA §1-2-1: *「손으로 열거하는 코드를 손으로 열거하는 테스트로 지키면 둘이 같이 어긋난다」*.
+     *
+     * → **상수로 뽑아 쿼리도 테스트도 «읽어 가게» 한다.** `@Query` 값은 컴파일 상수 식이어야 하므로
+     *   `static final String` 연결로만 조립한다(런타임 조립 불가 — 그래서 텍스트 블록을 포기했다).
+     * ⚠ 🔴 **이 상수가 지키는 것은 «식이 옳은가» 가 아니라 «사본이 안 갈리는가» 다.**
+     *   식이 옳은지는 **값으로 보는 테스트**가 지킨다(`AdminSalesStatsIntegrationTest` 의 부분 반품 절).
+     */
+
+    /** 아직 살아 있는 상품합계 — 취소분과 반품분을 <b>둘 다</b> 뺀다. */
+    String REMAINING_ITEMS = "(o.total_price - o.cancelled_items_total - o.returned_items_total)";
+
+    /** 아직 걸려 있는 쿠폰 할인 — 회수된 몫을 뺀다. */
+    String REMAINING_DISCOUNT =
+            "(o.coupon_discount - o.cancelled_coupon_discount - o.returned_coupon_discount)";
+
+    /**
+     * 🔴 <b>상품매출</b> = 남은 상품합계 − 남은 쿠폰할인.
+     *
+     * <p>⚠ <b>배송비는 안 섞는다</b> — 그대로 택배비로 나가는 돈이라 합치면 «얼마 팔았나» 를 알 수
+     * 없어진다(2026-07-24 결정). ⚠ <b>빼지도 않는다</b> — 부분 취소로 안 움직이고(G-4 결정 2)
+     * 부분 반품도 안 돌려준다(G-10 결정 3).
+     */
+    String ITEM_SALES = REMAINING_ITEMS + " - " + REMAINING_DISCOUNT;
 
     /**
      * 기간 요약 — 주문 수 · 상품매출 · 배송비 · 할인액.
@@ -61,17 +96,15 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
      *
      * @return {@code [[주문수, 상품매출, 배송비, 할인액]]} — 항상 한 행
      */
-    @Query(value = """
-            SELECT COUNT(*),
-                   NVL(SUM((o.total_price - o.cancelled_items_total)
-                         - (o.coupon_discount - o.cancelled_coupon_discount)), 0),
-                   NVL(SUM(o.shipping_fee), 0),
-                   NVL(SUM(o.coupon_discount - o.cancelled_coupon_discount), 0)
-              FROM orders o
-             WHERE o.status IN (:statuses)
-               AND o.paid_at >= :from
-               AND o.paid_at <  :to
-            """, nativeQuery = true)
+    @Query(value = "SELECT COUNT(*),"
+            + " NVL(SUM(" + ITEM_SALES + "), 0),"
+            + " NVL(SUM(o.shipping_fee), 0),"
+            + " NVL(SUM(" + REMAINING_DISCOUNT + "), 0)"
+            + " FROM orders o"
+            + " WHERE o.status IN (:statuses)"
+            + "   AND o.paid_at >= :from"
+            + "   AND o.paid_at <  :to",
+            nativeQuery = true)
     List<Object[]> summarize(@Param("statuses") Collection<String> statuses,
                              @Param("from") Instant from,
                              @Param("to") Instant to);
@@ -87,19 +120,17 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
      *
      * @return {@code [yyyy-MM-dd, 주문수, 상품매출, 배송비]} 여러 행, 날짜 오름차순
      */
-    @Query(value = """
-            SELECT TO_CHAR(o.paid_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD'),
-                   COUNT(*),
-                   NVL(SUM((o.total_price - o.cancelled_items_total)
-                         - (o.coupon_discount - o.cancelled_coupon_discount)), 0),
-                   NVL(SUM(o.shipping_fee), 0)
-              FROM orders o
-             WHERE o.status IN (:statuses)
-               AND o.paid_at >= :from
-               AND o.paid_at <  :to
-             GROUP BY TO_CHAR(o.paid_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
-             ORDER BY 1
-            """, nativeQuery = true)
+    @Query(value = "SELECT TO_CHAR(o.paid_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD'),"
+            + " COUNT(*),"
+            + " NVL(SUM(" + ITEM_SALES + "), 0),"
+            + " NVL(SUM(o.shipping_fee), 0)"
+            + " FROM orders o"
+            + " WHERE o.status IN (:statuses)"
+            + "   AND o.paid_at >= :from"
+            + "   AND o.paid_at <  :to"
+            + " GROUP BY TO_CHAR(o.paid_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')"
+            + " ORDER BY 1",
+            nativeQuery = true)
     List<Object[]> daily(@Param("statuses") Collection<String> statuses,
                          @Param("from") Instant from,
                          @Param("to") Instant to);

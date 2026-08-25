@@ -15,6 +15,7 @@ import com.glassvue.domain.catalog.repository.ProductVariantRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
+import com.glassvue.domain.order.repository.OrderStatsRepository;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
 import jakarta.persistence.EntityManager;
@@ -156,6 +157,55 @@ class AdminSalesStatsIntegrationTest {
         String body = mockMvc.perform(get(URL).header("Authorization", admin))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         return ((Number) JsonPath.read(body, "$.data.allTime.itemSales")).longValue();
+    }
+
+    /**
+     * 🔴 <b>부분 반품은 그 몫만큼 매출에서 빠진다</b> (2026-08-25, BACKLOG §I-1).
+     *
+     * <p>⚠ <b>이 테스트가 «식이 옳은가» 를 지키는 유일한 자리다.</b> 정의를 상수로 모았으므로
+     * {@code matchesDirectAggregate} 는 이제 사본 대조를 못 한다 — 여기서 <b>값으로</b> 본다.
+     *
+     * <p>🔴 <b>상태로 빠지는 것이 아니라 «금액» 으로 빠져야 한다.</b> 부분 반품 승인은 주문을
+     * {@code RETURNED} 가 아니라 <b>{@code DELIVERED} 로 되돌리고</b>, 그건 매출 상태다
+     * ({@code OrderStatus.isRevenue}). 즉 상태 필터로는 절대 안 빠진다 — 그래서 08-25 에
+     * <b>운영 매출이 56,000원 부풀려진 채</b> 돌았다.
+     * ⚠ 그래서 <b>주문이 여전히 DELIVERED 인 것을 함께 단언</b>한다. 그게 안 걸리면 이 테스트는
+     * «상태로 빠져서» 통과하는 다른 것을 재게 된다(WA §3-3).
+     */
+    @Test
+    @DisplayName("🔴 부분 반품은 그 몫만큼 매출에서 빠진다 — 주문은 DELIVERED 로 남는데도")
+    void partialReturnReducesRevenue() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+
+        String orderId = order(buyer, 3);          // 10,000 × 3 = 30,000 (쿠폰·적립금 없음)
+        pay(buyer, orderId);
+        ship(admin, orderId);
+        deliver(admin, orderId);
+        long afterDelivered = allTimeItemSales(admin);
+
+        // 3개 중 **1개만** 반품 요청 → 승인
+        String detail = mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andReturn().getResponse().getContentAsString();
+        String itemId = JsonPath.read(detail, "$.data.items[0].orderItemId");
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
+                        .contentType(JSON)
+                        .content("{\"reason\":\"ZZ-일부만\",\"items\":[{\"orderItemId\":\"" + itemId
+                                + "\",\"quantity\":1}]}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-approve").header("Authorization", admin))
+                .andExpect(status().isOk());
+
+        // 🔴 대조군 먼저 — 상태가 매출 상태로 **남아 있어야** 이 단언이 뜻을 갖는다.
+        String after = mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andReturn().getResponse().getContentAsString();
+        org.assertj.core.api.Assertions.assertThat((String) JsonPath.read(after, "$.data.status"))
+                .as("부분 반품은 DELIVERED 로 되돌린다 — 상태 필터로는 안 빠진다")
+                .isEqualTo("DELIVERED");
+
+        org.assertj.core.api.Assertions.assertThat(allTimeItemSales(admin))
+                .as("반품된 1개(10,000)만큼 매출이 줄어야 한다")
+                .isEqualTo(afterDelivered - 10_000);
     }
 
     @Test
@@ -354,19 +404,20 @@ class AdminSalesStatsIntegrationTest {
         String statusList = com.glassvue.domain.order.entity.OrderStatus.revenueStatusNames().stream()
                 .map(s -> "'" + s + "'")
                 .collect(java.util.stream.Collectors.joining(","));
-        // 🔴 **부분 취소분을 뺀다**(2026-08-24, G-4). 상품매출은 원본이 아니라 «남은 것» 이다.
-        //    ⚠ 이 식을 안 따라오면 위 주석이 말한 그 사고가 **또** 난다 — 지금은 부분 취소된 주문이
-        //       전부 CANCELLED(매출 상태 아님)라 **우연히 통과**하지만, PAID 주문을 부분 취소하는
-        //       순간 갈린다. 🔴 «우연히 맞는 것» 과 «맞는 것» 은 다르다.
-        //    ⚠ 배송비는 안 뺀다 — 부분 취소로 움직이지 않는 값이다(G-4 결정 2).
-        Object[] expected = (Object[]) entityManager.createNativeQuery("""
-                SELECT COUNT(*),
-                       NVL(SUM((o.total_price - o.cancelled_items_total)
-                             - (o.coupon_discount - o.cancelled_coupon_discount)), 0),
-                       NVL(SUM(o.shipping_fee), 0)
-                  FROM orders o
-                 WHERE o.status IN (%s)
-                """.formatted(statusList)).getSingleResult();
+        // 🔴 **금액 식도 손으로 적지 않는다**(2026-08-25, BACKLOG §I-1). 위 주석이 상태 목록에 대해
+        //    말한 사고가 **금액 식에서 그대로 되풀이됐다**: 08-24 가 부분 취소분을 빼면서 이 자리에도
+        //    손으로 넣었고, 08-25 가 부분 반품분(`returned_*`)을 만들면서 **여기도 프로덕션 SQL 도
+        //    안 열었다.** 🔴 **사본이 같이 틀리니 이 테스트는 초록이었다** — «코드와 SQL 이 같은지»
+        //    를 본다면서 정작 **자기가 또 하나의 사본**이었던 셈이다(상태 목록 때와 같은 문장).
+        // → 식은 OrderStatsRepository.ITEM_SALES 에서 받는다.
+        // ⚠ 🔴 **그래서 이 테스트는 이제 «식이 옳은가» 를 못 본다** — 그건 값으로 보는
+        //    `partialReturnReducesRevenue` 가 지킨다. 여기가 지키는 것은
+        //    **«같은 정의로 JPQL 과 native SQL 이 같은 답을 내는가»** 다(원래 의도 그대로).
+        Object[] expected = (Object[]) entityManager.createNativeQuery(
+                "SELECT COUNT(*),"
+                        + " NVL(SUM(" + OrderStatsRepository.ITEM_SALES + "), 0),"
+                        + " NVL(SUM(o.shipping_fee), 0)"
+                        + " FROM orders o WHERE o.status IN (" + statusList + ")").getSingleResult();
 
         mockMvc.perform(get(URL).header("Authorization", admin))
                 .andExpect(status().isOk())

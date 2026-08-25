@@ -152,7 +152,12 @@ async function submitCancel() {
 }
 
 async function onReturnApprove(row) {
-  if (!window.confirm(`${row.buyerNickname}님의 반품을 승인할까요? 재고 복원 + 결제금액을 적립금으로 환불합니다.`)) return;
+  // ⚠ **«결제금액» 이 아니다**(2026-08-25, G-10). 부분 반품이 생기면서 요청된 품목의 몫만 돌아간다 —
+  //    3개 중 1개만 요청된 주문에 «결제금액» 이라고 말하면 거짓이다. 상세 화면은 같은 날 고쳤는데
+  //    **이 목록은 안 열렸다**(거절 버튼과 같은 짝, §I-2).
+  // 🔴 목록에서는 «무엇이 몇 개» 를 아직 못 보여준다(§I-7) — 그건 AdminOrderResponse 가 부분 필드를
+  //    안 실어서다. 문구만이라도 거짓이 아니게 둔다.
+  if (!window.confirm(`${row.buyerNickname}님의 반품을 승인할까요? 요청된 품목의 재고가 복원되고 그 몫이 적립금으로 환불됩니다.`)) return;
   shipError.value = ''; error.value = '';
   try {
     await approveReturn(row.id);
@@ -160,14 +165,38 @@ async function onReturnApprove(row) {
     await loadCounts();
   } catch (e) { error.value = e.message; }
 }
-async function onReturnReject(row) {
-  if (!window.confirm(`${row.buyerNickname}님의 반품을 거절할까요? 배송완료로 되돌립니다.`)) return;
-  shipError.value = ''; error.value = '';
+/**
+ * 반품 거절 (2026-08-25 수정, BACKLOG §I-2).
+ *
+ * 🔴 **여기는 2주간 «항상 400» 이었다.** 사유는 V47(2026-08-11)부터 `@NotBlank` 인데 이 화면은
+ *    `rejectReturn(row.id)` 로 **사유 없이** 불렀다 — confirm 까지 통과한 뒤 매번
+ *    «거절 사유를 입력해 주세요.» 로 튕겼다.
+ * ⚠ **짝 중 한쪽만 고쳐진 것**이다: 같은 날 주문 **상세**에는 사유 폼이 붙었는데 **목록은 안 열었다.**
+ *    이 화면에 뷰 테스트가 없어 아무도 못 잡았다(WA §1-2-1).
+ * → **관리자 대행 취소와 같은 패널 패턴**으로 바꾼다. 이 파일이 이미 «사유가 필수면 confirm 이
+ *   아니라 패널» 이라는 답을 갖고 있었다 — 그걸 안 따른 것이 원인이다.
+ */
+const rejectTarget = ref(null);
+const rejectError = ref('');
+function openReject(row) {
+  rejectError.value = '';
+  rejectTarget.value = { id: row.id, buyer: row.buyerNickname, orderNo: row.orderNo, reason: '' };
+}
+async function submitReject() {
+  const reason = rejectTarget.value.reason.trim();
+  // 서버도 @NotBlank 로 막지만 화면에서 먼저 거른다 — 취소 사유·송장번호와 같은 방식.
+  if (!reason) {
+    rejectError.value = '거절 사유를 입력해 주세요. 거절은 상태를 안 남기므로(배송완료로 되돌아간다) '
+      + '사유가 «거절이 있었다» 를 고객에게 알리는 유일한 표시입니다.';
+    return;
+  }
+  rejectError.value = '';
   try {
-    await rejectReturn(row.id);
+    await rejectReturn(rejectTarget.value.id, reason);
+    rejectTarget.value = null;
     gridRef.value?.instance.refresh();
     await loadCounts();
-  } catch (e) { error.value = e.message; }
+  } catch (e) { rejectError.value = e.message; }
 }
 
 async function onDeliver(row) {
@@ -287,6 +316,35 @@ function fmt(v) {
       <p v-if="cancelError" class="alert-error mt-3">{{ cancelError }}</p>
     </div>
 
+    <!--
+      반품 거절(§I-2, 2026-08-25). 취소 패널과 **같은 자리·같은 모양** — 사유가 필수라 confirm 으로 못 한다.
+      🔴 예전엔 confirm 이었고 사유를 안 보내 **항상 400** 이었다. 상세 화면은 V47 때 폼이 붙었는데
+         이 목록만 2주간 안 열렸다.
+    -->
+    <div v-if="rejectTarget" class="card mb-4 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="section-title">반품 거절 — {{ rejectTarget.buyer }}님의 주문 ({{ rejectTarget.orderNo }})</h2>
+        <span class="muted">배송완료로 되돌아가고 재고·적립금은 건드리지 않습니다. 고객에게 사유가 그대로 전달됩니다.</span>
+      </div>
+      <div class="mt-3 flex flex-wrap items-end gap-3">
+        <label class="block grow">
+          <span class="muted mb-1 block">거절 사유 <strong>(필수)</strong></span>
+          <input
+            v-model="rejectTarget.reason"
+            class="field w-full"
+            placeholder="예) 사용 흔적이 있어 반품이 어렵습니다"
+            maxlength="500"
+            @keyup.enter="submitReject"
+          />
+        </label>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-primary" @click="submitReject">반품 거절</button>
+          <button type="button" class="btn btn-secondary" @click="rejectTarget = null; rejectError = ''">닫기</button>
+        </div>
+      </div>
+      <p v-if="rejectError" class="alert-error mt-3">{{ rejectError }}</p>
+    </div>
+
     <DxDataGrid
       ref="gridRef"
       :data-source="store"
@@ -331,7 +389,7 @@ function fmt(v) {
           >배송완료</button>
           <template v-if="data.data.status === 'RETURN_REQUESTED'">
             <button type="button" class="btn btn-secondary btn-sm" @click="onReturnApprove(data.data)">반품승인</button>
-            <button type="button" class="btn btn-ghost btn-sm" @click="onReturnReject(data.data)">거절</button>
+            <button type="button" class="btn btn-ghost btn-sm" @click="openReject(data.data)">거절</button>
           </template>
           <!--
             취소는 발송 전(ORDERED·PAID)에만 뜬다 — 서버의 isCancellable() 과 같은 조건이다.
