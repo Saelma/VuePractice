@@ -78,6 +78,17 @@ public record OrderResponse(
         /** 반품으로 회수된 사용 적립금 몫 누적. ⚠ 환불액에 이미 포함돼 있다 — 남은 적립금 계산용이다. */
         long returnedPoint,
 
+        /**
+         * 🔴 반품으로 <b>회수한 배송완료 적립</b> 누적 (2026-08-25, BACKLOG §I-4).
+         *
+         * <p>⚠ <b>이 값이 없어서 화면이 거짓말을 했다</b> — 500P 적립된 주문에서 200P 가 회수돼도
+         * 상세는 계속 «이 주문으로 <b>500원</b> 적립되었어요» 라고 말했다. {@code earnedPoint} 는
+         * <b>준 것</b>이고 지금 남은 것은 «준 것 − 회수한 것» 이다.
+         * <p>⚠ 부분 반품 전에는 갈릴 일이 없었다(전량 반품이면 주문이 {@code RETURNED} 라 화면이
+         * 다르게 그렸다) — <b>«멀쩡한 배송완료 주문이 틀린 값을 말하는» 경우가 새로 생겼다.</b>
+         */
+        long reversedEarnedPoint,
+
         List<OrderItemResponse> items,
         Instant createdAt,
         Instant paidAt,
@@ -152,6 +163,7 @@ public record OrderResponse(
                 o.getReturnedItemsTotal(),
                 o.getReturnedCouponDiscount(),
                 o.getReturnedPoint(),
+                o.getReversedEarnedPoint(),
                 o.getItems().stream().map(OrderItemResponse::from).toList(),
                 o.getCreatedAt(),
                 o.getPaidAt(),

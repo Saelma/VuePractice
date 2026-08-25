@@ -440,8 +440,14 @@ public class OrderService {
         //    «부분 취소하고 그대로 두는» 정상 경로에서 `product.sold_count` 가 안 줄어 인기순이 틀어진다.
         //    ⚠ 전량이 빠져 아래 OrderCancelledEvent 가 나가는 경우에도 **겹치지 않는다** —
         //       그쪽은 «남은 수량» 을 싣는데 여기서 이미 뺐으므로 그때 남은 것은 0 이다.
+        // ⚠ 「무엇을 몇 개」 는 감사 원장이 쓰는 것과 **같은 문자열**이다(cancelItemByAdmin 참고) —
+        //    두 곳이 다른 말을 하면 CS 에서 고객 알림과 원장을 못 맞춘다.
+        String itemsSummary = item.getProductName()
+                + (item.getVariantName() == null ? "" : " (" + item.getVariantName() + ")")
+                + " " + quantity + "개";
         eventPublisher.publishEvent(new OrderItemCancelledEvent(
-                order.getId(), order.getMemberId(), SoldLine.of(item, quantity)));
+                order.getId(), order.getMemberId(), SoldLine.of(item, quantity),
+                itemsSummary, refund, refundedPoint, order.isFullyCancelledByItems()));
 
         if (order.isFullyCancelledByItems()) {
             // 🔴 남은 게 없으면 주문 자체가 취소다. 재고·적립금은 위에서 이미 되돌렸다 —
@@ -625,7 +631,8 @@ public class OrderService {
             couponService.restore(order.getMemberCouponId());
         }
         // 판매량 되돌림은 catalog 가 구독한다 — 환불(동기)이 끝난 뒤 결과 알림(주문 취소와 같은 규약).
-        eventPublisher.publishEvent(OrderReturnedEvent.of(order, settlement.refundAmount(), lines));
+        eventPublisher.publishEvent(
+                OrderReturnedEvent.of(order, settlement.refundAmount(), lines, returnedDetail));
         // ⚠ 원장에는 **무엇을 몇 개 되돌리고 얼마를 돌려줬나** 를 적는다. 부분 반품이 생기면서
         //   금액만으로는 «어느 품목이 빠졌나» 를 못 되짚는다(ORDER_ITEM_CANCEL 이 같은 자리에서 정한 것).
         publishAudit(AuditAction.ORDER_RETURN_APPROVE, actor, order,

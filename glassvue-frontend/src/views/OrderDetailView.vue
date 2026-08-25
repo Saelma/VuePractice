@@ -251,15 +251,22 @@ const onApproveReturn = () => act(approveReturn,
   '반품을 승인할까요? 요청된 품목의 재고가 복원되고 그 몫이 적립금으로 환불됩니다(적립·등급도 그만큼 회수).');
 
 /**
- * 반품 카드의 상태 문구. 세 갈래다 — ⚠ **거절이 세 번째로 뒤늦게 생겼다**(2026-08-11).
- * 거절은 주문 상태를 DELIVERED 로 되돌리므로 `order.status` 만으로는 «거절됨» 을 말할 수 없고,
- * `returnRejectedAt` 이 유일한 근거다(그게 없던 동안 화면에서 반품 이야기가 통째로 사라졌다).
+ * 반품 카드의 상태 문구. ⚠ **거절이 세 번째로 뒤늦게 생겼고**(2026-08-11),
+ * **부분 반품이 네 번째로 생겼다**(2026-08-25, §I-3).
+ *
+ * 🔴 둘 다 **주문 상태를 DELIVERED 로 되돌리는** 갈래라 `order.status` 만으로는 말할 수 없다 —
+ * 거절은 `returnRejectedAt`, 부분 반품은 `returnedItemsTotal` 이 유일한 근거다.
+ * ⚠ **순서가 규약이다**: 부분 반품을 거절보다 **먼저** 본다. 부분 반품 뒤 다시 요청했다 거절당하면
+ * 둘 다 참인데, 그때 고객에게 급한 것은 «왜 거절됐나» 이므로 거절이 **마지막에** 이긴다.
+ * → 아래 순서는 «RETURNED → 요청중 → 거절 → 부분 반품» 이다.
  */
 const returnStatusText = computed(() => {
   if (!order.value) return '';
   if (order.value.status === 'RETURNED') return '반품 완료 (환불됨)';
   if (order.value.status === 'RETURN_REQUESTED') return '반품 요청됨 (관리자 처리 대기)';
-  return '반품 요청이 거절됨';
+  if (order.value.returnRejectedAt) return '반품 요청이 거절됨';
+  // 🔴 여기가 없으면 부분 반품된 주문이 «거절됨» 으로 뜬다 — 렌더 조건만 넓히면 생기는 함정이다.
+  return '일부 반품 완료 (남은 품목은 그대로)';
 });
 
 // 거절은 **사유가 필수**라 confirm 으로 못 받는다 — 인라인 폼을 연다(발송·반품요청과 같은 이유).
@@ -589,13 +596,40 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
         </dl>
 
         <!--
+          🔴 반품으로 되돌아간 것(§I-4, 2026-08-25). **취소 섹션과 줄을 나눈다** — 둘은 돈이 다르게
+          움직인다(취소는 돈으로, 반품은 «현금분 + 쓴 적립금» 을 함께 적립금으로). 합치면 못 가른다.
+          ⚠ 이 섹션이 없어서 **부분 반품된 주문의 합계 카드는 위 줄들의 산수가 안 맞는데
+            그 차액이 어디에도 없었다** — 서버는 값을 보내고 있었고 화면만 안 읽었다.
+        -->
+        <dl v-if="order.returnedItemsTotal > 0" class="space-y-2 border-t border-line px-5 py-4 text-sm">
+          <div class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">반품된 품목</dt>
+            <dd class="tabular-nums text-ink-700">−{{ priceText(order.returnedItemsTotal) }}</dd>
+          </div>
+          <!--
+            ⚠ **취소와 달리 «환불액» 하나로 끝난다** — 반품 환불에는 쓴 적립금이 이미 들어 있다.
+              취소처럼 「돌려받은 적립금」을 따로 적으면 **두 번 받은 것처럼** 읽힌다.
+          -->
+          <div class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">환불 적립금</dt>
+            <dd class="tabular-nums font-medium text-emerald-700">
+              {{ priceText(order.returnedItemsTotal - order.returnedCouponDiscount) }}
+            </dd>
+          </div>
+          <div v-if="order.reversedEarnedPoint > 0" class="flex items-center justify-between gap-4">
+            <dt class="text-ink-500">회수된 적립</dt>
+            <dd class="tabular-nums text-ink-700">−{{ priceText(order.reversedEarnedPoint) }}</dd>
+          </div>
+        </dl>
+
+        <!--
           주문 시점에 실제로 받은 금액이다 — 정책이 바뀌어도 이 숫자는 안 바뀐다(스냅샷).
           ⚠ **부분 취소가 있었으면 이 값은 «지금 받을 금액» 이다**(서버가 뺄셈을 이미 했다).
              그래서 그때는 이름도 바꿔 단다 — 「결제 금액」이라고 하면 처음 낸 금액으로 읽힌다.
         -->
         <div class="flex items-end justify-between gap-4 border-t border-line px-5 py-4">
           <span class="text-sm font-medium text-ink-700">
-            {{ order.cancelledItemsTotal > 0 ? '남은 결제 금액' : '결제 금액' }}
+            {{ order.cancelledItemsTotal > 0 || order.returnedItemsTotal > 0 ? '남은 결제 금액' : '결제 금액' }}
           </span>
           <span class="text-2xl font-bold tabular-nums text-ink-900">{{ priceText(order.payAmount) }}</span>
         </div>
@@ -653,8 +687,17 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
 
         <!-- 적립은 배송완료 시점이라, 그 전에는 "받을 예정"이 아니라 아무 말도 하지 않는다.
              예정 금액을 미리 보여주면 취소·반품에서 약속이 어긋난다. -->
-        <p v-if="order.earnedPoint > 0" class="muted mt-2 text-right">
-          이 주문으로 <strong class="text-ink-700">{{ priceText(order.earnedPoint) }}</strong> 적립되었어요.
+        <!--
+          🔴 **회수분을 뺀다**(§I-4, 2026-08-25). 예전엔 원본 `earnedPoint` 를 그대로 말해서,
+             200P 가 회수된 뒤에도 «500원 적립되었어요» 라고 했다. **준 것**과 **지금 남은 것**은 다르다.
+          ⚠ 부분 반품 전에는 갈릴 일이 없었다(전량 반품이면 주문이 RETURNED 라 화면이 달랐다) —
+            **멀쩡한 배송완료 주문이 틀린 값을 말하는 경우가 새로 생겼다.**
+        -->
+        <p v-if="order.earnedPoint - order.reversedEarnedPoint > 0" class="muted mt-2 text-right">
+          이 주문으로
+          <strong class="text-ink-700">{{ priceText(order.earnedPoint - order.reversedEarnedPoint) }}</strong>
+          적립되었어요.
+          <span v-if="order.reversedEarnedPoint > 0">(반품으로 {{ priceText(order.reversedEarnedPoint) }} 회수)</span>
         </p>
       </div>
 
@@ -832,7 +875,8 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
           거절은 상태를 안 남기므로 returnRejectedAt 이 유일한 근거다.
       -->
       <div
-        v-if="order.status === 'RETURN_REQUESTED' || order.status === 'RETURNED' || order.returnRejectedAt"
+        v-if="order.status === 'RETURN_REQUESTED' || order.status === 'RETURNED'
+          || order.returnRejectedAt || order.returnedItemsTotal > 0"
         class="card mt-4 p-5"
       >
         <h2 class="section-title">반품</h2>

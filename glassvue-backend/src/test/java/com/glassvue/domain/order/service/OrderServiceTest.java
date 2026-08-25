@@ -942,5 +942,10 @@ class OrderServiceTest {
         OrderCancelledEvent cancelled = capturePublished(OrderCancelledEvent.class);
         assertThat(cancelled.lines()).singleElement()
                 .satisfies(l -> assertThat(l.quantity()).isEqualTo(2));
+        // 🔴 **금액도 «남은 것» 이다** (2026-08-25, §I). 이 값이 곧 고객 알림 문구가 된다 —
+        //    원본을 실으면 «30,000원 주문이 취소되었습니다» 로 나가는데 실제로 빠진 건 20,000 이다.
+        //    ⚠ **같은 이벤트의 lines 는 08-25 에 고쳤는데 이 필드는 안 봤다** — 한 이벤트 안에서도
+        //       필드마다 물어야 한다(WA §2-2-2 의 이벤트 판).
+        assertThat(cancelled.cancelledAmount()).isEqualTo(20_000);
     }
 }

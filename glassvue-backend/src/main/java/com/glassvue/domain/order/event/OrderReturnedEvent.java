@@ -20,7 +20,14 @@ import java.util.UUID;
  * 그 값이 필요한데, 핸들러는 주문 엔티티를 못 본다(도메인 경계). 배송완료 이벤트가 {@code earnedPoint}
  * 를 싣는 것과 <b>같은 자리·같은 이유</b>다.
  */
-public record OrderReturnedEvent(UUID orderId, UUID memberId, long refundedPoint, List<SoldLine> lines)
+/**
+ * @param itemsSummary   «지바 1개, 반팔티 1개» 처럼 사람이 읽는 요약 (감사 원장과 같은 문자열)
+ * @param fullyReturned  🔴 이번 승인으로 <b>주문에 남은 것이 없어졌나</b>. 알림 문구가 «반품이
+ *                       완료되었어요» 와 «일부 반품이 완료되었어요» 로 갈리는 유일한 근거다.
+ *                       ⚠ 핸들러는 주문 상태를 못 보므로(도메인 경계) 이벤트가 실어 나른다.
+ */
+public record OrderReturnedEvent(UUID orderId, UUID memberId, long refundedPoint, List<SoldLine> lines,
+                                 String itemsSummary, boolean fullyReturned)
         implements DomainEvent {
 
     /**
@@ -34,7 +41,9 @@ public record OrderReturnedEvent(UUID orderId, UUID memberId, long refundedPoint
      * @param refundedPoint 이번 회차에 적립금으로 돌려준 금액 ({@code ReturnSettlement.refundAmount})
      * @param lines         이번 회차에 반품된 상품·수량
      */
-    public static OrderReturnedEvent of(Order order, long refundedPoint, List<SoldLine> lines) {
-        return new OrderReturnedEvent(order.getId(), order.getMemberId(), refundedPoint, lines);
+    public static OrderReturnedEvent of(Order order, long refundedPoint, List<SoldLine> lines,
+                                        String itemsSummary) {
+        return new OrderReturnedEvent(order.getId(), order.getMemberId(), refundedPoint, lines,
+                itemsSummary, order.hasNothingLeft());
     }
 }

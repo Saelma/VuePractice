@@ -3,6 +3,7 @@ package com.glassvue.domain.notification;
 import com.glassvue.domain.notification.entity.NotificationType;
 import com.glassvue.domain.notification.service.NotificationCommandService;
 import com.glassvue.domain.order.event.OrderCancelledEvent;
+import com.glassvue.domain.order.event.OrderItemCancelledEvent;
 import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
@@ -44,11 +45,50 @@ public class OrderNotificationHandler {
     }
 
     public void handle(OrderCancelledEvent event) {
+        // ⚠ **«이번에 취소된 금액» 이다**(2026-08-25, §I). 예전엔 주문 **원본** 을 말해서, 부분 취소로
+        //    이미 25,000 이 빠진 주문의 남은 10,000 을 취소하며 «35,000원 취소» 라고 알렸다(5296 실측).
         notificationService.create(event.memberId(), NotificationType.ORDER,
                 "주문이 취소되었어요",
-                event.totalPrice() + "원 주문이 취소되었습니다.",
+                event.cancelledAmount() + "원 주문이 취소되었습니다.",
                 "/orders/" + event.orderId());
-        log.info("[알림] 주문 취소 — order={} member={}", event.orderId(), event.memberId());
+        log.info("[알림] 주문 취소 — order={} member={} amount={}",
+                event.orderId(), event.memberId(), event.cancelledAmount());
+    }
+
+    /**
+     * 🔴 <b>부분 취소</b> — 고객에게 «무엇이 몇 개 빠졌고 얼마가 돌아왔나» 를 알린다 (2026-08-25, §I).
+     *
+     * <p>⚠ <b>여기까지 알림이 아예 없었다.</b> 관리자가 대신 부분 취소하면 고객에게 <b>아무 말이
+     * 없었다</b> — 전체 취소는 알림이 가므로 비대칭이었고, 2026-08-11 이 반품에 대해 고친 것의
+     * <b>거울상</b>이다. G-4(08-24)가 두고 간 자리다.
+     *
+     * <p>⚠ <b>제목이 «주문이 취소되었어요» 가 아니다</b> — 1개만 빠졌는데 그렇게 말하면 고객은
+     * 주문 전체가 취소된 줄 안다. 전량이 빠지면 그때 {@code OrderCancelledEvent} 가 따로 나간다.
+     */
+    public void handle(OrderItemCancelledEvent event) {
+        // 🔴 **전량이 빠졌으면 여기서 말하지 않는다** — 뒤이어 OrderCancelledEvent 가 나가므로
+        //    «주문 일부가 취소되었어요» 와 «주문이 취소되었어요» 가 **연달아 두 번** 뜬다.
+        //    ⚠ 이벤트 자체를 안 낼 수는 없다: 판매량 되돌림이 이 회차 몫을 여기에만 싣는다.
+        //       **구독자마다 «무엇을 하느냐» 를 가르는** 자리다(catalog 는 언제나 처리한다).
+        if (event.orderFullyCancelled()) {
+            log.info("[알림] 부분 취소 생략(주문 전체 취소로 이어짐) — order={}", event.orderId());
+            return;
+        }
+        StringBuilder message = new StringBuilder(event.itemsSummary()).append(" 취소되었습니다.");
+        if (event.refundedAmount() > 0) {
+            message.append(' ').append(event.refundedAmount()).append("원");
+            // 적립금으로도 돌아갔으면 둘 다 말한다 — «얼마 돌아왔나» 가 한쪽만이면 고객이 잔액과 못 맞춘다.
+            if (event.refundedPoint() > 0) {
+                message.append("과 적립금 ").append(event.refundedPoint()).append("원");
+            }
+            message.append("이 환불됩니다.");
+        } else if (event.refundedPoint() > 0) {
+            message.append(' ').append(event.refundedPoint()).append("원이 적립금으로 환불되었습니다.");
+        }
+        notificationService.create(event.memberId(), NotificationType.ORDER,
+                "주문 일부가 취소되었어요", message.toString(), "/orders/" + event.orderId());
+        log.info("[알림] 부분 취소 — order={} member={} refund={} point={}",
+                event.orderId(), event.memberId(), event.refundedAmount(), event.refundedPoint());
     }
 
     /**
@@ -59,13 +99,21 @@ public class OrderNotificationHandler {
      * 취소에는 있고 반품에는 없던 <b>비대칭</b>이고, 같은 날 §8(쿠폰)에서 본 것과 같은 모양이다.
      */
     public void handle(OrderReturnedEvent event) {
+        // 🔴 **부분 반품에도 «반품이 완료되었어요» 라고 말하던 자리다** (2026-08-25, §8-6).
+        //    G-10 검증에서 **네 번** 거짓으로 나갔다 — 고객은 주문 전체가 반품된 줄 읽는다.
+        //    ⚠ 흐름에 «부분» 을 넣고 **문구를 안 열었다**: WA §1-2-1 «남기는 쪽 ↔ 보는 쪽» 그대로다.
+        //    🔴 그 짝이 «조용해서 오래 간다» 고 경고한 그대로 **돈은 정확했고 아무것도 안 터졌다.**
+        String title = event.fullyReturned() ? "반품이 완료되었어요" : "일부 반품이 완료되었어요";
+        String what = event.fullyReturned()
+                ? "반품이 완료되었어요."
+                : event.itemsSummary() + " 반품이 완료되었어요.";
         String message = event.refundedPoint() > 0
-                ? "반품이 완료되었어요. " + event.refundedPoint() + "원이 적립금으로 환불되었습니다."
-                : "반품이 완료되었어요.";
+                ? what + " " + event.refundedPoint() + "원이 적립금으로 환불되었습니다."
+                : what;
         notificationService.create(event.memberId(), NotificationType.ORDER,
-                "반품이 완료되었어요", message, "/orders/" + event.orderId());
-        log.info("[알림] 반품 승인 — order={} member={} refunded={}", event.orderId(), event.memberId(),
-                event.refundedPoint());
+                title, message, "/orders/" + event.orderId());
+        log.info("[알림] 반품 승인 — order={} member={} refunded={} full={}", event.orderId(),
+                event.memberId(), event.refundedPoint(), event.fullyReturned());
     }
 
     /**

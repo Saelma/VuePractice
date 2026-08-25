@@ -2,6 +2,7 @@ package com.glassvue.domain.notification;
 
 import com.glassvue.domain.order.event.OrderCancelledEvent;
 import com.glassvue.domain.order.event.OrderDeliveredEvent;
+import com.glassvue.domain.order.event.OrderItemCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
@@ -68,6 +69,17 @@ public class OrderEventListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrderReturnRejected(OrderReturnRejectedEvent event) {
+        notificationHandler.handle(event);
+    }
+
+    /**
+     * 부분 취소 (2026-08-25, §I). 🔴 <b>전체 취소와 «둘 다» 구독한다</b> — 부분 취소는
+     * {@code OrderCancelledEvent} 를 전량이 빠질 때만 내므로, 이 구독이 없으면 관리자가 대신
+     * 부분 취소해도 고객에게 아무 말이 없다.
+     */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderItemCancelled(OrderItemCancelledEvent event) {
         notificationHandler.handle(event);
     }
 }

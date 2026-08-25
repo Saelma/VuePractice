@@ -53,6 +53,7 @@ function order(overrides = {}) {
     cancelledItemsTotal: 0, refundedAmount: 0, cancelledPoint: 0,
     // 반품이 회수해 간 몫(G-10). 취소 쪽 셋과 **짝**이라 픽스처에서도 나란히 둔다.
     returnedItemsTotal: 0, returnedCouponDiscount: 0, returnedPoint: 0, refundAmount: 0,
+    reversedEarnedPoint: 0,
     items: [
       item({ orderItemId: 'i-a', productName: 'ZZ-A', price: 20_000, lineTotal: 20_000 }),
       item({ orderItemId: 'i-b', productName: 'ZZ-B', price: 15_000, lineTotal: 15_000 }),
@@ -492,5 +493,101 @@ describe('OrderDetailView — 부분 반품 (G-10)', () => {
     // 🔴 서버가 «승인하면 얼마인가» 를 계산해 보내므로 관리자가 누르기 전에 금액을 본다.
     expect(w.text()).toContain('환불 예정 적립금');
     expect(w.text()).toContain('12,858원');
+  });
+});
+
+/**
+ * 열한 번째 묶음 (2026-08-25, BACKLOG §I-3 · §I-4) — **부분 반품된 주문이 «돈 이야기» 를 하는가.**
+ *
+ * 🔴 **감사가 잡은 자리다.** 부분 반품 승인은 주문을 `DELIVERED` 로 되돌리는데, 화면은 전량 시절
+ *    조건(`RETURN_REQUESTED || RETURNED || returnRejectedAt`)만 봐서 **반품 카드가 통째로 사라졌다.**
+ *    합계 카드에도 반품 섹션이 없어 **위 줄들의 산수가 안 맞는데 차액이 어디에도 없었고**,
+ *    적립 문구는 회수분을 모른 채 원본을 말했다.
+ * ⚠ 🔴 **셋 다 서버는 값을 보내고 있었다** — 화면만 안 읽었다. WA §1-2-1 «남기는 쪽 ↔ 보는 쪽».
+ */
+describe('OrderDetailView — 부분 반품된 주문의 표시 (§I-3 · §I-4)', () => {
+  let w;
+
+  /** 배송완료로 되돌아온, 일부만 반품된 주문. 지바 2개 중 1개(10,000)를 반품했다. */
+  const partiallyReturned = (overrides = {}) => order({
+    status: 'DELIVERED',
+    totalPrice: 35_000, couponDiscount: 5_000, usedPoint: 2_000, earnedPoint: 500,
+    returnedItemsTotal: 10_000, returnedCouponDiscount: 1_428, returnedPoint: 571,
+    reversedEarnedPoint: 200,
+    returnReason: 'ZZ-단순 변심',
+    returnedAt: '2026-08-25T02:00:00Z',
+    payAmount: 18_001,
+    ...overrides,
+  });
+
+  beforeEach(() => { authState.user = { id: ME, role: 'USER' }; push.mockReset(); });
+  afterEach(() => { if (w) w.unmount(); w = null; authState.user = null; });
+
+  async function open(data) {
+    getOrder.mockReset().mockResolvedValue(data);
+    w = mount(OrderDetailView, {
+      props: { id: 'o1' },
+      global: { stubs: { RouterLink: true, ItemThumb: true } },
+    });
+    await flushPromises();
+    return w;
+  }
+
+  it('🔴 반품 카드가 **사라지지 않는다** — 승인 뒤 주문은 DELIVERED 로 되돌아온다', async () => {
+    const w = await open(partiallyReturned());
+
+    expect(w.text()).toContain('일부 반품 완료 (남은 품목은 그대로)');
+    // 요청 사유가 화면에 남아야 «무엇 때문에 돌려보냈나» 를 고객이 되짚을 수 있다.
+    expect(w.text()).toContain('ZZ-단순 변심');
+  });
+
+  it('🔴 합계 카드가 **반품으로 빠진 것**을 갈라 보여준다 — 취소 섹션과 줄이 다르다', async () => {
+    const w = await open(partiallyReturned());
+
+    expect(w.text()).toContain('반품된 품목');
+    // 환불 적립금 = 반품금액 10,000 − 회수 쿠폰 1,428 = 8,572
+    expect(w.text()).toContain('8,572원');
+    expect(w.text()).toContain('회수된 적립');
+    // ⚠ **«돌려받은 적립금» 줄은 없어야 한다** — 반품 환불액에 쓴 적립금이 이미 들어 있어서,
+    //    취소처럼 따로 적으면 두 번 받은 것처럼 읽힌다.
+    expect(w.text()).not.toContain('돌려받은 적립금');
+  });
+
+  it('총액 라벨이 «남은 결제 금액» 이다 — 처음 낸 금액으로 읽히면 안 된다', async () => {
+    const w = await open(partiallyReturned());
+    expect(w.text()).toContain('남은 결제 금액');
+    expect(w.text()).not.toContain('결제 금액\n');
+  });
+
+  it('🔴 적립 문구가 **회수분을 뺀다** — 500 준 뒤 200 회수됐으면 300 이다', async () => {
+    const w = await open(partiallyReturned());
+
+    expect(w.text()).toContain('300원');
+    expect(w.text()).toContain('반품으로 200원 회수');
+    // 🔴 원본을 그대로 말하던 자리다.
+    expect(w.text()).not.toContain('이 주문으로 500원');
+  });
+
+  it('⚠ 거절이 있으면 «거절됨» 이 이긴다 — 부분 반품 뒤 재요청이 거절된 주문', async () => {
+    const w = await open(partiallyReturned({
+      returnRejectedReason: 'ZZ-사용 흔적이 있습니다',
+      returnRejectedAt: '2026-08-25T03:00:00Z',
+    }));
+
+    // 둘 다 참인 상태다. 고객에게 급한 것은 «왜 거절됐나» 라 그쪽이 이겨야 한다.
+    expect(w.text()).toContain('반품 요청이 거절됨');
+    expect(w.text()).toContain('ZZ-사용 흔적이 있습니다');
+  });
+
+  it('⚠ 대조군: 반품이 없는 주문은 카드도 반품 섹션도 **안 뜬다** (예전 화면 그대로)', async () => {
+    const w = await open(order({ status: 'DELIVERED', earnedPoint: 500 }));
+
+    expect(w.text()).not.toContain('일부 반품 완료');
+    expect(w.text()).not.toContain('반품된 품목');
+    expect(w.text()).toContain('결제 금액');
+    expect(w.text()).not.toContain('남은 결제 금액');
+    // 회수가 없으면 원본을 그대로 말한다.
+    expect(w.text()).toContain('이 주문으로');
+    expect(w.text()).toContain('500원');
   });
 });
