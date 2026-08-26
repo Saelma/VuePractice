@@ -569,6 +569,31 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
+     * 🔴 <b>관리자의 부분 취소가 마지막 품목까지 비웠을 때</b> (2026-08-26, BACKLOG I-6).
+     *
+     * <p>⚠ <b>{@link #cancelByAdmin} 과 갈라 둔 이유는 «사유» 하나다.</b> 그쪽은 사유가 <b>필수</b>인데
+     * 부분 취소는 <b>사유를 아예 받지 않는다</b>({@code OrderItemCancelRequest} — «회차마다 일어나
+     * 한 칸에 담기지 않는다» 는 G-4 결정). 없는 사유를 지어 넣지 않는다:
+     * <b>«관리자 부분 취소로 비었음» 같은 문구는 관리자가 «쓴» 사유가 아니라 서버가 만든 설명</b>이라,
+     * 화면의 「취소 사유」 칸에 넣으면 <b>사람이 적은 것처럼 보인다</b>(V37 이 동의 시각을 백필하지 않은 것과
+     * 같은 판단 — 지어낸 값은 근거로 쓰이는 순간 틀린 결정을 만든다).
+     * → <b>사유는 NULL 로 두고 행위자만 남긴다.</b> 「무엇을 몇 개」 는 원장({@code ORDER_ITEM_CANCEL})에
+     * 회차별로 있다.
+     *
+     * <p>🔴 <b>왜 필요한가</b>: 이 갈래가 {@link #cancel}{@code (null)} 을 부르고 있었다 —
+     * 관리자가 대행으로 마지막 품목을 뺐는데도 {@link #cancelledBy} 가 NULL 로 남아,
+     * 위 규칙상 <b>«주문자 본인이 취소했다» 로 거짓말</b>을 했다. 고객 상세의
+     * 「고객센터에서 대신 취소했어요」 줄도 안 떴다.
+     * ⚠ <b>{@link #cancelByAdmin} 의 경고가 가리키던 그 호출부가 실제로 생긴 것</b>이다 —
+     * *«한쪽만 부른 호출부가 생기면 거짓말을 한다»*. 그래서 여기서도 <b>한 메서드 안에서</b> 함께 정한다.
+     */
+    public void cancelByAdminFromItems(UUID adminId, String adminName) {
+        cancel(null);
+        this.cancelledBy = adminId;
+        this.cancelledByName = adminName;
+    }
+
+    /**
      * 배송완료 주문만 반품 요청할 수 있다(운송 중·미결제 주문은 취소로 처리).
      *
      * <p>🔴 <b>남은 것이 있어야 한다</b> (2026-08-25, G-10). 부분 반품 승인은 주문을 {@code DELIVERED}

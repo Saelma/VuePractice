@@ -1,6 +1,7 @@
 package com.glassvue.domain.order;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -89,6 +90,7 @@ class OrderPartialCancelIntegrationTest {
     private String userLoginId;
     private String otherLoginId;
     private UUID userId;
+    private UUID adminId;
     private UUID variantId;
     private UUID productId;
 
@@ -98,7 +100,7 @@ class OrderPartialCancelIntegrationTest {
         adminLoginId = "zzpca_" + sfx;
         userLoginId = "zzpcu_" + sfx;
         otherLoginId = "zzpco_" + sfx;
-        member(adminLoginId, MARK + "-관리자", Role.ADMIN);
+        adminId = member(adminLoginId, MARK + "-관리자", Role.ADMIN);
         userId = member(userLoginId, MARK + "-구매자", Role.USER);
         member(otherLoginId, MARK + "-남", Role.USER);
 
@@ -241,6 +243,83 @@ class OrderPartialCancelIntegrationTest {
         assertThat(after.refundedAmount()).isEqualTo(30_000); // 35,000 − 쿠폰 5,000
         assertThat(memberCouponRepository.findById(mc.getId()).orElseThrow().isUsed())
                 .as("전량 취소되면 쿠폰은 돌아와야 한다").isFalse();
+    }
+
+    // ─────────── 🔴 누가 비웠나 (2026-08-26, BACKLOG I-6) ───────────
+    //
+    // 이 저장소의 규약은 **«cancelled_by 가 NULL 이면 주문자 본인이 취소한 것»** 이다(Order.cancelledBy).
+    // 그래서 «안 적는 것» 이 곧 «본인이라고 적는 것» 이다 — 관리자가 대행했는데 비워 두면
+    // **주문 행이 거짓말을 한다.** 아래 둘은 **짝**이라 함께 있어야 뜻을 갖는다(한쪽만 있으면
+    // «항상 NULL» 이나 «항상 관리자» 인 구현도 통과한다).
+
+    @Test
+    @DisplayName("🔴 관리자가 마지막 품목을 빼서 주문이 비면 **누가 했는지 남는다** — NULL 이면 본인이라는 뜻이므로")
+    void adminDrainsLastItem_recordsActor() throws Exception {
+        Order o = order(null, 0, null, 0);
+        String admin = login(adminLoginId);
+
+        cancelItem("/admin-cancel-item", o.getId(), admin, itemId(o, 1), 1).andExpect(status().isOk());
+        cancelItem("/admin-cancel-item", o.getId(), admin, itemId(o, 0), 1).andExpect(status().isOk());
+
+        Order after = reload(o.getId());
+        assertThat(after.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(after.getCancelledBy())
+                .as("관리자가 비웠는데 NULL 이면 «본인이 취소했다» 로 읽힌다")
+                .isEqualTo(adminId);
+        assertThat(after.getCancelledByName()).isEqualTo(MARK + "-관리자");
+        assertThat(after.getCancelReason())
+                .as("부분 취소는 사유를 받지 않는다 — 없는 사유를 서버가 지어 넣지 않는다")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("🔴 본인이 마지막 품목을 빼면 행위자는 **NULL 로 남는다** — 위 테스트의 대조군")
+    void ownerDrainsLastItem_keepsActorNull() throws Exception {
+        Order o = order(null, 0, null, 0);
+        String token = login(userLoginId);
+
+        cancelItem("/cancel-item", o.getId(), token, itemId(o, 1), 1).andExpect(status().isOk());
+        cancelItem("/cancel-item", o.getId(), token, itemId(o, 0), 1).andExpect(status().isOk());
+
+        Order after = reload(o.getId());
+        assertThat(after.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(after.getCancelledBy()).isNull();
+        assertThat(after.getCancelledByName()).isNull();
+    }
+
+    @Test
+    @DisplayName("🔴 그 값이 **고객 화면까지** 간다 — 「고객센터에서 대신 취소했어요」가 읽는 칸")
+    void adminDrainsLastItem_visibleToCustomer() throws Exception {
+        Order o = order(null, 0, null, 0);
+        String admin = login(adminLoginId);
+        cancelItem("/admin-cancel-item", o.getId(), admin, itemId(o, 1), 1).andExpect(status().isOk());
+        cancelItem("/admin-cancel-item", o.getId(), admin, itemId(o, 0), 1).andExpect(status().isOk());
+
+        // ⚠ 엔티티만 보면 «저장은 됐는데 응답에 없는» 경우를 못 잡는다(§I 감사의 결론 — 값을 만들고
+        //    그 값을 읽는 쪽을 안 여는 것). 그래서 고객이 실제로 받는 응답으로 한 번 더 본다.
+        mockMvc.perform(get("/api/orders/" + o.getId()).header("Authorization", login(userLoginId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cancelledByName").value(MARK + "-관리자"));
+    }
+
+    @Test
+    @DisplayName("원장도 «그 하나가 마지막이었다» 를 말한다 — 품목 하나 뺀 것과 구분되게")
+    void adminDrainsLastItem_auditSaysOrderDied() throws Exception {
+        Order o = order(null, 0, null, 0);
+        String admin = login(adminLoginId);
+
+        cancelItem("/admin-cancel-item", o.getId(), admin, itemId(o, 1), 1).andExpect(status().isOk());
+        cancelItem("/admin-cancel-item", o.getId(), admin, itemId(o, 0), 1).andExpect(status().isOk());
+        auditLogRepository.flush();
+
+        var logs = auditLogRepository.findAll().stream()
+                .filter(a -> a.getAction() == AuditAction.ORDER_ITEM_CANCEL)
+                .filter(a -> a.getDetail() != null && a.getDetail().contains(o.getOrderNo()))
+                .toList();
+        assertThat(logs).hasSize(2);
+        assertThat(logs.stream().filter(a -> a.getDetail().contains("주문 취소됨")).count())
+                .as("마지막 회차에만 붙어야 한다 — 매 회차에 붙으면 구분이 안 된다")
+                .isEqualTo(1);
     }
 
     // ────────────────────────── 재고 · 적립금 ──────────────────────────

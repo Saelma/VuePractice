@@ -367,7 +367,8 @@ public class OrderService {
     public void cancelItem(UUID orderId, UUID memberId, UUID orderItemId, long quantity) {
         Order order = orderRepository.findByIdAndMemberId(orderId, memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        applyItemCancellation(order, orderItemId, quantity);
+        // actor 가 null 이면 «본인» 이다 — Order.cancelledBy 의 NULL 규약과 같은 뜻이다.
+        applyItemCancellation(order, orderItemId, quantity, null);
     }
 
     /**
@@ -385,11 +386,15 @@ public class OrderService {
         String itemName = item.getProductName()
                 + (item.getVariantName() == null ? "" : " (" + item.getVariantName() + ")");
 
-        long refund = applyItemCancellation(order, orderItemId, quantity);
+        long refund = applyItemCancellation(order, orderItemId, quantity, actor);
 
         // ⚠ 「무엇을 몇 개 빼고 얼마를 돌려줬나」 — AuditAction.ORDER_ITEM_CANCEL 주석이 정한 내용이다.
+        // 🔴 **주문이 이 회차로 죽었으면 그것도 적는다**(2026-08-26, I-6). 원장만 보는 사람은
+        //    «품목 하나 뺐다» 와 «그 하나가 마지막이라 주문이 끝났다» 를 구분할 방법이 없다.
+        //    ⚠ 앞부분(품목·수량)은 고객 알림과 **같은 문자열**을 유지한다 — 뒤에만 덧붙인다.
         publishAudit(AuditAction.ORDER_ITEM_CANCEL, actor, order,
-                itemName + " " + quantity + "개 취소 / 환불 " + refund + "원");
+                itemName + " " + quantity + "개 취소 / 환불 " + refund + "원"
+                        + (order.getStatus() == OrderStatus.CANCELLED ? " (마지막 품목 — 주문 취소됨)" : ""));
     }
 
     /**
@@ -417,7 +422,7 @@ public class OrderService {
      *
      * @return 이 회차에 돌려준 돈
      */
-    private long applyItemCancellation(Order order, UUID orderItemId, long quantity) {
+    private long applyItemCancellation(Order order, UUID orderItemId, long quantity, AuthUser actor) {
         requireCancellable(order);
         OrderItem item = findItem(order, orderItemId);
         if (quantity <= 0 || quantity > item.remainingQuantity()) {
@@ -452,7 +457,16 @@ public class OrderService {
         if (order.isFullyCancelledByItems()) {
             // 🔴 남은 게 없으면 주문 자체가 취소다. 재고·적립금은 위에서 이미 되돌렸다 —
             //    여기서 applyCancellation 을 부르면 **두 번** 돌려준다.
-            order.cancel(null);
+            // 🔴 **누가 비웠는지를 남긴다**(2026-08-26, BACKLOG I-6). 예전엔 여기가 언제나
+            //    `order.cancel(null)` 이었고, NULL 은 이 저장소에서 «본인이 취소했다» 는 뜻이라
+            //    **관리자가 대행한 주문이 주문 행에서 거짓말을 했다**(고객 상세의 「고객센터에서
+            //    대신 취소했어요」 줄도 안 떴다). ⚠ 마지막 품목을 뺀 쪽이 곧 «주문을 취소한 쪽» 이다 —
+            //    앞 회차를 누가 했든 **이 회차의 행위자**로 적는다(그 회차들은 원장에 각각 남아 있다).
+            if (actor == null) {
+                order.cancel(null);
+            } else {
+                order.cancelByAdminFromItems(actor.id(), actor.nickname());
+            }
             couponService.restore(order.getMemberCouponId());
             eventPublisher.publishEvent(OrderCancelledEvent.from(order));
             log.info("Order fully cancelled by item cancellations: {}", order.getOrderNo());
