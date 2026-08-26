@@ -387,6 +387,182 @@ class AdminSalesStatsIntegrationTest {
         org.assertj.core.api.Assertions.assertThat(((Number) sales.get(0)).longValue()).isEqualTo(30_000L);
     }
 
+    /**
+     * 🔴 <b>부분 반품한 몫은 상품별 TOP 에서도 빠진다</b> (2026-08-26, BACKLOG §I-5).
+     *
+     * <p>⚠ <b>매출({@code partialReturnReducesRevenue})과 따로 있어야 하는 이유</b>: 그건 주문 합계
+     * ({@code orders.returned_items_total})를 보고 이건 <b>품목</b>({@code order_item.returned_quantity})을
+     * 본다 — 08-25 에 <b>앞의 것만 고쳐졌고</b> 이 쿼리는 원본 스냅샷을 합산한 채 남았다.
+     * 같은 사고를 한 테스트로 덮을 수 없다.
+     *
+     * <p>🔴 <b>상태로 빠지는 것이 아니라 «수량» 으로 빠져야 한다</b> — 부분 반품 승인은 주문을
+     * {@code DELIVERED} 로 되돌리고 그건 매출 상태다. 그래서 <b>주문이 여전히 DELIVERED 인 것을
+     * 함께 단언</b>한다(WA §3-3 — 그게 없으면 «상태로 빠져서» 통과하는 다른 것을 재게 된다).
+     *
+     * <p>⚠ 수량을 12 로 크게 잡는 이유: espdb 에는 다른 주문이 쌓여 있어서 <b>TOP 10 안에 들어야</b>
+     * 이 단언이 성립한다. 3개짜리는 어느 날 밀려날 수 있다.
+     */
+    @Test
+    @DisplayName("🔴 부분 반품한 몫은 TOP 에서도 빠진다 — 주문은 DELIVERED 로 남는데도")
+    void topProductsExcludesReturnedQuantity() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+
+        String orderId = order(buyer, 12);      // 10,000 × 12 = 120,000
+        pay(buyer, orderId);
+        ship(admin, orderId);
+        deliver(admin, orderId);
+        assertTop(admin, 12L, 120_000L);        // 반품 전 — 원본 그대로
+
+        String itemId = firstItemId(buyer, orderId);
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
+                        .contentType(JSON)
+                        .content("{\"reason\":\"ZZ-TOP일부\",\"items\":[{\"orderItemId\":\"" + itemId
+                                + "\",\"quantity\":5}]}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-approve").header("Authorization", admin))
+                .andExpect(status().isOk());
+
+        // 🔴 대조군 먼저 — 상태가 매출 상태로 **남아 있어야** 아래 단언이 뜻을 갖는다.
+        assertStatus(buyer, orderId, "DELIVERED");
+        assertTop(admin, 7L, 70_000L);          // 12 − 5
+    }
+
+    /**
+     * 🔴 <b>부분 취소한 몫도 상품별 TOP 에서 빠진다</b> (2026-08-26, BACKLOG §I-5).
+     *
+     * <p>⚠ 반품 절과 <b>칸이 다른 컬럼</b>을 밟는다({@code cancelled_quantity} ↔ {@code returned_quantity}).
+     * 둘은 G-10 결정 1 로 <b>일부러 나눠 둔 칸</b>이라, 한쪽만 빼는 식을 써도 다른 한쪽 테스트는
+     * 초록으로 남는다 — 그래서 <b>둘 다</b> 밟는다.
+     *
+     * <p>⚠ 부분 취소된 주문은 {@code PAID} 로 남는다(전량이 빠져야 {@code CANCELLED} 다).
+     */
+    @Test
+    @DisplayName("🔴 부분 취소한 몫도 TOP 에서 빠진다 — 주문은 PAID 로 남는데도")
+    void topProductsExcludesCancelledQuantity() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+
+        String orderId = order(buyer, 12);
+        pay(buyer, orderId);
+        assertTop(admin, 12L, 120_000L);
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/cancel-item").header("Authorization", buyer)
+                        .contentType(JSON)
+                        .content("{\"orderItemId\":\"" + firstItemId(buyer, orderId) + "\",\"quantity\":5}"))
+                .andExpect(status().isOk());
+
+        assertStatus(buyer, orderId, "PAID");
+        assertTop(admin, 7L, 70_000L);
+    }
+
+    /**
+     * 🔴 <b>전량이 빠진 상품은 TOP 에 «0개» 로 남지 않는다 — 행 자체가 없다</b> (BACKLOG §I-5).
+     *
+     * <p>⚠ 🔴 <b>이 테스트는 처음에 «다른 이유로» 통과했다</b> (2026-08-26 — WA §3-3 그대로).
+     * 처음엔 <b>품목이 하나뿐인 주문</b>을 전량 취소했는데, 그러면 주문 자체가 {@code CANCELLED} 로
+     * 떨어져 <b>상태 필터에서 이미 빠진다</b> — {@code HAVING} 을 지워도 초록이었다(변형 D 가 0건).
+     * → <b>품목을 둘</b>로 만들어 <b>한 상품만</b> 전량 취소한다. 그래야 주문이 {@code PAID} 로 남아
+     * 그 상품이 <b>0개짜리 행</b>으로 올라올 수 있고, 그때 비로소 {@code HAVING} 이 유일한 방어가 된다.
+     *
+     * <p>⚠ {@code HAVING} 이 없으면 이 상품이 <b>0개·0원으로 TOP 자리를 차지</b>한다. 매출이 0인 날에
+     * 행을 안 내는 {@code daily} 와 같은 판단이고, 화면의 「이 기간에는 팔린 상품이 없어요」와도 맞는다.
+     */
+    @Test
+    @DisplayName("🔴 한 상품만 전량 취소되면 그 상품은 TOP 에서 사라진다 — 주문은 PAID 로 남는데도")
+    void topProductsDropsFullyCancelledProduct() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+
+        // 같은 주문에 **다른 상품**을 하나 더 담는다 — 이게 있어야 주문이 매출 상태로 남는다.
+        UUID otherVariantId = secondProductVariant();
+        mockMvc.perform(post("/api/cart/items").header("Authorization", buyer).contentType(JSON)
+                        .content("{\"variantId\":\"" + variantId + "\",\"quantity\":12}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/cart/items").header("Authorization", buyer).contentType(JSON)
+                        .content("{\"variantId\":\"" + otherVariantId + "\",\"quantity\":1}"))
+                .andExpect(status().isOk());
+        String created = mockMvc.perform(post("/api/orders").header("Authorization", buyer).contentType(JSON)
+                        .content("{\"recipient\":\"ZZ수령인\",\"phone\":\"010-0000-0000\",\"zipcode\":\"06134\","
+                                + "\"address1\":\"서울시 강남구 테헤란로 1\",\"address2\":null}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String orderId = JsonPath.read(created, "$.data");
+        pay(buyer, orderId);
+        assertTop(admin, 12L, 120_000L);
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/cancel-item").header("Authorization", buyer)
+                        .contentType(JSON)
+                        .content("{\"orderItemId\":\"" + itemIdOf(buyer, orderId, productId) + "\",\"quantity\":12}"))
+                .andExpect(status().isOk());
+
+        // 🔴 대조군 — 다른 품목이 남아 주문은 **매출 상태**다. 상태로 빠진 게 아니라는 뜻이다.
+        assertStatus(buyer, orderId, "PAID");
+
+        String body = mockMvc.perform(get(URL).header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        java.util.List<Object> rows = JsonPath.read(body,
+                "$.data.topProducts[?(@.productId == '" + productId + "')].quantity");
+        org.assertj.core.api.Assertions.assertThat(rows)
+                .as("남은 수량이 0 인 상품은 행 자체가 없어야 한다 (HAVING)")
+                .isEmpty();
+    }
+
+    /** 같은 주문에 함께 담을 <b>다른 상품</b>의 옵션 — 주문을 매출 상태로 남겨 두는 역할만 한다. */
+    private UUID secondProductVariant() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        Category cat = categoryRepository.save(Category.builder().name("ZZC-통계2" + suffix).build());
+        UUID otherProductId = productRepository.save(Product.builder()
+                .name("ZZP-통계상품2" + suffix).description("d").price(1_000)
+                .status(ProductStatus.SELLING).category(cat).build()).getId();
+        return variantRepository.save(ProductVariant.of(otherProductId, "기본", 0, 1000, 0)).getId();
+    }
+
+    /** 주문 상세에서 <b>특정 상품</b>의 품목 id — 품목이 여럿인 주문에서 쓴다. */
+    private String itemIdOf(String buyer, String orderId, UUID wanted) throws Exception {
+        String detail = mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andReturn().getResponse().getContentAsString();
+        java.util.List<Object> ids = JsonPath.read(detail,
+                "$.data.items[?(@.productId == '" + wanted + "')].orderItemId");
+        org.assertj.core.api.Assertions.assertThat(ids)
+                .as("주문에 그 상품의 품목이 없다 — 담기가 안 된 것이다")
+                .isNotEmpty();
+        return String.valueOf(ids.get(0));
+    }
+
+    /** 주문 상세의 첫 품목 id — 부분 취소·부분 반품이 대상으로 쓴다. */
+    private String firstItemId(String buyer, String orderId) throws Exception {
+        String detail = mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(detail, "$.data.items[0].orderItemId");
+    }
+
+    private void assertStatus(String buyer, String orderId, String expected) throws Exception {
+        String body = mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andReturn().getResponse().getContentAsString();
+        org.assertj.core.api.Assertions.assertThat((String) JsonPath.read(body, "$.data.status"))
+                .as("부분만 빠진 주문은 매출 상태로 남는다 — 상태 필터로는 안 걸러진다")
+                .isEqualTo(expected);
+    }
+
+    /**
+     * 이 테스트가 만든 상품이 TOP 에서 <b>몇 개·얼마</b>로 잡히는지 본다.
+     *
+     * <p>⚠ 값을 <b>손으로 적어</b> 단언한다 — 식을 SQL 에서 다시 조립해 비교하면
+     * {@code matchesDirectAggregate} 가 08-25 에 겪은 «사본이 같이 틀려서 초록» 이 되풀이된다.
+     */
+    private void assertTop(String admin, long quantity, long sales) throws Exception {
+        String body = mockMvc.perform(get(URL).header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String filter = "$.data.topProducts[?(@.productId == '" + productId + "')].";
+        java.util.List<Object> qty = JsonPath.read(body, filter + "quantity");
+        java.util.List<Object> amount = JsonPath.read(body, filter + "sales");
+        org.assertj.core.api.Assertions.assertThat(qty)
+                .as("이 테스트의 상품이 TOP 10 에 없다 — 단언할 대상이 없으면 초록도 뜻이 없다")
+                .isNotEmpty();
+        org.assertj.core.api.Assertions.assertThat(((Number) qty.get(0)).longValue()).isEqualTo(quantity);
+        org.assertj.core.api.Assertions.assertThat(((Number) amount.get(0)).longValue()).isEqualTo(sales);
+    }
+
     @Test
     @DisplayName("API 응답이 DB 직접 집계와 일치한다 — 정의가 코드와 SQL 양쪽에서 같은지")
     void matchesDirectAggregate() throws Exception {

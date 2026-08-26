@@ -242,6 +242,8 @@ function applyManual() {
           <h2 class="section-title">많이 팔린 상품 TOP {{ data.topProducts.length }}</h2>
           <p class="muted mt-1">
             판매액은 <strong>쿠폰 할인 전</strong> 금액입니다 — 쿠폰은 주문 단위라 상품별로 나눌 수 없어요.
+            <br />
+            취소·반품된 몫은 <strong>빠진 뒤</strong>의 수량·금액입니다 (상점의 인기순과 같은 기준).
           </p>
           <!--
             ⚠ 기간을 열면서 **빈 목록이 흔해졌다**. 「팔린 게 없다」와 「이 기간에 안 팔렸다」는 다른 말이라

@@ -81,6 +81,27 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
      */
     String ITEM_SALES = REMAINING_ITEMS + " - " + REMAINING_DISCOUNT;
 
+    /* ─────────── 품목 단위의 «남은 것» — 상품별 TOP 이 쓴다 (2026-08-26, BACKLOG §I-5) ───────────
+     *
+     * ⚠ 위 셋은 <b>주문(o.)</b> 단위이고 아래 둘은 <b>품목(oi.)</b> 단위다. 상품별 TOP 은
+     *   {@code order_item} 을 묶으므로 주문 합계로는 «어느 상품이» 를 못 가른다.
+     * 🔴 <b>같은 식이 엔티티에도 있다</b> — {@code OrderItem.remainingQuantity()}·{@code remainingAmount()}.
+     *   SQL 에서 그 메서드를 부를 수 없어 <b>사본이 하나 생기는 것을 피할 수 없다.</b>
+     *   그래서 이름을 <b>메서드와 같게</b> 두고, 어긋나면 잡히도록 값으로 보는 테스트를 붙였다
+     *   ({@code AdminSalesStatsIntegrationTest} 의 TOP 절). ⚠ 셋 중 하나를 고치면 나머지 둘을 연다.
+     */
+
+    /** 아직 살아 있는 품목 수량 — {@code OrderItem.remainingQuantity()} 와 같은 식. */
+    String REMAINING_QUANTITY = "(oi.quantity - oi.cancelled_quantity - oi.returned_quantity)";
+
+    /**
+     * 아직 살아 있는 품목 금액 = <b>단가 × 남은 수량</b> ({@code OrderItem.remainingAmount()} 와 같은 식).
+     *
+     * <p>⚠ <b>{@code line_total} 을 깎지 않는다</b> — 그건 «몇 개를 얼마에 샀나» 라는 주문 시점
+     * 스냅샷이라 안 줄어든다({@code OrderItem.cancelledQuantity} 주석과 같은 판단).
+     */
+    String REMAINING_AMOUNT = "(oi.price * " + REMAINING_QUANTITY + ")";
+
     /**
      * 기간 요약 — 주문 수 · 상품매출 · 배송비 · 할인액.
      *
@@ -147,22 +168,34 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
      * 깎았는지 나눌 근거가 없다. 안분하면 그럴듯하지만 <b>지어낸 숫자</b>가 된다.
      * 그래서 요약의 상품매출(할인 후)과 이 값의 합계는 <b>일부러 다르다</b> — 화면에도 그렇게 적는다.
      *
-     * @return {@code [product_id(RAW), 상품명, 판매수량, 판매액]} 판매수량 내림차순
+     * <p>🔴 <b>수량·금액은 «남은 것» 이다</b> (2026-08-26, BACKLOG §I-5) — {@link #REMAINING_QUANTITY}·
+     * {@link #REMAINING_AMOUNT}. ⚠ 08-24 가 부분 취소분을 빼며 {@code summarize}·{@code daily} 만 고쳤고
+     * 08-25 가 부분 반품분을 빼며 <b>같은 파일의 세 번째 쿼리를 안 열었다</b> — 그래서 여기만
+     * <b>원본 스냅샷을 합산한 채</b> 남아 있었다. 상태 필터는 <b>전량</b> 취소·반품만 걸러내므로
+     * (부분은 {@code PAID}·{@code DELIVERED} 로 남는다) <b>부분으로 빠진 몫이 그대로 TOP 에 잡혔다.</b>
+     * 🔴 그 사이 {@code product.sold_count}(상점 인기순)는 이벤트로 줄고 있어서
+     * <b>관리자 TOP 과 상점 인기순이 서로 다른 말을 했다.</b>
+     *
+     * <p>⚠ <b>남은 수량이 0 인 상품은 행 자체가 없다</b>({@code HAVING}). 안 걸러내면 전량이 빠진
+     * 상품이 <b>0개·0원으로 TOP 자리를 차지</b>한다 — 매출 0인 날에 행을 안 내는 {@code daily} 와 같은 판단이고,
+     * 「이 기간에 안 팔렸다」를 「0개 팔렸다」로 보여 주지 않기 위해서다.
+     *
+     * @return {@code [product_id(RAW), 상품명, 남은 수량, 남은 금액]} 수량 내림차순
      */
-    @Query(value = """
-            SELECT oi.product_id,
-                   MAX(oi.product_name) KEEP (DENSE_RANK LAST ORDER BY o.paid_at),
-                   SUM(oi.quantity),
-                   SUM(oi.line_total)
-              FROM order_item oi
-              JOIN orders o ON o.id = oi.order_id
-             WHERE o.status IN (:statuses)
-               AND o.paid_at >= :from
-               AND o.paid_at <  :to
-             GROUP BY oi.product_id
-             ORDER BY SUM(oi.quantity) DESC, SUM(oi.line_total) DESC
-             FETCH FIRST :limit ROWS ONLY
-            """, nativeQuery = true)
+    @Query(value = "SELECT oi.product_id,"
+            + " MAX(oi.product_name) KEEP (DENSE_RANK LAST ORDER BY o.paid_at),"
+            + " SUM(" + REMAINING_QUANTITY + "),"
+            + " SUM(" + REMAINING_AMOUNT + ")"
+            + " FROM order_item oi"
+            + " JOIN orders o ON o.id = oi.order_id"
+            + " WHERE o.status IN (:statuses)"
+            + "   AND o.paid_at >= :from"
+            + "   AND o.paid_at <  :to"
+            + " GROUP BY oi.product_id"
+            + " HAVING SUM(" + REMAINING_QUANTITY + ") > 0"
+            + " ORDER BY SUM(" + REMAINING_QUANTITY + ") DESC, SUM(" + REMAINING_AMOUNT + ") DESC"
+            + " FETCH FIRST :limit ROWS ONLY",
+            nativeQuery = true)
     List<Object[]> topProducts(@Param("statuses") Collection<String> statuses,
                                @Param("from") Instant from,
                                @Param("to") Instant to,
