@@ -433,8 +433,12 @@ public class OrderService {
         }
 
         long pointBefore = order.getCancelledPoint();
+        // 🔴 **이번 회차에 빠진 «상품합계»** (2026-08-26, I-12). 주문이 이 회차로 비면 고객 알림이
+        //    이 값을 말한다 — 그때 `remainingItemsTotal()` 은 이미 0 이라 못 쓴다(0원이라고 말했다).
+        long itemsBefore = order.getCancelledItemsTotal();
         long refund = order.cancelItem(item, quantity);
         long refundedPoint = order.getCancelledPoint() - pointBefore;
+        long cancelledItemsAmount = order.getCancelledItemsTotal() - itemsBefore;
 
         productCommandService.increaseStock(
                 item.getVariantId(), quantity, StockChangeReason.CANCEL, order.getId());
@@ -468,7 +472,8 @@ public class OrderService {
                 order.cancelByAdminFromItems(actor.id(), actor.nickname());
             }
             couponService.restore(order.getMemberCouponId());
-            eventPublisher.publishEvent(OrderCancelledEvent.from(order));
+            // ⚠ `from(order)` 이 아니다 — 그건 «남은 상품합계» 를 읽는데 여기선 이미 0 이다(I-12).
+            eventPublisher.publishEvent(OrderCancelledEvent.ofItemsDrained(order, cancelledItemsAmount));
             log.info("Order fully cancelled by item cancellations: {}", order.getOrderNo());
         }
         log.info("Order item cancelled: {} item={} qty={} refund={} refundedPoint={}",

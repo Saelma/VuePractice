@@ -27,6 +27,27 @@ import java.util.UUID;
 public record OrderCancelledEvent(UUID orderId, UUID memberId, long cancelledAmount, int itemCount,
                                   List<SoldLine> lines) implements DomainEvent {
 
+    /**
+     * 🔴 <b>부분 취소가 마지막 품목까지 비웠을 때</b> (2026-08-26, BACKLOG I-12).
+     *
+     * <p>⚠ <b>{@link #from} 을 쓸 수 없다.</b> 그쪽은 {@code order.remainingItemsTotal()} 을 읽는데,
+     * 이 갈래에서는 <b>직전에 그 품목이 이미 빠져</b> 남은 것이 <b>0</b> 이다 →
+     * 고객에게 «<b>0원</b> 주문이 취소되었습니다» 가 나갔다(2026-08-26 운영 실측, {@code 20260826-5931}).
+     *
+     * <p>🔴 <b>더 나쁜 것은 그 금액이 어디에도 안 나온다는 것</b>이다 — 마지막 회차는 «전량이 빠지는
+     * 경우» 라 <b>부분 취소 알림을 건너뛴다</b>(08-25 §11-2 ②, 알림이 두 번 뜨는 것을 막으려고).
+     * 즉 앞 회차들은 각자 금액을 알렸는데 <b>마지막 회차의 10,000원만 통째로 사라졌다.</b>
+     *
+     * <p>→ <b>이번 회차에 빠진 상품합계를 그대로 싣는다</b>(사용자 결정, 2026-08-26).
+     * ⚠ 누적 환불액이 아니다 — 앞 회차는 이미 각자 알렸으므로 합치면 «또 받나» 로 읽힌다.
+     * ⚠ 필드의 뜻은 {@link #from} 과 <b>같다</b>(«이번에 취소된 상품합계») — 경로마다 다른 뜻을
+     * 넣지 않는다. 다른 것은 <b>그 값을 어디서 얻느냐</b> 뿐이다.
+     */
+    public static OrderCancelledEvent ofItemsDrained(Order order, long cancelledAmount) {
+        return new OrderCancelledEvent(order.getId(), order.getMemberId(), cancelledAmount,
+                order.getItems().size(), SoldLine.remaining(order));
+    }
+
     public static OrderCancelledEvent from(Order order) {
         return new OrderCancelledEvent(order.getId(), order.getMemberId(),
                 // 🔴 **«남은» 상품합계다** — 이번 취소로 실제로 빠지는 금액이 그것이다.

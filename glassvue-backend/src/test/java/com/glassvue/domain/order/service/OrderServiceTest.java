@@ -948,4 +948,38 @@ class OrderServiceTest {
         //       필드마다 물어야 한다(WA §2-2-2 의 이벤트 판).
         assertThat(cancelled.cancelledAmount()).isEqualTo(20_000);
     }
+
+    /**
+     * 🔴 <b>부분 취소가 주문을 비우면 «이번 회차» 금액을 말한다 — 0원이 아니다</b>
+     * (2026-08-26, BACKLOG I-12).
+     *
+     * <p>운영 실측({@code 20260826-5931}): 32,000원어치를 세 회차로 뺐는데 고객이 받은 마지막 알림이
+     * «<b>0원</b> 주문이 취소되었습니다» 였다. {@code from(order)} 이 읽는 {@code remainingItemsTotal()}
+     * 은 그 시점에 <b>이미 0</b> 이기 때문이다.
+     *
+     * <p>🔴 <b>그리고 그 금액은 어디에도 안 나온다</b> — 마지막 회차는 «전량이 빠지는 경우» 라
+     * 부분 취소 알림을 건너뛴다(08-25 §11-2 ②). 앞 회차는 각자 알렸는데 <b>마지막 것만 사라진다.</b>
+     *
+     * <p>⚠ <b>대조군을 함께 단언한다</b> — 앞 회차(2개 중 1개)에서는 {@code OrderCancelledEvent} 가
+     * 아예 안 나가야 한다. 그게 없으면 «항상 이번 회차 금액으로 내보내는» 구현도 통과한다.
+     */
+    @Test
+    @DisplayName("🔴 부분 취소로 주문이 비면 «이번 회차» 금액을 싣는다 — 0원이라고 말하지 않는다")
+    void cancelItem_drainingOrder_carriesThisRoundAmount() {
+        UUID p1 = UUID.randomUUID();
+        Order order = orderWith(OrderItem.of(p1, p1, null, "지바", null, 10_000, 10_000L, null, 2));
+        order.pay();
+        when(orderRepository.findByIdAndMemberId(order.getId(), memberId)).thenReturn(Optional.of(order));
+        UUID itemId = order.getItems().get(0).getId();
+
+        orderService.cancelItem(order.getId(), memberId, itemId, 1);
+        verify(eventPublisher, never()).publishEvent(any(OrderCancelledEvent.class));
+
+        orderService.cancelItem(order.getId(), memberId, itemId, 1);   // 마지막 1개 — 주문이 빈다
+
+        OrderCancelledEvent cancelled = capturePublished(OrderCancelledEvent.class);
+        assertThat(cancelled.cancelledAmount())
+                .as("이번 회차에 빠진 10,000 이다 — 0(남은 것)도 20,000(누적)도 아니다")
+                .isEqualTo(10_000);
+    }
 }
