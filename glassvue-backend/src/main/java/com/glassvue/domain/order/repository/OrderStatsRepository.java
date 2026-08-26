@@ -175,6 +175,11 @@ public interface OrderStatsRepository extends Repository<Order, UUID> {
      * (부분은 {@code PAID}·{@code DELIVERED} 로 남는다) <b>부분으로 빠진 몫이 그대로 TOP 에 잡혔다.</b>
      * 🔴 그 사이 {@code product.sold_count}(상점 인기순)는 이벤트로 줄고 있어서
      * <b>관리자 TOP 과 상점 인기순이 서로 다른 말을 했다.</b>
+     * ⚠ 🔴 <b>그렇다고 이걸 고치면 둘이 «같은 값» 이 되는 것은 아니다</b>(2026-08-26 배포 검증 실측) —
+     * <b>세는 창이 다르다</b>(여기는 고른 기간 · 매출 상태, 저쪽은 전체 기간 누적). 게다가
+     * {@code sold_count} 에는 <b>08-25 이전 부분 취소가 판매량을 안 되돌리던 구멍</b>의 이력이 남아 있다
+     * (실측: 지바 TOP 5 / {@code sold_count} 12 · 몽쉘 10개 1 / 8).
+     * <b>고쳐진 것은 «TOP 이 원본을 세던 것» 이지 «둘의 값이 일치하는 것» 이 아니다.</b>
      *
      * <p>⚠ <b>남은 수량이 0 인 상품은 행 자체가 없다</b>({@code HAVING}). 안 걸러내면 전량이 빠진
      * 상품이 <b>0개·0원으로 TOP 자리를 차지</b>한다 — 매출 0인 날에 행을 안 내는 {@code daily} 와 같은 판단이고,
