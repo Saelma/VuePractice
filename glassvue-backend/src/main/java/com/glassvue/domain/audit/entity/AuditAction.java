@@ -138,6 +138,14 @@ public enum AuditAction {
      * 원장은 오늘부터 시작한다(V44·V50 과 같은 판단 — 모르는 값은 지어내지 않는다).
      *
      * <p>⚠ {@code V51} 로 CHECK 제약을 함께 넓혔다.
+     *
+     * <p>🔴 <b>{@code ORDER_RETURN_APPROVE} 의 detail 에는 사유도 적는다</b> (2026-08-26, BACKLOG I-10) —
+     * «품목 + 환불액 + <b>사유</b>». ⚠ {@code order.return_reason} 은 <b>한 칸</b>이라 다음 요청이
+     * 덮으므로, 회차가 쌓이면 «1회차는 왜 반품했나» 를 알 곳이 <b>여기뿐</b>이다.
+     * <b>거절 쪽이 2026-08-14 에 정확히 같은 논리로 먼저 그렇게 해 뒀고</b>({@code ORDER_RETURN_REJECT}),
+     * 승인 쪽만 빠져 있던 <b>짝의 비대칭</b>이었다.
+     * ⚠ detail 이 1000자를 넘으면 <b>«…(잘림)» 으로 눕힌다</b>({@code OrderService.fitDetail}) —
+     * 넘긴 채로 두면 {@code ORA-12899} 로 <b>반품 승인 자체가 롤백된다.</b>
      */
     ORDER_SHIP(AuditTargetType.MEMBER),
     ORDER_DELIVER(AuditTargetType.MEMBER),

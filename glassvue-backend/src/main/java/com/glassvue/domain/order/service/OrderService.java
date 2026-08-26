@@ -500,11 +500,38 @@ public class OrderService {
      * <p>⚠ {@code what} 은 «이 조작이 무엇을 움직였는가» 다 — 택배사·송장 · 나간 적립금 · 환불액 · 사유.
      * 주문번호는 여기서 붙이므로 <b>호출자가 또 적지 않는다</b>(V43 때는 호출자가 직접 이어 붙였다).
      */
+    /**
+     * 원장 {@code detail} 의 상한 — {@code AdminAuditLog.detail} 이 {@code VARCHAR2(1000)} 이다.
+     *
+     * <p>🔴 <b>넘으면 조작 자체가 롤백된다.</b> 감사는 <b>같은 트랜잭션</b>에서 저장되므로
+     * (`AdminAuditCommandService` — «감사가 실패하면 조작 전체가 함께 롤백된다»),
+     * 길이 초과({@code ORA-12899})는 «원장만 못 남는 것» 이 아니라 <b>반품 승인·취소가 실패하는 것</b>이다.
+     * ⚠ <b>저장소 어디에도 자르는 곳이 없었다</b>(2026-08-26 확인) — 지금까지는 문자열이 짧아서
+     * 안 터진 것이지 막혀 있던 것이 아니다.
+     */
+    private static final int AUDIT_DETAIL_MAX = 1000;
+
     private void publishAudit(AuditAction action, AuthUser actor, Order order, String what) {
         eventPublisher.publishEvent(new AdminActionEvent(
                 action, actor.id(), actor.nickname(),
                 order.getMemberId(), memberService.loginIdOf(order.getMemberId()),
-                order.getOrderNo() + " / " + what));
+                fitDetail(order.getOrderNo() + " / " + what)));
+    }
+
+    /**
+     * 원장 detail 을 상한 안으로 눕힌다 — <b>자르되 «잘렸다» 고 말한다.</b>
+     *
+     * <p>⚠ 조용히 자르면 읽는 사람이 <b>그게 전부인 줄</b> 안다. 특히 사유가 뒤에 붙으므로
+     * 잘리는 것은 대개 <b>사유의 꼬리</b>다({@code AuditAction.ORDER_RETURN_APPROVE} 주석 참조).
+     * 🔴 <b>품목이 아주 많은 주문은 사유가 통째로 날아갈 수도 있다</b> — 그건 detail 한 칸으로
+     * 풀 문제가 아니라서 BACKLOG §I-13 에 따로 적었다.
+     */
+    private static String fitDetail(String detail) {
+        if (detail.length() <= AUDIT_DETAIL_MAX) {
+            return detail;
+        }
+        String mark = "…(잘림)";
+        return detail.substring(0, AUDIT_DETAIL_MAX - mark.length()) + mark;
     }
 
     private void requireCancellable(Order order) {
@@ -625,6 +652,15 @@ public class OrderService {
                 .map(it -> new StockRestore(it.getVariantId(), it.getReturnRequestedQuantity()))
                 .toList();
         List<SoldLine> lines = SoldLine.ofRequestedReturn(order);
+        // 🔴 **사유도 여기서 떠 둔다** (2026-08-26, BACKLOG I-10). 지금은 정산이 이 칸을 안 건드리지만
+        //    **같은 자리에 두는 것이 규약**이다 — 위 주석이 말하는 «정산 전에 이번 회차를 읽어 둔다».
+        //    ⚠ `return_reason` 은 **한 칸**이라 다음 요청이 덮는다. 그래서 회차가 쌓이면
+        //       «1회차는 왜 반품했나» 를 알 곳이 **이 원장뿐**이다(거절 쪽이 08-14 에 정한 것과 같은 논리).
+        //    ⚠ 🔴 **변형으로 확인했다 — 이 읽기를 정산 «뒤» 로 옮겨도 오늘은 아무 테스트도 안 빨개진다**
+        //       (2026-08-26, 0건). 즉 이 배치는 «방어» 이지 지금 지켜지는 계약이 아니다.
+        //       그래도 여기 두는 이유: 위 두 줄(`requested`·`lines`)이 **정산 뒤에 읽으면 0 이 되는**
+        //       값이라, 같은 블록에 있으면 다음 사람이 «여기는 정산 전» 을 한 번에 읽는다.
+        String returnReason = order.getReturnReason();
         String returnedDetail = requested.stream()
                 .map(it -> it.getProductName()
                         + (it.getVariantName() == null ? "" : " (" + it.getVariantName() + ")")
@@ -655,7 +691,9 @@ public class OrderService {
         // ⚠ 원장에는 **무엇을 몇 개 되돌리고 얼마를 돌려줬나** 를 적는다. 부분 반품이 생기면서
         //   금액만으로는 «어느 품목이 빠졌나» 를 못 되짚는다(ORDER_ITEM_CANCEL 이 같은 자리에서 정한 것).
         publishAudit(AuditAction.ORDER_RETURN_APPROVE, actor, order,
-                returnedDetail + " 반품 / 환불 " + settlement.refundAmount() + "원");
+                returnedDetail + " 반품 / 환불 " + settlement.refundAmount() + "원"
+                        + (returnReason == null || returnReason.isBlank()
+                                ? "" : " / 사유: " + returnReason));
         log.info("Return approved: {} items={} refund={} earnedReversed={} admin={}",
                 id, requested.size(), settlement.refundAmount(), settlement.earnedToReverse(), actor.id());
     }

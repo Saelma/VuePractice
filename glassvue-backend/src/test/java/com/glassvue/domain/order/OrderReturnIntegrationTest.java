@@ -339,6 +339,58 @@ class OrderReturnIntegrationTest {
         assertThat(reject.getDetail()).contains("ZZ-사용 흔적이 있습니다");
     }
 
+    /**
+     * 🔴 <b>승인 원장에도 사유가 남는다 — 그리고 다음 회차가 주문의 사유를 덮어도 그대로다</b>
+     * (2026-08-26, BACKLOG I-10).
+     *
+     * <p>⚠ <b>거절 쪽({@link #rejectReturn_auditSurvivesReRequest})과 정확히 같은 논리</b>인데
+     * 승인 쪽만 빠져 있었다 — <b>짝의 비대칭</b>. 다만 «지워진다» 가 아니라 <b>«덮인다»</b> 라는 것이
+     * 다르다: {@code return_reason} 은 한 칸이라 부분 반품 <b>2회차 요청이 1회차 사유를 덮는다.</b>
+     *
+     * <p>🔴 <b>부분 반품이 이 손실을 키웠다</b> — 전량 시절엔 한 주문에 반품이 한 번이라 덮일 일이
+     * 없었다. 회차가 생기면서 «1회차는 왜 반품했나» 를 알 곳이 <b>원장뿐</b>이 됐다.
+     */
+    @Test
+    @DisplayName("🔴 반품 승인 원장에 사유가 남고, **2회차 요청이 덮어도 1회차 사유는 그대로다**")
+    void approveReturn_auditKeepsReasonOfEachRound() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 2, null);   // 2개 — 회차를 나눌 수 있다
+
+        String itemId = JsonPath.read(mockMvc.perform(get("/api/orders/" + orderId)
+                .header("Authorization", buyer)).andReturn().getResponse().getContentAsString(),
+                "$.data.items[0].orderItemId");
+        // 1회차 — 1개만
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
+                        .contentType(JSON)
+                        .content("{\"reason\":\"ZZ-1회차 색이 달라요\",\"items\":[{\"orderItemId\":\""
+                                + itemId + "\",\"quantity\":1}]}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-approve")
+                .header("Authorization", admin)).andExpect(status().isOk());
+
+        // 2회차 요청 — 주문의 사유 칸을 **덮는다**
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
+                        .contentType(JSON)
+                        .content("{\"reason\":\"ZZ-2회차 마음이 바뀌었어요\",\"items\":[{\"orderItemId\":\""
+                                + itemId + "\",\"quantity\":1}]}"))
+                .andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+
+        // 대조군 — 주문 쪽에는 1회차 사유가 **없다**(덮였다). 그게 없으면 이 테스트는
+        // «원장에도 있고 주문에도 있는» 상태를 재게 되어 원장의 값을 증명하지 못한다.
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.returnReason").value("ZZ-2회차 마음이 바뀌었어요"));
+
+        AdminAuditLog approve = auditOfBuyer().stream()
+                .filter(l -> l.getAction() == AuditAction.ORDER_RETURN_APPROVE).findFirst().orElseThrow();
+        assertThat(approve.getDetail())
+                .as("1회차 사유를 알 곳이 여기뿐이다")
+                .contains("ZZ-1회차 색이 달라요")
+                .contains("환불");
+    }
+
     /** 이 테스트가 만든 구매자를 대상으로 한 감사 이력(오래된 것부터). */
     private List<AdminAuditLog> auditOfBuyer() {
         return entityManager.createQuery(

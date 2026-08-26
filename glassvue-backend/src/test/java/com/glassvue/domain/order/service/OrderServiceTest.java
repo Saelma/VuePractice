@@ -476,7 +476,34 @@ class OrderServiceTest {
         assertThat(e.action()).isEqualTo(AuditAction.ORDER_RETURN_APPROVE);
         // 🔴 **무엇을 몇 개** 가 함께 남는다 (2026-08-25, G-10) — 부분 반품이 생기면서 금액만으로는
         //    «어느 품목이 빠졌나» 를 못 되짚는다(ORDER_ITEM_CANCEL 이 같은 자리에서 정한 것).
-        assertThat(e.detail()).isEqualTo("20260101-0020 / 지바 2개 반품 / 환불 20000원");
+        // 🔴 **사유도 함께 남는다** (2026-08-26, BACKLOG I-10) — `return_reason` 은 한 칸이라
+        //    다음 회차 요청이 덮으므로, 회차가 쌓이면 «1회차는 왜» 를 알 곳이 원장뿐이다.
+        //    ⚠ 거절 쪽이 2026-08-14 에 같은 논리로 먼저 그렇게 해 뒀고 승인만 빠져 있었다.
+        assertThat(e.detail()).isEqualTo("20260101-0020 / 지바 2개 반품 / 환불 20000원 / 사유: ZZ-반품사유");
+    }
+
+    /**
+     * 🔴 <b>원장 detail 이 1000자를 넘으면 «자르되 잘렸다고 말한다»</b> (2026-08-26, I-10).
+     *
+     * <p>⚠ <b>이건 «보기 좋게» 가 아니라 «안 터지게» 다.</b> {@code AdminAuditLog.detail} 이
+     * {@code VARCHAR2(1000)} 인데 <b>저장소 어디에도 자르는 곳이 없었다</b> — 감사는 같은 트랜잭션에서
+     * 저장되므로({@code AdminAuditCommandService}) 길이 초과는 «원장만 못 남는 것» 이 아니라
+     * <b>반품 승인 자체가 롤백되는 것</b>이다({@code ORA-12899}).
+     *
+     * <p>🔴 <b>사유를 원장에 붙이기로 하면서 그 위험이 커졌다</b> — 사유는 500자까지 들어온다.
+     * 지금까지 안 터진 것은 문자열이 짧아서지 막혀 있어서가 아니었다.
+     */
+    @Test
+    @DisplayName("🔴 원장 detail 이 1000자를 넘으면 «…(잘림)» 으로 눕는다 — 안 그러면 승인이 롤백된다")
+    void approveReturn_trimsOverlongDetail() {
+        Order order = returnRequestedOrder("20260101-0022", "ZZ" + "가".repeat(1_200));
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(memberService.loginIdOf(memberId)).thenReturn("zzbuyer");
+
+        orderService.approveReturn(order.getId(), admin);
+
+        AdminActionEvent e = captureAudit();
+        assertThat(e.detail()).hasSize(1_000).endsWith("…(잘림)");
     }
 
     /**
@@ -507,6 +534,11 @@ class OrderServiceTest {
 
     /** 반품 요청까지 온 주문 하나. */
     private Order returnRequestedOrder(String orderNo) {
+        return returnRequestedOrder(orderNo, "ZZ-반품사유");
+    }
+
+    /** 사유를 갈아 끼우는 판 — 원장 길이 가드를 밟을 때 쓴다(I-10). */
+    private Order returnRequestedOrder(String orderNo, String reason) {
         UUID p1 = UUID.randomUUID();
         Order order = Order.create(memberId, "구매자닉",
                 List.of(OrderItem.of(p1, p1, null, "지바", null, 10_000, 10_000L, null, 2)),
@@ -515,7 +547,7 @@ class OrderServiceTest {
         order.pay();
         order.ship(DeliveryCarrier.CJ, "123");
         order.deliver();
-        requestFullReturn(order, "ZZ-반품사유");
+        requestFullReturn(order, reason);
         return order;
     }
 
