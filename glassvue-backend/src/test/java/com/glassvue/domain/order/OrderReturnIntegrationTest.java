@@ -407,6 +407,178 @@ class OrderReturnIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    // ─────────── 🔴 부분 반품 — HTTP 로 관통한다 (2026-08-26, BACKLOG §I-8) ───────────
+    //
+    // ⚠ **G-10(부분 반품)은 엔티티 단위와 mock 서비스 테스트만 있었다.** 이 파일의 반품 테스트는
+    //    전부 `fullReturnBody`(전량)였다 — 즉 «요청 → 승인» 을 **부분 수량으로 HTTP 관통한 적이 없다.**
+    // 🔴 **부분 «취소» 에는 그 테스트가 있다**(`OrderPartialCancelIntegrationTest`, 457줄:
+    //    권한 401/403/404/200 · 재고 · 적립금 · 원장 · 회귀). **같은 모양의 기능인데 한쪽만 있었다.**
+
+    /**
+     * 🔴 <b>부분 반품을 요청부터 승인까지 HTTP 로 밟는다</b> (2026-08-26, §I-8).
+     *
+     * <p>3개 중 <b>1개만</b> 반품한다. 여기서 보는 것은 «금액이 맞나» 가 아니라
+     * (그건 {@code OrderServiceTest} 의 배분식 테스트가 지킨다) <b>«HTTP 로 들어와도 같은 값이 되나»</b> 다.
+     *
+     * <p>⚠ <b>주문이 {@code DELIVERED} 로 «남는» 것을 함께 단언한다</b> — 부분 반품 승인은
+     * {@code RETURNED} 가 아니라 배송완료로 되돌린다. 그 성질이 §I-1(매출)·§I-3(화면)·§I-5(TOP) 를
+     * 낳았으므로 <b>계약으로 못 박아 둔다.</b>
+     */
+    @Test
+    @DisplayName("🔴 부분 반품: 3개 중 1개만 — 재고·적립금이 그 몫만 움직이고 주문은 DELIVERED 로 남는다")
+    void partialReturn_movesOnlyThatShare() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 3, null);   // 50,000 × 3 = 150,000 · 적립 1,500
+
+        long balanceBefore = balance();
+        String itemId = firstItemId(buyer, orderId);
+        partialReturn(buyer, orderId, itemId, 1, "ZZ-하나만 반품");
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-approve").header("Authorization", admin))
+                .andExpect(status().isOk());
+
+        // 🔴 **적립 회수는 «비례» 다**(G-10 배분식) — 3개분 적립 중 1개분만 되돌아간다.
+        //    ⚠ 적립률을 **손으로 적지 않는다**: 등급에 따라 1%·2% 로 갈리고, 그 숫자를 여기 베끼면
+        //       등급 정책이 바뀔 때 **이 테스트가 정책의 두 번째 사본**이 된다(WA §1-2-1).
+        //       배송완료 직후 잔액이 곧 «3개분 적립» 이므로 그 값에서 유도한다.
+        long earnedForThree = balanceBefore;
+        assertThat(balance()).isEqualTo(balanceBefore + 50_000 - earnedForThree / 3);
+        entityManager.flush();
+        entityManager.clear();
+        // 재고: 100 − 3(주문) + 1(반품) = 98. 🔴 전량이면 100 이 된다 — 여기서 갈린다.
+        assertThat(variantRepository.findById(variantId).orElseThrow().getStock()).isEqualTo(98);
+        assertLedgerConsistent();
+
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(status().isOk())
+                // 🔴 RETURNED 가 아니다 — 남은 것이 있으면 배송완료로 되돌아간다
+                .andExpect(jsonPath("$.data.status").value("DELIVERED"))
+                .andExpect(jsonPath("$.data.items[0].remainingQuantity").value(2))
+                .andExpect(jsonPath("$.data.items[0].returnableQuantity").value(2));
+    }
+
+    /**
+     * 🔴 <b>남은 것이 없어지면 그때 {@code RETURNED} 다</b> — 회차를 나눠도 전량과 같은 곳에 닿는다.
+     *
+     * <p>⚠ 이것이 G-10 설계의 <b>안전 조건</b>이다({@code Order.applyRequestedReturns} 주석의 «수렴»).
+     * 단위 테스트가 금액의 수렴을 지키고, 여기서는 <b>상태와 재고가 수렴하는지</b>를 HTTP 로 본다.
+     */
+    @Test
+    @DisplayName("🔴 부분 반품 두 회차로 다 빼면 RETURNED — 전량 반품과 같은 곳에 닿는다")
+    void partialReturnTwice_convergesToReturned() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 2, null);
+        String itemId = firstItemId(buyer, orderId);
+
+        partialReturn(buyer, orderId, itemId, 1, "ZZ-1회차");
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-approve").header("Authorization", admin))
+                .andExpect(status().isOk());
+        partialReturn(buyer, orderId, itemId, 1, "ZZ-2회차");
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-approve").header("Authorization", admin))
+                .andExpect(status().isOk());
+
+        // ⚠ **flush 가 먼저다** — clear() 만 부르면 아직 안 나간 변경을 **버린다**(이 파일의 원장
+        //    테스트가 `flush(); clear();` 로 해 둔 이유다). 처음에 이걸 빼먹어 2회차가 통째로
+        //    사라졌고 «수렴이 안 된다» 로 보였다(2026-08-26).
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(variantRepository.findById(variantId).orElseThrow().getStock()).isEqualTo(100);
+        assertLedgerConsistent();
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.status").value("RETURNED"))
+                .andExpect(jsonPath("$.data.items[0].remainingQuantity").value(0));
+    }
+
+    /** 남은 수량보다 많이 반품 요청하면 막힌다 — 부분 취소에 있는 가드의 반품 판. */
+    @Test
+    @DisplayName("남은 수량을 넘겨 반품 요청하면 400 — 주문은 그대로여야 한다")
+    void partialReturn_overRemaining_rejected() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
+                        .contentType(JSON)
+                        .content("{\"reason\":\"ZZ-과다\",\"items\":[{\"orderItemId\":\""
+                                + firstItemId(buyer, orderId) + "\",\"quantity\":2}]}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.status").value("DELIVERED"));
+    }
+
+    // ─────────── 🔴 권한 비대칭 (2026-08-26, §I-8) ───────────
+    //
+    // ⚠ `return-approve` 에는 401/403 이 있는데(`approveRequiresAdmin`) **`return-reject` 에는 없었다.**
+    //    `return-request` 의 «남의 주문» 도 없었다. 🔴 **부분 취소에는 둘 다 있다** — 같은 비대칭이다.
+
+    @Test
+    @DisplayName("🔴 반품 거절도 관리자만 — 일반 회원 403, 미인증 401 (승인에만 있던 테스트)")
+    void rejectRequiresAdmin() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+        requestReturn(buyer, orderId, "변심");
+        String body = "{\"reason\":\"ZZ-거절\"}";
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-reject").contentType(JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-reject")
+                        .header("Authorization", buyer).contentType(JSON).content(body))
+                .andExpect(status().isForbidden());
+
+        // 🔴 대조군 — 관리자는 된다. 이게 없으면 «경로가 그냥 죽어 있어서» 통과하는 것과 구분이 안 된다.
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-reject")
+                        .header("Authorization", admin).contentType(JSON).content(body))
+                .andExpect(status().isOk());
+    }
+
+    /**
+     * 🔴 <b>남의 주문은 반품 요청할 수 없다 — 있는지조차 알려주지 않는다(404)</b>.
+     *
+     * <p>⚠ 403 이 아니라 <b>404</b> 다({@code findByIdAndMemberId} 가 못 찾는다) —
+     * 부분 취소의 같은 테스트가 «있는지조차 알려주지 않는다» 라고 적어 둔 그 규약이다.
+     */
+    @Test
+    @DisplayName("🔴 남의 주문은 반품 요청 불가 — 404 (부분 취소에만 있던 테스트)")
+    void requestReturn_othersOrder_notFound() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+        String itemId = firstItemId(buyer, orderId);
+
+        String otherLoginId = "retother_" + UUID.randomUUID().toString().substring(0, 8);
+        memberRepository.save(Member.builder().loginId(otherLoginId)
+                .password(passwordEncoder.encode(PW)).nickname("ZZ남" + otherLoginId).role(Role.USER).build());
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request")
+                        .header("Authorization", login(otherLoginId)).contentType(JSON)
+                        .content("{\"reason\":\"ZZ-남의주문\",\"items\":[{\"orderItemId\":\""
+                                + itemId + "\",\"quantity\":1}]}"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.status").value("DELIVERED"));
+    }
+
+    /** 주문 상세의 첫 품목 id. */
+    private String firstItemId(String buyer, String orderId) throws Exception {
+        String detail = mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(detail, "$.data.items[0].orderItemId");
+    }
+
+    /** 품목 하나를 <b>수량만큼</b> 반품 요청한다 — {@code requestReturn}(전량)의 부분 판. */
+    private void partialReturn(String buyer, String orderId, String itemId, long qty, String reason)
+            throws Exception {
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
+                        .contentType(JSON)
+                        .content("{\"reason\":\"" + reason + "\",\"items\":[{\"orderItemId\":\""
+                                + itemId + "\",\"quantity\":" + qty + "}]}"))
+                .andExpect(status().isOk());
+    }
+
     @Test
     @DisplayName("배송완료가 아닌 주문은 반품 요청 불가 — ORDER-400R")
     void onlyDeliveredCanRequest() throws Exception {

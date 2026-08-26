@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT,
   DELIVERY_CARRIERS, shipOrder, deliverOrder, cancelOrder, adminCancelOrder, resolveOrderStatusFilter,
@@ -14,7 +17,6 @@ describe('order status 헬퍼', () => {
     expect(orderStatusText('CANCELLED')).toBe('취소됨');
     expect(orderStatusText('RETURN_REQUESTED')).toBe('반품요청');
     expect(orderStatusText('RETURNED')).toBe('반품완료');
-    expect(Object.keys(ORDER_STATUS_TEXT)).toHaveLength(7);
   });
 
   it('모르는 상태는 원문 그대로', () => {
@@ -30,6 +32,46 @@ describe('order status 헬퍼', () => {
     expect(orderStatusClass('DELIVERED')).toBe('badge-success');
     expect(orderStatusClass('CANCELLED')).toBe('badge-danger');
     expect(orderStatusClass('XXX')).toBe('badge-neutral');
+  });
+});
+
+/**
+ * 🔴 **주문 상태 라벨 ↔ 백엔드 enum 드리프트** (2026-08-26, BACKLOG §I-8).
+ *
+ * ⚠ 여기 있던 것은 `expect(Object.keys(ORDER_STATUS_TEXT)).toHaveLength(7)` 였다 —
+ * **손으로 센 숫자**다. 상태가 늘면 이 7 이 «틀렸다» 고 알려 주긴 하지만, 🔴 **어느 상태가
+ * 빠졌는지는 안 알려 주고**, 더 나쁘게는 **상태를 하나 더하면서 라벨도 하나 더하면
+ * 8 == 8 로 통과**한다 — 즉 «키가 서로 같은가» 는 한 번도 안 본다.
+ *
+ * 🔴 **감사 라벨은 2026-08-10 에 이미 이 문제를 «읽어서 대조» 로 풀었다**(`audit.test.js`).
+ * 같은 저장소에 **답이 이미 있는데 주문 상태만 손으로 세고 있었다** — §I-8 이 「드리프트 가드
+ * 비대칭」이라고 부른 것이 이것이다.
+ *
+ * ⚠ **`audit.test.js` 의 첫 가드를 그대로 가져온다** — 파서가 0개를 내면 아래 대조가
+ * 「0 == 0」으로 **영원히 초록**이면서 아무것도 안 지킨다(WA §3-3).
+ */
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ORDER_STATUS_JAVA = resolve(
+  HERE,
+  '../../../glassvue-backend/src/main/java/com/glassvue/domain/order/entity/OrderStatus.java',
+);
+
+/** `OrderStatus.java` 에서 enum 값을 뽑는다. 값 뒤에 `// 주석` 이 붙어 있고 마지막은 `;` 다. */
+function orderStatusesFromJava() {
+  const src = readFileSync(ORDER_STATUS_JAVA, 'utf8');
+  return [...src.matchAll(/^ {4}([A-Z][A-Z0-9_]*)\s*(?:\([^)]*\))?\s*[,;]/gm)].map((m) => m[1]);
+}
+
+describe('주문 상태 라벨 ↔ 백엔드 enum 드리프트 (2026-08-26, §I-8)', () => {
+  it('🔴 파서가 값을 실제로 찾았다 — 0개면 아래 대조가 「0 == 0」으로 통과해 버린다', () => {
+    const values = orderStatusesFromJava();
+    expect(values.length).toBeGreaterThanOrEqual(5);
+    expect(values).toContain('ORDERED');            // 최초 값 — 없으면 파싱이 틀린 것이다
+    expect(values).toContain('RETURN_REQUESTED');   // `;` 로 끝나는 마지막 값 직전까지 잡히는지
+  });
+
+  it('🔴 라벨 키 집합이 enum 과 **정확히** 같다 — 빠지면 화면에 날문자(RETURN_REQUESTED)로 뜬다', () => {
+    expect(Object.keys(ORDER_STATUS_TEXT).sort()).toEqual(orderStatusesFromJava().sort());
   });
 });
 
