@@ -25,7 +25,7 @@ class OrderEventListenerTest {
     @Test
     @DisplayName("리스너는 로직 없이 Handler에 위임만 한다")
     void delegatesToHandler() {
-        OrderPlacedEvent event = new OrderPlacedEvent(UUID.randomUUID(), UUID.randomUUID(), 10_000, 1, List.of());
+        OrderPlacedEvent event = new OrderPlacedEvent(UUID.randomUUID(), UUID.randomUUID(), "20260101-0001", 10_000, 1, List.of());
         listener.onOrderPlaced(event);
         verify(notificationHandler).handle(event);
     }
@@ -33,7 +33,7 @@ class OrderEventListenerTest {
     @Test
     @DisplayName("취소 이벤트도 Handler에 위임만 한다")
     void delegatesCancelledToHandler() {
-        OrderCancelledEvent event = new OrderCancelledEvent(UUID.randomUUID(), UUID.randomUUID(), 30_000, 2, List.of());
+        OrderCancelledEvent event = new OrderCancelledEvent(UUID.randomUUID(), UUID.randomUUID(), "20260101-0001", 30_000, 2, List.of());
         listener.onOrderCancelled(event);
         verify(notificationHandler).handle(event);
     }
@@ -46,7 +46,7 @@ class OrderEventListenerTest {
     @Test
     @DisplayName("배송완료 이벤트도 Handler에 위임만 한다")
     void delegatesDeliveredToHandler() {
-        OrderDeliveredEvent event = new OrderDeliveredEvent(UUID.randomUUID(), UUID.randomUUID(), 50_000, 500);
+        OrderDeliveredEvent event = new OrderDeliveredEvent(UUID.randomUUID(), UUID.randomUUID(), "20260101-0001", 50_000, 500);
         listener.onOrderDelivered(event);
         verify(notificationHandler).handle(event);
     }
@@ -54,7 +54,7 @@ class OrderEventListenerTest {
     @Test
     @DisplayName("반품 승인 이벤트도 Handler에 위임만 한다")
     void delegatesReturnedToHandler() {
-        OrderReturnedEvent event = new OrderReturnedEvent(UUID.randomUUID(), UUID.randomUUID(), 25_000, List.of(), "ZZ상품 1개", true);
+        OrderReturnedEvent event = new OrderReturnedEvent(UUID.randomUUID(), UUID.randomUUID(), "20260101-0001", 25_000, List.of(), "ZZ상품 1개", true);
         listener.onOrderReturned(event);
         verify(notificationHandler).handle(event);
     }
@@ -62,7 +62,7 @@ class OrderEventListenerTest {
     @Test
     @DisplayName("반품 거절 이벤트도 Handler에 위임만 한다")
     void delegatesReturnRejectedToHandler() {
-        OrderReturnRejectedEvent event = new OrderReturnRejectedEvent(UUID.randomUUID(), UUID.randomUUID(), "ZZ-거절사유");
+        OrderReturnRejectedEvent event = new OrderReturnRejectedEvent(UUID.randomUUID(), UUID.randomUUID(), "20260101-0001", "ZZ-거절사유");
         listener.onOrderReturnRejected(event);
         verify(notificationHandler).handle(event);
     }

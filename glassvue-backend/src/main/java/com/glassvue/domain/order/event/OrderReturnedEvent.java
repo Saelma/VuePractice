@@ -26,7 +26,7 @@ import java.util.UUID;
  *                       완료되었어요» 와 «일부 반품이 완료되었어요» 로 갈리는 유일한 근거다.
  *                       ⚠ 핸들러는 주문 상태를 못 보므로(도메인 경계) 이벤트가 실어 나른다.
  */
-public record OrderReturnedEvent(UUID orderId, UUID memberId, long refundedPoint, List<SoldLine> lines,
+public record OrderReturnedEvent(UUID orderId, UUID memberId, String orderNo, long refundedPoint, List<SoldLine> lines,
                                  String itemsSummary, boolean fullyReturned)
         implements DomainEvent {
 
@@ -43,7 +43,7 @@ public record OrderReturnedEvent(UUID orderId, UUID memberId, long refundedPoint
      */
     public static OrderReturnedEvent of(Order order, long refundedPoint, List<SoldLine> lines,
                                         String itemsSummary) {
-        return new OrderReturnedEvent(order.getId(), order.getMemberId(), refundedPoint, lines,
+        return new OrderReturnedEvent(order.getId(), order.getMemberId(), order.getOrderNo(), refundedPoint, lines,
                 itemsSummary, order.hasNothingLeft());
     }
 }

@@ -24,7 +24,7 @@ import java.util.UUID;
  * <p>⚠ 🔴 <b>같은 이벤트의 {@code lines} 는 08-25 에 «남은 것» 으로 고쳤는데 이 필드는 안 봤다</b> —
  * 한 이벤트 안에서도 <b>필드마다</b> 물어야 한다(WA §2-2-2 의 이벤트 판).
  */
-public record OrderCancelledEvent(UUID orderId, UUID memberId, long cancelledAmount, int itemCount,
+public record OrderCancelledEvent(UUID orderId, UUID memberId, String orderNo, long cancelledAmount, int itemCount,
                                   List<SoldLine> lines) implements DomainEvent {
 
     /**
@@ -44,12 +44,12 @@ public record OrderCancelledEvent(UUID orderId, UUID memberId, long cancelledAmo
      * 넣지 않는다. 다른 것은 <b>그 값을 어디서 얻느냐</b> 뿐이다.
      */
     public static OrderCancelledEvent ofItemsDrained(Order order, long cancelledAmount) {
-        return new OrderCancelledEvent(order.getId(), order.getMemberId(), cancelledAmount,
+        return new OrderCancelledEvent(order.getId(), order.getMemberId(), order.getOrderNo(), cancelledAmount,
                 order.getItems().size(), SoldLine.remaining(order));
     }
 
     public static OrderCancelledEvent from(Order order) {
-        return new OrderCancelledEvent(order.getId(), order.getMemberId(),
+        return new OrderCancelledEvent(order.getId(), order.getMemberId(), order.getOrderNo(),
                 // 🔴 **«남은» 상품합계다** — 이번 취소로 실제로 빠지는 금액이 그것이다.
                 order.remainingItemsTotal(),
                 // 🔴 **«남은» 수량이다** (2026-08-25, G-10). 부분 취소가 이미 자기 몫을 되돌렸으므로

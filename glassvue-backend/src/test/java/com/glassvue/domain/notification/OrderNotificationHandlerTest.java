@@ -1,6 +1,7 @@
 package com.glassvue.domain.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -40,6 +41,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class OrderNotificationHandlerTest {
 
+    /** 알림 본문 맨 앞에 붙는 주문번호(2026-08-26) — 어느 주문인지 알림함에서 바로 읽히게. */
+    private static final String ORDER_NO = "20260101-0001";
+
     @Mock NotificationCommandService notificationService;
     @InjectMocks OrderNotificationHandler handler;
 
@@ -66,7 +70,7 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("주문 접수 → **구매자**에게 ORDER 알림, 링크는 그 주문 상세")
     void placedNotifiesBuyer() {
-        handler.handle(new OrderPlacedEvent(orderId, buyerId, 30_000L, 2, List.of()));
+        handler.handle(new OrderPlacedEvent(orderId, buyerId, ORDER_NO, 30_000L, 2, List.of()));
 
         Notified n = captured();
         assertThat(n.memberId()).isEqualTo(buyerId);   // 주문 id 가 아니다(둘 다 UUID 라 바꿔 써도 컴파일된다)
@@ -80,7 +84,7 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("배송완료 + 적립 → 적립액을 문구에 담는다")
     void deliveredWithPoint() {
-        handler.handle(new OrderDeliveredEvent(orderId, buyerId, 50_000L, 500L));
+        handler.handle(new OrderDeliveredEvent(orderId, buyerId, ORDER_NO, 50_000L, 500L));
 
         Notified n = captured();
         assertThat(n.memberId()).isEqualTo(buyerId);
@@ -91,10 +95,10 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("⚠ 적립이 0이면 적립 문구를 **넣지 않는다** — \"0P 적립되었습니다\"는 안내가 아니라 혼란이다")
     void deliveredWithoutPoint() {
-        handler.handle(new OrderDeliveredEvent(orderId, buyerId, 0L, 0L));
+        handler.handle(new OrderDeliveredEvent(orderId, buyerId, ORDER_NO, 0L, 0L));
 
         Notified n = captured();
-        assertThat(n.message()).isEqualTo("배송이 완료되었어요.");
+        assertThat(n.message()).isEqualTo(ORDER_NO + " · 배송이 완료되었어요.");
         assertThat(n.message()).doesNotContain("적립");
     }
 
@@ -106,7 +110,7 @@ class OrderNotificationHandlerTest {
         // 🔴 **이 값은 «이번에 취소된 금액» 이지 주문 원금이 아니다** (2026-08-25, §I).
         //    실측(08-24 `20260824-5296`): 원본 35,000 중 25,000 이 이미 부분 취소로 빠진 뒤
         //    남은 **10,000** 을 취소하면서 알림이 «35,000원 취소» 라고 말했다.
-        handler.handle(new OrderCancelledEvent(orderId, buyerId, 10_000L, 2, List.of()));
+        handler.handle(new OrderCancelledEvent(orderId, buyerId, ORDER_NO, 10_000L, 2, List.of()));
 
         Notified n = captured();
         assertThat(n.memberId()).isEqualTo(buyerId);
@@ -125,7 +129,7 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("반품 승인 → 구매자에게 **환불 금액과 함께** (돈이 움직였는데 말이 없으면 안 된다)")
     void returnedNotifiesBuyer() {
-        handler.handle(new OrderReturnedEvent(orderId, buyerId, 25_000L, List.of(), "ZZ상품 1개", true));
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 25_000L, List.of(), "ZZ상품 1개", true));
 
         Notified n = captured();
         assertThat(n.memberId()).isEqualTo(buyerId);
@@ -144,24 +148,24 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("🔴 부분 반품이면 «일부» 라고 말하고 **무엇이 몇 개** 인지 밝힌다")
     void partialReturnSaysPartial() {
-        handler.handle(new OrderReturnedEvent(orderId, buyerId, 12_858L, List.of(),
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 12_858L, List.of(),
                 "지바 1개, 반팔티 1개", false));
 
         Notified n = captured();
         assertThat(n.title()).isEqualTo("일부 반품이 완료되었어요");
         // 🔴 «반품이 완료되었어요» 로 시작하면 안 된다 — 고객이 주문 전체가 끝난 줄 읽는다.
-        assertThat(n.message()).startsWith("지바 1개, 반팔티 1개 반품이 완료되었어요.");
+        assertThat(n.message()).startsWith(ORDER_NO + " · 지바 1개, 반팔티 1개 반품이 완료되었어요.");
         assertThat(n.message()).contains("12858");
     }
 
     @Test
     @DisplayName("⚠ 대조군: 전량 반품이면 예전과 **같은 문구**다 (기존 주문의 알림은 안 바뀐다)")
     void fullReturnKeepsOldWording() {
-        handler.handle(new OrderReturnedEvent(orderId, buyerId, 25_000L, List.of(), "ZZ상품 1개", true));
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 25_000L, List.of(), "ZZ상품 1개", true));
 
         Notified n = captured();
         assertThat(n.title()).isEqualTo("반품이 완료되었어요");
-        assertThat(n.message()).startsWith("반품이 완료되었어요.");
+        assertThat(n.message()).startsWith(ORDER_NO + " · 반품이 완료되었어요.");
         // ⚠ 전량이면 «무엇이 몇 개» 를 안 붙인다 — 주문 전체라 굳이 열거할 이유가 없다.
         assertThat(n.message()).doesNotContain("ZZ상품");
     }
@@ -175,7 +179,7 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("🔴 부분 취소 → 무엇이 몇 개 빠졌고 얼마가 돌아오는지 알린다")
     void itemCancelledNotifiesBuyer() {
-        handler.handle(new OrderItemCancelledEvent(orderId, buyerId, List.of(),
+        handler.handle(new OrderItemCancelledEvent(orderId, buyerId, ORDER_NO, List.of(),
                 "지바 1개", 8_000L, 2_000L, false));
 
         Notified n = captured();
@@ -195,7 +199,7 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("⚠ 마지막 품목을 뺀 부분 취소는 **알림을 안 낸다** (두 번 뜨지 않게)")
     void itemCancelledStaysQuietWhenOrderIsEmptied() {
-        handler.handle(new OrderItemCancelledEvent(orderId, buyerId, List.of(),
+        handler.handle(new OrderItemCancelledEvent(orderId, buyerId, ORDER_NO, List.of(),
                 "지바 1개", 8_000L, 2_000L, true));
 
         verifyNoInteractions(notificationService);
@@ -204,10 +208,10 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("⚠ 환불액이 0이면 금액 문구를 **넣지 않는다** (배송완료 적립과 같은 판단)")
     void returnedWithoutRefund() {
-        handler.handle(new OrderReturnedEvent(orderId, buyerId, 0L, List.of(), "ZZ상품 1개", true));
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 0L, List.of(), "ZZ상품 1개", true));
 
         Notified n = captured();
-        assertThat(n.message()).isEqualTo("반품이 완료되었어요.");
+        assertThat(n.message()).isEqualTo(ORDER_NO + " · 반품이 완료되었어요.");
         assertThat(n.message()).doesNotContain("환불");
     }
 
@@ -223,7 +227,7 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("반품 거절 → 구매자에게 **사유와 함께** 알린다 (안내가 가리키는 곳에 내용이 있어야 한다)")
     void returnRejectedNotifiesBuyer() {
-        handler.handle(new OrderReturnRejectedEvent(orderId, buyerId, "사용 흔적이 있습니다"));
+        handler.handle(new OrderReturnRejectedEvent(orderId, buyerId, ORDER_NO, "사용 흔적이 있습니다"));
 
         Notified n = captured();
         assertThat(n.memberId()).isEqualTo(buyerId);
@@ -242,10 +246,50 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("⚠ 거절 사유가 비면 「null」을 보여주지 않고 고객센터로 안내한다")
     void returnRejectedWithoutReason() {
-        handler.handle(new OrderReturnRejectedEvent(orderId, buyerId, null));
+        handler.handle(new OrderReturnRejectedEvent(orderId, buyerId, ORDER_NO, null));
 
         Notified n = captured();
         assertThat(n.message()).doesNotContain("null");
         assertThat(n.message()).contains("고객센터");
+    }
+    /**
+     * 🔴 <b>여섯 개 알림이 «전부» 주문번호로 시작한다</b> (2026-08-26, 사용자 요청).
+     *
+     * <p>⚠ <b>이 테스트가 이 파일에서 유일하게 «전부» 를 세는 자리다.</b> 나머지 테스트는 알림을
+     * <b>하나씩</b> 본다 — 그래서 새 알림이 생기거나 한 곳만 문구를 고치면 <b>그 하나만 낡는다.</b>
+     * 🔴 이 저장소가 반복해서 데는 «짝의 비대칭» 이 정확히 그 모양이고(매출 식·상태 목록·부분 취소
+     * 알림), 오늘만 §I-5·§I-6·§I-12 셋이 같은 이유로 나왔다.
+     *
+     * <p>⚠ <b>핸들러 메서드가 늘면 이 테스트는 «안 늘어난다»</b> — 컴파일도 안 깨진다.
+     * 그래서 <b>여기에 «여섯» 이라는 개수를 적지 않고</b> 이벤트를 나열한다: 새 이벤트를 만든
+     * 사람이 이 목록을 보고 한 줄 더하게 된다. (개수를 적으면 그 숫자가 낡는다 — WA §4-0.)
+     */
+    @Test
+    @DisplayName("🔴 주문 알림은 **전부** 본문이 주문번호로 시작한다 — 알림함에서 어느 주문인지 알아야 한다")
+    void everyOrderNotificationStartsWithOrderNo() {
+        record Case(String what, Runnable fire) {}
+        List<Case> cases = List.of(
+                new Case("주문 접수", () ->
+                        handler.handle(new OrderPlacedEvent(orderId, buyerId, ORDER_NO, 30_000L, 2, List.of()))),
+                new Case("배송 완료", () ->
+                        handler.handle(new OrderDeliveredEvent(orderId, buyerId, ORDER_NO, 50_000L, 500L))),
+                new Case("주문 취소", () ->
+                        handler.handle(new OrderCancelledEvent(orderId, buyerId, ORDER_NO, 10_000L, 2, List.of()))),
+                new Case("부분 취소", () ->
+                        handler.handle(new OrderItemCancelledEvent(orderId, buyerId, ORDER_NO, List.of(),
+                                "지바 1개", 10_000L, 0L, false))),
+                new Case("반품 승인", () ->
+                        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 25_000L, List.of(),
+                                "지바 1개", true))),
+                new Case("반품 거절", () ->
+                        handler.handle(new OrderReturnRejectedEvent(orderId, buyerId, ORDER_NO, "ZZ-사용 흔적"))));
+
+        for (Case c : cases) {
+            reset(notificationService);
+            c.fire().run();
+            assertThat(captured().message())
+                    .as("«%s» 알림이 주문번호로 시작하지 않는다", c.what())
+                    .startsWith(ORDER_NO + " · ");
+        }
     }
 }

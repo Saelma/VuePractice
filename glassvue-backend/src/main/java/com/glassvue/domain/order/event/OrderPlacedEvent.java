@@ -13,11 +13,11 @@ import java.util.UUID;
  * <p>{@code lines} 는 상품별 판매 수량 — catalog 가 인기(판매량)를 비정규화하는 데 쓴다(B-8, {@link SoldLine}).
  * 알림 구독자는 이 필드를 무시하면 된다.
  */
-public record OrderPlacedEvent(UUID orderId, UUID memberId, long totalPrice, int itemCount,
+public record OrderPlacedEvent(UUID orderId, UUID memberId, String orderNo, long totalPrice, int itemCount,
                                List<SoldLine> lines) implements DomainEvent {
 
     public static OrderPlacedEvent from(Order order) {
-        return new OrderPlacedEvent(order.getId(), order.getMemberId(), order.getTotalPrice(),
+        return new OrderPlacedEvent(order.getId(), order.getMemberId(), order.getOrderNo(), order.getTotalPrice(),
                 order.getItems().size(), SoldLine.ordered(order));
     }
 }

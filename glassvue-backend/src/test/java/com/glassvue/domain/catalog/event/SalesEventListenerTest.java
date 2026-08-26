@@ -27,14 +27,14 @@ class SalesEventListenerTest {
     @Test
     @DisplayName("주문됨 → 판매량 증가에 위임한다")
     void placedIncreases() {
-        listener.onOrderPlaced(new OrderPlacedEvent(UUID.randomUUID(), UUID.randomUUID(), 10_000, 1, lines));
+        listener.onOrderPlaced(new OrderPlacedEvent(UUID.randomUUID(), UUID.randomUUID(), "20260101-0001", 10_000, 1, lines));
         verify(salesSyncHandler).increase(lines);
     }
 
     @Test
     @DisplayName("취소 → 판매량 감소에 위임한다(주문의 반대)")
     void cancelledDecreases() {
-        listener.onOrderCancelled(new OrderCancelledEvent(UUID.randomUUID(), UUID.randomUUID(), 10_000, 1, lines));
+        listener.onOrderCancelled(new OrderCancelledEvent(UUID.randomUUID(), UUID.randomUUID(), "20260101-0001", 10_000, 1, lines));
         verify(salesSyncHandler).decrease(lines);
     }
 
@@ -42,7 +42,7 @@ class SalesEventListenerTest {
     @DisplayName("반품 승인 → 판매량 감소에 위임한다")
     void returnedDecreases() {
         // refundedPoint 는 알림 문구용이라 catalog 는 안 본다 — 0 이든 아니든 판매량 감소는 같다.
-        listener.onOrderReturned(new OrderReturnedEvent(UUID.randomUUID(), UUID.randomUUID(), 0L, lines, "ZZ상품 1개", true));
+        listener.onOrderReturned(new OrderReturnedEvent(UUID.randomUUID(), UUID.randomUUID(), "20260101-0001", 0L, lines, "ZZ상품 1개", true));
         verify(salesSyncHandler).decrease(lines);
     }
 }

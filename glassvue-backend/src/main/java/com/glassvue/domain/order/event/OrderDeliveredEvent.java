@@ -22,11 +22,11 @@ import java.util.UUID;
  * @param payableAmount 적립·등급 산정 기준액(상품합계 − 쿠폰할인 − 사용 적립금)
  * @param earnedPoint   실제로 적립된 금액. 알림이 "500P 적립되었습니다"를 쓸 수 있게 담는다
  */
-public record OrderDeliveredEvent(UUID orderId, UUID memberId,
+public record OrderDeliveredEvent(UUID orderId, UUID memberId, String orderNo,
                                   long payableAmount, long earnedPoint) implements DomainEvent {
 
     public static OrderDeliveredEvent from(Order order, long earnedPoint) {
-        return new OrderDeliveredEvent(order.getId(), order.getMemberId(),
+        return new OrderDeliveredEvent(order.getId(), order.getMemberId(), order.getOrderNo(),
                 order.rewardableAmount(), earnedPoint);
     }
 }

@@ -23,10 +23,10 @@ import java.util.UUID;
  * ⚠ 교훈: <b>«없는 값을 지어내지 않는다» 와 «없는 곳을 가리키지 않는다» 는 다른 규칙이다.</b>
  * 앞은 지켰는데 뒤를 어겼다 — 값이 없으면 문장을 비우는 게 아니라 <b>값을 만들어야</b> 했다(V47).
  */
-public record OrderReturnRejectedEvent(UUID orderId, UUID memberId, String reason) implements DomainEvent {
+public record OrderReturnRejectedEvent(UUID orderId, UUID memberId, String orderNo, String reason) implements DomainEvent {
 
     public static OrderReturnRejectedEvent from(Order order) {
-        return new OrderReturnRejectedEvent(order.getId(), order.getMemberId(),
+        return new OrderReturnRejectedEvent(order.getId(), order.getMemberId(), order.getOrderNo(),
                 order.getReturnRejectedReason());
     }
 }

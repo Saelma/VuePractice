@@ -26,19 +26,38 @@ public class OrderNotificationHandler {
 
     private final NotificationCommandService notificationService;
 
+    /**
+     * 🔴 <b>본문 맨 앞에 주문번호를 붙인다</b> (2026-08-26, 사용자 결정).
+     *
+     * <p>⚠ <b>알림함에서 «어느 주문인지» 를 알 방법이 없었다.</b> 여섯 개 알림이 전부
+     * «주문이 취소되었어요 / 10000원 주문이 취소되었습니다.» 처럼 <b>주문을 지목하지 않았고</b>,
+     * 식별은 {@code link} 를 눌러 들어가야만 됐다 — 주문이 여럿인 고객에게는 목록이 다 같아 보인다.
+     *
+     * <p>🔴 <b>제목이 아니라 본문 맨 앞이다.</b> 벨 드롭다운이 제목을 {@code truncate}(한 줄)로,
+     * 본문을 {@code line-clamp-2}(두 줄)로 그린다 — 제목에 넣으면 <b>주문번호부터 잘린다.</b>
+     * ⚠ 관리자용 반품 알림({@code ReturnRequestAlertHandler})은 제목 뒤 괄호를 쓰는데,
+     * <b>그 전례를 그대로 옮기지 않은 이유가 이것</b>이다(같은 화면이 아니다).
+     *
+     * <p>⚠ <b>여기 한 곳에서만 붙인다</b> — 여섯 군데에 손으로 적으면 그중 하나가 낡는다
+     * (WA §1-2-1 이 매출 식·상태 목록에서 두 번 겪은 그 모양).
+     */
+    private static String withOrderNo(String orderNo, String message) {
+        return orderNo + " · " + message;
+    }
+
     public void handle(OrderPlacedEvent event) {
         notificationService.create(event.memberId(), NotificationType.ORDER,
                 "주문이 접수되었어요",
-                "상품 " + event.itemCount() + "건 주문이 접수되었습니다.",
+                withOrderNo(event.orderNo(), "상품 " + event.itemCount() + "건 주문이 접수되었습니다."),
                 "/orders/" + event.orderId());
         log.info("[알림] 주문 접수 — order={} member={}", event.orderId(), event.memberId());
     }
 
     /** 배송완료 안내 — 적립 결과를 함께 알린다(적립 자체는 주문 트랜잭션에서 이미 끝났다). */
     public void handle(OrderDeliveredEvent event) {
-        String message = event.earnedPoint() > 0
+        String message = withOrderNo(event.orderNo(), event.earnedPoint() > 0
                 ? "배송이 완료되었어요. " + event.earnedPoint() + "P 적립되었습니다."
-                : "배송이 완료되었어요.";
+                : "배송이 완료되었어요.");
         notificationService.create(event.memberId(), NotificationType.ORDER,
                 "배송이 완료되었어요", message, "/orders/" + event.orderId());
         log.info("[알림] 배송완료 — order={} member={} earned={}P", event.orderId(), event.memberId(), event.earnedPoint());
@@ -49,7 +68,7 @@ public class OrderNotificationHandler {
         //    이미 25,000 이 빠진 주문의 남은 10,000 을 취소하며 «35,000원 취소» 라고 알렸다(5296 실측).
         notificationService.create(event.memberId(), NotificationType.ORDER,
                 "주문이 취소되었어요",
-                event.cancelledAmount() + "원 주문이 취소되었습니다.",
+                withOrderNo(event.orderNo(), event.cancelledAmount() + "원 주문이 취소되었습니다."),
                 "/orders/" + event.orderId());
         log.info("[알림] 주문 취소 — order={} member={} amount={}",
                 event.orderId(), event.memberId(), event.cancelledAmount());
@@ -86,7 +105,8 @@ public class OrderNotificationHandler {
             message.append(' ').append(event.refundedPoint()).append("원이 적립금으로 환불되었습니다.");
         }
         notificationService.create(event.memberId(), NotificationType.ORDER,
-                "주문 일부가 취소되었어요", message.toString(), "/orders/" + event.orderId());
+                "주문 일부가 취소되었어요", withOrderNo(event.orderNo(), message.toString()),
+                "/orders/" + event.orderId());
         log.info("[알림] 부분 취소 — order={} member={} refund={} point={}",
                 event.orderId(), event.memberId(), event.refundedAmount(), event.refundedPoint());
     }
@@ -107,9 +127,9 @@ public class OrderNotificationHandler {
         String what = event.fullyReturned()
                 ? "반품이 완료되었어요."
                 : event.itemsSummary() + " 반품이 완료되었어요.";
-        String message = event.refundedPoint() > 0
+        String message = withOrderNo(event.orderNo(), event.refundedPoint() > 0
                 ? what + " " + event.refundedPoint() + "원이 적립금으로 환불되었습니다."
-                : what;
+                : what);
         notificationService.create(event.memberId(), NotificationType.ORDER,
                 title, message, "/orders/" + event.orderId());
         log.info("[알림] 반품 승인 — order={} member={} refunded={} full={}", event.orderId(),
@@ -130,9 +150,9 @@ public class OrderNotificationHandler {
      * 경계는 방어해 둔다 — <b>«null» 이라는 글자가 고객 알림에 뜨는 것</b>보다는 낫다.
      */
     public void handle(OrderReturnRejectedEvent event) {
-        String message = (event.reason() == null || event.reason().isBlank())
+        String message = withOrderNo(event.orderNo(), (event.reason() == null || event.reason().isBlank())
                 ? "자세한 내용은 고객센터로 문의해 주세요."
-                : "사유: " + event.reason();
+                : "사유: " + event.reason());
         notificationService.create(event.memberId(), NotificationType.ORDER,
                 "반품 요청이 거절되었어요", message, "/orders/" + event.orderId());
         log.info("[알림] 반품 거절 — order={} member={}", event.orderId(), event.memberId());

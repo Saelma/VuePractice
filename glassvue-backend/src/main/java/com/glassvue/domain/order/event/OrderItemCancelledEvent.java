@@ -36,7 +36,7 @@ import java.util.UUID;
  *                       ⚠ <b>이벤트 자체를 막을 수는 없다</b> — 판매량 되돌림은 이 회차 몫이
  *                       여기에만 실려 있어서다. <b>«무엇을 하느냐» 를 구독자마다 가른다.</b>
  */
-public record OrderItemCancelledEvent(UUID orderId, UUID memberId, List<SoldLine> lines,
+public record OrderItemCancelledEvent(UUID orderId, UUID memberId, String orderNo, List<SoldLine> lines,
                                       String itemsSummary, long refundedAmount, long refundedPoint,
                                       boolean orderFullyCancelled)
         implements DomainEvent {

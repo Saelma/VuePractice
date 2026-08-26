@@ -455,7 +455,7 @@ public class OrderService {
                 + (item.getVariantName() == null ? "" : " (" + item.getVariantName() + ")")
                 + " " + quantity + "개";
         eventPublisher.publishEvent(new OrderItemCancelledEvent(
-                order.getId(), order.getMemberId(), SoldLine.of(item, quantity),
+                order.getId(), order.getMemberId(), order.getOrderNo(), SoldLine.of(item, quantity),
                 itemsSummary, refund, refundedPoint, order.isFullyCancelledByItems()));
 
         if (order.isFullyCancelledByItems()) {
