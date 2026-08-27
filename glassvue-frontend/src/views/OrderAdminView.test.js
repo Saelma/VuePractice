@@ -48,13 +48,34 @@ function row(overrides = {}) {
 
 let w = null;
 
+/**
+ * 🔴 **그리드가 «행을 그릴 때까지» 기다린다 — 정해진 횟수만큼 flush 하지 않는다** (2026-08-27).
+ *
+ * 전엔 `await flushPromises()` **두 번**이었다. 그건 «두 번이면 되겠지» 라는 **추측**이고,
+ * `CustomStore.load` → devextreme 내부 → Vue 렌더가 프로미스를 몇 개 거치는지는 우리 사정이 아니다.
+ * ⚠ **단독으로 돌리면 늘 초록이라 안 보인다** — 전체 스위트로 돌려 부하가 걸리면 두 번이 모자라
+ * 행이 아직 없고, `btn(w, '거절')` 이 `undefined` 가 되어 **«Cannot read properties of undefined»**
+ * 로 죽는다. 🔴 **실패하는 테스트가 매번 달라서** 처음엔 그날 만진 코드 탓으로 보였다.
+ *
+ * 이 저장소의 두 번째 «가끔 빨개지는 테스트» 다(첫째는 `priceFilterUsesSalePrice`, 08-19 §7).
+ * **다만 이쪽은 원인을 알고 고쳤다** — 구조를 바꿔 회피한 것이 아니다.
+ */
+async function untilRendered(w, tries = 50) {
+  for (let i = 0; i < tries; i += 1) {
+    // 행이 그려지면 처리 칸의 「상세」 버튼이 생긴다 — 상태와 무관하게 모든 행에 있는 유일한 버튼이다.
+    if (btn(w, '상세')) return w;
+    await flushPromises();
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+  }
+  throw new Error('그리드가 행을 그리지 않았다 — 기다림을 포기했다');
+}
+
 async function open(rows = [row()]) {
   fetchAdminOrders.mockResolvedValue({ content: rows, totalElements: rows.length });
   fetchAdminOrderCounts.mockResolvedValue({ RETURN_REQUESTED: rows.length });
   w = mount(OrderAdminView);
   await flushPromises();
-  await flushPromises();
-  return w;
+  return untilRendered(w);
 }
 
 const btn = (w, text) => w.findAll('button').find((b) => b.text() === text);

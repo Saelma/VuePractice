@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router';
 import {
   getOrder, payOrder, shipOrder, deliverOrder, cancelOrder,
   cancelOrderItem, cancelOrderItemByAdmin,
-  requestReturn, approveReturn, rejectReturn,
+  requestReturn, approveReturn, rejectReturn, returnApproveConfirm,
   orderStatusText, orderStatusClass, DELIVERY_CARRIERS,
 } from '../api/order';
 import { priceText, hasDiscount, discountRate, strikePrice } from '../api/product';
@@ -248,8 +248,10 @@ async function submitReturn() {
   }
 }
 // ⚠ 문구가 «결제금액» 에서 «요청된 품목» 으로 바뀌었다(G-10) — 부분 반품이 생기면서 전량이 아닐 수 있다.
-const onApproveReturn = () => act(approveReturn,
-  '반품을 승인할까요? 요청된 품목의 재고가 복원되고 그 몫이 적립금으로 환불됩니다(적립·등급도 그만큼 회수).');
+// 🔴 **수량은 2026-08-27 에 붙었다**(§I-7). 관리자 «목록» 에만 넣고 여기를 안 열어서, 같은 주문을
+//    목록에서 승인하면 「8개 중 5개」, 상세에서 승인하면 수량이 없는 상태였다 — **사용자가 잡았다.**
+//    그래서 문구를 `api/order.js` 한 곳으로 옮겼다. 여기서 다시 적지 않는다.
+const onApproveReturn = () => act(approveReturn, returnApproveConfirm(order.value));
 
 /**
  * 반품 카드의 상태 문구. ⚠ **거절이 세 번째로 뒤늦게 생겼고**(2026-08-11),

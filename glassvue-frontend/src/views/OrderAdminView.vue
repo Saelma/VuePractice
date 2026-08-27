@@ -13,6 +13,7 @@ import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-gri
 import { DxTextBox } from 'devextreme-vue/text-box';
 import {
   fetchAdminOrders, fetchAdminOrderCounts, shipOrder, deliverOrder, approveReturn, rejectReturn,
+  returnApproveConfirm,
   adminCancelOrder,
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT, DELIVERY_CARRIERS,
   resolveOrderStatusFilter,
@@ -157,14 +158,9 @@ async function onReturnApprove(row) {
   //    **이 목록은 안 열렸다**(거절 버튼과 같은 짝, §I-2).
   // 🔴 **이제 «몇 개» 를 말한다**(2026-08-27, §I-7). 서버가 requested/total 을 실어 준다 —
   //    이전엔 상세로 들어가야만 알 수 있어서, 목록에서 승인하는 관리자는 **모르고 눌렀다.**
-  // ⚠ **«요청된 품목» 은 남긴다** — 수량은 «얼마나» 를 더할 뿐이고, «무엇이» 를 말하는 것은
-  //    저 말이다. 수량이 없으면(옛 응답·0) **문구가 조용히 «undefined개» 가 되는 대신** 원래 말로
-  //    돌아간다 — 화면이 서버 필드에 매달리면 안 된다.
-  const q = row.returnRequestedQuantity;
-  const scope = q > 0 && row.totalQuantity > q ? `요청된 품목(${row.totalQuantity}개 중 ${q}개)`
-      : q > 0 ? `요청된 품목 ${q}개`
-      : '요청된 품목';
-  if (!window.confirm(`${row.buyerNickname}님의 반품을 승인할까요? ${scope}의 재고가 복원되고 그 몫이 적립금으로 환불됩니다.`)) return;
+  // 🔴 **문구는 여기 적지 않는다** — `returnApproveConfirm` 하나가 목록·상세 양쪽을 만든다.
+  //    처음엔 여기에 직접 적었고, 그 바람에 **상세 화면만 수량을 안 말하는 상태**가 됐다(2026-08-27).
+  if (!window.confirm(returnApproveConfirm(row))) return;
   shipError.value = ''; error.value = '';
   try {
     await approveReturn(row.id);

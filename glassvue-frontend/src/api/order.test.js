@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT,
   DELIVERY_CARRIERS, shipOrder, deliverOrder, cancelOrder, adminCancelOrder, resolveOrderStatusFilter,
+  returnApproveConfirm,
 } from './order';
 import { clearSession } from '../stores/auth';
 
@@ -195,5 +196,61 @@ describe('resolveOrderStatusFilter — 관리자 홈에서 "할 일"을 집어 �
   it('⚠ Object 프로토타입 속성에 속지 않는다 (?status=toString)', () => {
     expect(resolveOrderStatusFilter('toString')).toBe('PAID');
     expect(resolveOrderStatusFilter('constructor')).toBe('PAID');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 반품 승인 confirm 문구 (2026-08-27, BACKLOG §I-7 후속)
+//
+// 🔴 **사용자가 잡은 자리다.** 목록의 문구에 수량을 넣으면서 상세를 안 열어, 같은 주문을
+//    목록에서 승인하면 「8개 중 5개」, 상세에서 승인하면 수량이 없었다 — I-7 이 고치려던 병
+//    (「목록과 상세가 다른 말을 한다」)을 **고치는 도중에 다시 낸 것이다.**
+//    문구를 화면에 두는 한 또 갈리므로 함수 하나로 모았고, 여기가 그걸 지킨다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('returnApproveConfirm — 목록과 상세가 같은 말을 한다', () => {
+
+  /** 관리자 목록 행이 가진 모양 — 서버가 낸 **합**. */
+  const adminRow = { buyerNickname: 'ZZ구매자', totalQuantity: 8, returnRequestedQuantity: 5 };
+  /** 주문 상세가 가진 모양 — **품목 배열**. 같은 주문(8개 중 5개 요청)이다. */
+  const detail = {
+    items: [
+      { quantity: 5, returnRequestedQuantity: 3 },
+      { quantity: 3, returnRequestedQuantity: 2 },
+    ],
+  };
+
+  it('🔴 같은 주문이면 «몇 개 중 몇 개» 가 같다 — 가진 모양이 달라도', () => {
+    expect(returnApproveConfirm(adminRow)).toContain('8개 중 5개');
+    expect(returnApproveConfirm(detail)).toContain('8개 중 5개');
+  });
+
+  it('구매자 이름은 목록에만 붙는다 — 상세는 그 사람 주문을 보고 있는 중이다', () => {
+    expect(returnApproveConfirm(adminRow)).toContain('ZZ구매자님의');
+    expect(returnApproveConfirm(detail)).not.toContain('님의');
+  });
+
+  it('전량 요청이면 «몇 개 중» 을 말하지 않는다 — 8개 중 8개는 그냥 8개다', () => {
+    const text = returnApproveConfirm({ totalQuantity: 8, returnRequestedQuantity: 8 });
+    expect(text).toContain('요청된 품목 8개');
+    expect(text).not.toContain('중');
+  });
+
+  it('🔴 수량 칸이 없으면 원래 문구로 돌아간다 — «undefined개» 가 새면 안 된다', () => {
+    // ⚠ 실제로 낸 실수다(2026-08-27). 옛 응답이 섞이거나 필드가 늦게 와도 문구는 성립해야 한다.
+    for (const source of [{}, undefined, { buyerNickname: 'ZZ구매자' }, { items: [] }]) {
+      const text = returnApproveConfirm(source);
+      expect(text).toContain('요청된 품목');
+      expect(text).not.toContain('undefined');
+      expect(text).not.toContain('NaN');
+    }
+  });
+
+  it('⚠ «결제금액» 이라고 말하지 않는다 — 부분 반품이면 거짓이다(G-10)', () => {
+    expect(returnApproveConfirm(adminRow)).not.toContain('결제금액');
+  });
+
+  it('적립·등급 회수를 말한다 — 승인은 적립도 되돌린다', () => {
+    expect(returnApproveConfirm(adminRow)).toContain('적립·등급도 그만큼 회수');
   });
 });

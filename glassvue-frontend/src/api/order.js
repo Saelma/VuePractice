@@ -144,6 +144,36 @@ export function approveReturn(id) {
 }
 
 /**
+ * 반품 승인 confirm 문구 — **목록과 상세가 같은 말을 하게 하는 단 하나의 자리**.
+ *
+ * 🔴 **이 함수가 생긴 경위가 요점이다**(2026-08-27, §I-7). 목록의 문구에 수량을 넣으면서
+ * **상세를 안 열었다.** 그래서 같은 주문을 목록에서 승인하면 「8개 중 5개」, 상세에서 승인하면
+ * 수량이 없는 상태가 됐다 — **I-7 이 고치려던 병(「목록과 상세가 다른 말을 한다」)을 고치면서
+ * 그 병을 다시 낸 것이다.** 문구를 화면에 두는 한 또 갈린다.
+ *
+ * ⚠ **두 화면이 가진 것이 다르다** — 관리자 목록은 서버가 낸 **합**(`totalQuantity` 등)을 갖고,
+ * 주문 상세는 **품목 배열**(`items`)을 갖는다. 그래서 둘 다 받는다.
+ * ⚠ **수량이 없으면 원래 문구로 돌아간다** — 옛 응답이 섞여도 «undefined개» 가 새면 안 된다
+ * (2026-08-27 에 실제로 냈고 테스트가 잡았다).
+ *
+ * @param source 관리자 목록 행(`AdminOrderResponse`) 또는 주문 상세(`OrderResponse`)
+ */
+export function returnApproveConfirm(source = {}) {
+  const items = source.items;
+  const sum = (of) => (items || []).reduce((a, i) => a + (Number(i[of]) || 0), 0);
+  const total = items ? sum('quantity') : Number(source.totalQuantity) || 0;
+  const asked = items ? sum('returnRequestedQuantity') : Number(source.returnRequestedQuantity) || 0;
+
+  const scope = asked > 0 && total > asked ? `요청된 품목(${total}개 중 ${asked}개)`
+    : asked > 0 ? `요청된 품목 ${asked}개`
+    : '요청된 품목';
+  // ⚠ 구매자 이름은 목록에만 있다(상세는 그 사람의 주문을 보고 있는 중이라 굳이 안 붙인다).
+  const who = source.buyerNickname ? `${source.buyerNickname}님의 ` : '';
+  return `${who}반품을 승인할까요? ${scope}의 재고가 복원되고 그 몫이 적립금으로 환불됩니다`
+    + `(적립·등급도 그만큼 회수).`;
+}
+
+/**
  * 반품 거절(관리자). **사유 필수**(2026-08-11, V47).
  *
  * ⚠ 거절은 상태를 안 남긴다(배송완료로 되돌아간다) — 사유가 「거절이 있었다」를 나타내는 유일한

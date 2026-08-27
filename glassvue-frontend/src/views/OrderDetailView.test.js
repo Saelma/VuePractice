@@ -24,7 +24,10 @@ const cancelOrderItem = vi.fn();
 const cancelOrderItemByAdmin = vi.fn();
 const requestReturn = vi.fn();
 
-vi.mock('../api/order', () => ({
+vi.mock('../api/order', async (importOriginal) => ({
+  // ⚠ **`returnApproveConfirm` 은 진짜를 쓴다** — 이 화면이 그 함수를 «실제로 부르는가» 가
+  //    검증 대상이다(2026-08-27). 가짜로 갈아끼우면 문구를 다시 인라인으로 적어 놔도 초록이다.
+  returnApproveConfirm: (await importOriginal()).returnApproveConfirm,
   getOrder: (...a) => getOrder(...a),
   cancelOrderItem: (...a) => cancelOrderItem(...a),
   cancelOrderItemByAdmin: (...a) => cancelOrderItemByAdmin(...a),
@@ -493,6 +496,38 @@ describe('OrderDetailView — 부분 반품 (G-10)', () => {
     // 🔴 서버가 «승인하면 얼마인가» 를 계산해 보내므로 관리자가 누르기 전에 금액을 본다.
     expect(w.text()).toContain('환불 예정 적립금');
     expect(w.text()).toContain('12,858원');
+  });
+
+  /**
+   * 🔴 **사용자가 잡은 자리다**(2026-08-27, §I-7 후속). 관리자 «목록» 의 승인 문구에만 수량을
+   * 넣고 이 화면을 안 열어서, 같은 주문을 목록에서 승인하면 「N개 중 M개」, 상세에서 승인하면
+   * 수량이 없었다.
+   *
+   * ⚠ **여기가 지키는 것은 «문구» 가 아니라 «배선» 이다** — 문구 규칙 자체는
+   * `api/order.test.js` 가 본다. 이 테스트는 **화면이 그 함수를 실제로 부르는가**를 본다.
+   * 문구를 다시 인라인으로 적어 놓으면 여기가 빨개진다.
+   */
+  it('🔴 승인 confirm 이 «몇 개 중 몇 개» 를 말한다 — 목록과 같은 말이어야 한다', async () => {
+    authState.user = { id: 'admin-1', role: 'ADMIN' };
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    // 관리자가 남의 주문을 보는 상황. 2품목(2개 + 1개) 중 1개만 요청됐다.
+    getOrder.mockResolvedValue(order({
+      status: 'RETURN_REQUESTED', memberId: 'someone-else',
+      items: [
+        item({ orderItemId: 'i-a', productName: 'ZZ-A', quantity: 2, returnRequestedQuantity: 1 }),
+        item({ orderItemId: 'i-b', productName: 'ZZ-B', quantity: 1, returnRequestedQuantity: 0 }),
+      ],
+    }));
+    w = mount(OrderDetailView, {
+      props: { id: 'o1' },
+      global: { stubs: { RouterLink: true, ItemThumb: true } },
+    });
+    await flushPromises();
+
+    await w.findAll('button').find((b) => b.text() === '반품 승인').trigger('click');
+
+    expect(confirmSpy.mock.calls[0][0]).toContain('3개 중 1개');
+    confirmSpy.mockRestore();
   });
 });
 
