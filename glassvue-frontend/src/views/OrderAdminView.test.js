@@ -135,4 +135,49 @@ describe('OrderAdminView — 반품 승인·거절 (§I-2)', () => {
     expect(asked).toContain('요청된 품목');
     expect(approveReturn).toHaveBeenCalledWith('o1');
   });
+
+  // ── 부분 수량이 목록에 보이는가 (2026-08-27, BACKLOG §I-7) ─────────────────
+
+  it('🔴 승인 confirm 이 «몇 개 중 몇 개» 를 말한다 — 목록에서 승인하는 관리자가 모르고 누르던 자리', async () => {
+    const w = await open([row({ totalQuantity: 3, returnRequestedQuantity: 1 })]);
+
+    await btn(w, '반품승인').trigger('click');
+    await flushPromises();
+
+    const asked = window.confirm.mock.calls[0][0];
+    expect(asked).toContain('3개 중 1개');
+    expect(asked).toContain('요청된 품목');   // «무엇이» 를 말하는 말은 그대로 남는다
+  });
+
+  it('🔴 수량 칸이 없어도 «undefined개» 가 새지 않는다 — 옛 응답으로 되돌아가도 문구가 안 깨진다', async () => {
+    // ⚠ 실제로 낸 실수다(2026-08-27). row() 기본값엔 부분 필드가 없다 — 그게 이 테스트의 조건이다.
+    const w = await open();
+
+    await btn(w, '반품승인').trigger('click');
+    await flushPromises();
+
+    expect(window.confirm.mock.calls[0][0]).not.toContain('undefined');
+  });
+
+  it('부분 반품 중인 주문과 멀쩡한 주문이 목록에서 갈린다', async () => {
+    const w = await open([
+      row({ id: 'o1', orderNo: 'ZZ-부분', status: 'DELIVERED',
+            totalQuantity: 3, returnedQuantity: 1, remainingQuantity: 2 }),
+      row({ id: 'o2', orderNo: 'ZZ-멀쩡', status: 'DELIVERED',
+            totalQuantity: 3, returnedQuantity: 0, remainingQuantity: 3 }),
+    ]);
+
+    const text = w.text();
+    // 🔴 고치기 전에는 두 줄이 **글자 그대로 같았다**(상태도 DELIVERED, 금액도 같다).
+    expect(text).toContain('3개 중 1개');
+    // 멀쩡한 쪽에는 흔적 줄이 아예 안 그려진다 — 「3개 중 0개」 같은 빈 말이 남으면 안 된다.
+    expect(text).not.toContain('0개 반품됨');
+  });
+
+  it('«돌아올 것»(요청)과 «돌아온 것»(반품)이 섞이지 않는다', async () => {
+    const w = await open([row({ totalQuantity: 3, returnRequestedQuantity: 1, returnedQuantity: 0 })]);
+
+    expect(w.text()).toContain('1개 반품 요청됨');
+    expect(w.text()).not.toContain('반품됨');   // 아직 안 빠졌다
+  });
 });

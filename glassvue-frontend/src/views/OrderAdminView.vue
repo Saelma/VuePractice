@@ -155,9 +155,16 @@ async function onReturnApprove(row) {
   // ⚠ **«결제금액» 이 아니다**(2026-08-25, G-10). 부분 반품이 생기면서 요청된 품목의 몫만 돌아간다 —
   //    3개 중 1개만 요청된 주문에 «결제금액» 이라고 말하면 거짓이다. 상세 화면은 같은 날 고쳤는데
   //    **이 목록은 안 열렸다**(거절 버튼과 같은 짝, §I-2).
-  // 🔴 목록에서는 «무엇이 몇 개» 를 아직 못 보여준다(§I-7) — 그건 AdminOrderResponse 가 부분 필드를
-  //    안 실어서다. 문구만이라도 거짓이 아니게 둔다.
-  if (!window.confirm(`${row.buyerNickname}님의 반품을 승인할까요? 요청된 품목의 재고가 복원되고 그 몫이 적립금으로 환불됩니다.`)) return;
+  // 🔴 **이제 «몇 개» 를 말한다**(2026-08-27, §I-7). 서버가 requested/total 을 실어 준다 —
+  //    이전엔 상세로 들어가야만 알 수 있어서, 목록에서 승인하는 관리자는 **모르고 눌렀다.**
+  // ⚠ **«요청된 품목» 은 남긴다** — 수량은 «얼마나» 를 더할 뿐이고, «무엇이» 를 말하는 것은
+  //    저 말이다. 수량이 없으면(옛 응답·0) **문구가 조용히 «undefined개» 가 되는 대신** 원래 말로
+  //    돌아간다 — 화면이 서버 필드에 매달리면 안 된다.
+  const q = row.returnRequestedQuantity;
+  const scope = q > 0 && row.totalQuantity > q ? `요청된 품목(${row.totalQuantity}개 중 ${q}개)`
+      : q > 0 ? `요청된 품목 ${q}개`
+      : '요청된 품목';
+  if (!window.confirm(`${row.buyerNickname}님의 반품을 승인할까요? ${scope}의 재고가 복원되고 그 몫이 적립금으로 환불됩니다.`)) return;
   shipError.value = ''; error.value = '';
   try {
     await approveReturn(row.id);
@@ -358,7 +365,14 @@ function fmt(v) {
       <DxColumn data-field="orderNo" caption="주문번호" :width="140" />
       <DxColumn data-field="createdAt" caption="주문일시" :width="160" :calculate-display-value="(r) => fmt(r.createdAt)" />
       <DxColumn data-field="buyerNickname" caption="구매자" :width="130" />
-      <DxColumn data-field="summary" caption="상품" />
+      <!--
+        🔴 **품목 요약 아래에 «부분» 흔적을 적는다**(2026-08-27, §I-7). 이 줄이 없던 시절엔
+        부분 반품 중인 DELIVERED 주문과 멀쩡한 DELIVERED 주문이 **목록에서 글자 그대로 같았다.**
+        ⚠ 고객 화면은 `OrderItemPartialNote` 가 **품목 단위**로 그리는데 여기는 **주문 단위 합계**다 —
+           그리드 한 줄이 주문 하나라 품목을 펼칠 자리가 없다. 그래서 같은 컴포넌트를 못 쓴다.
+           대신 서버가 합을 내 주므로 **화면에서 더하지는 않는다**(합산식 사본을 안 만든다).
+      -->
+      <DxColumn data-field="summary" caption="상품" cell-template="summaryCell" />
       <!-- 고객이 본 숫자와 어긋나지 않게 **실제 받은 금액**(payAmount)을 보여준다. -->
       <DxColumn data-field="payAmount" caption="금액" :width="120" alignment="right" :calculate-display-value="(r) => priceText(r.payAmount)" />
       <DxColumn data-field="status" caption="상태" :width="100" alignment="center" cell-template="statusCell" />
@@ -366,6 +380,24 @@ function fmt(v) {
 
       <DxPaging :page-size="10" />
       <DxPager :show-page-size-selector="true" :allowed-page-sizes="[10, 20, 50]" :show-info="true" info-text="{2}건 중 {0}-{1}" />
+
+      <template #summaryCell="{ data }">
+        <div class="min-w-0">
+          <span class="text-ink-900">{{ data.data.summary }}</span>
+          <span class="muted ml-1 tabular-nums">{{ data.data.totalQuantity }}개</span>
+          <!-- 승인 대기 — «돌아올 것». 목록에서 승인 버튼이 무엇을 승인하는지 여기가 말한다. -->
+          <p v-if="data.data.returnRequestedQuantity > 0" class="text-xs text-warning">
+            <b>{{ data.data.returnRequestedQuantity }}개</b> 반품 요청됨
+          </p>
+          <!-- 이미 빠진 것. ⚠ 요청과 줄을 나눈다 — 섞으면 «돌아온 것» 과 «돌아올 것» 이 안 갈린다. -->
+          <p v-if="data.data.returnedQuantity > 0" class="text-xs text-danger">
+            {{ data.data.totalQuantity }}개 중 <b>{{ data.data.returnedQuantity }}개</b> 반품됨
+          </p>
+          <p v-if="data.data.cancelledQuantity > 0" class="text-xs text-danger">
+            {{ data.data.totalQuantity }}개 중 <b>{{ data.data.cancelledQuantity }}개</b> 취소됨
+          </p>
+        </div>
+      </template>
 
       <template #statusCell="{ data }">
         <span class="badge" :class="orderStatusClass(data.data.status)">

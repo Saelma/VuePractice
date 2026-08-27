@@ -12,6 +12,7 @@ import {
 } from '../api/order';
 import { priceText, hasDiscount, discountRate, strikePrice } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
+import OrderItemPartialNote from '../components/OrderItemPartialNote.vue';
 import { addressText } from '../api/shipping';
 import { authState, isAdmin } from '../stores/auth';
 
@@ -514,25 +515,11 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
                 <span v-if="hasDiscount(item)" class="font-medium text-danger">{{ discountRate(item) }}%</span>
               </p>
               <!--
-                부분 취소 흔적(G-4). ⚠ **원본 수량을 지우지 않고 그 옆에 적는다** — 「3개 중 1개
-                취소됨」이 읽히려면 둘 다 필요하다. 취소가 없으면 줄 자체가 안 그려진다.
+                부분 취소·반품 흔적(G-4 · G-10). 🔴 **여기 있던 세 줄을 컴포넌트로 뽑았다**
+                (2026-08-27, §I-7) — 주문 «목록» 도 같은 표시가 필요해졌는데, 베껴 쓰면
+                **상세와 목록이 같은 주문에 다른 말을 하게 된다.** 규칙은 그쪽에 적혀 있다.
               -->
-              <p v-if="item.cancelledQuantity > 0" class="mt-1 text-xs text-danger">
-                <template v-if="item.remainingQuantity === 0 && item.returnedQuantity === 0">전량 취소됨</template>
-                <template v-else>{{ item.quantity }}개 중 <b>{{ item.cancelledQuantity }}개</b> 취소됨</template>
-              </p>
-              <!--
-                부분 반품 흔적(G-10). 🔴 **취소와 «줄을 나눈다»** — 「1개 취소 · 1개 반품」이 한 줄에
-                합쳐지면 무엇이 왜 빠졌는지 못 읽는다(그래서 서버도 칸을 나눴다, G-10 결정 1).
-              -->
-              <p v-if="item.returnedQuantity > 0" class="mt-1 text-xs text-danger">
-                <template v-if="item.remainingQuantity === 0 && item.cancelledQuantity === 0">전량 반품됨</template>
-                <template v-else>{{ item.quantity }}개 중 <b>{{ item.returnedQuantity }}개</b> 반품됨</template>
-              </p>
-              <!-- 승인 대기 중인 요청. ⚠ **아직 안 빠진 것**이라 위 둘과 색을 갈라 둔다. -->
-              <p v-if="item.returnRequestedQuantity > 0" class="muted mt-1 text-xs">
-                <b>{{ item.returnRequestedQuantity }}개</b> 반품 요청됨 (승인 대기)
-              </p>
+              <OrderItemPartialNote :item="item" />
               <!--
                 부분 취소 버튼. ⚠ 「주문 취소」와 **갈라 둔다** — 전체 취소는 쿠폰까지 복구되고
                 이건 안 된다(G-4 결정 1). 남은 수량이 0이면 뺄 것이 없어 안 그린다.

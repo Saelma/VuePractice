@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router';
 import { fetchOrders, orderStatusText, orderStatusClass, ORDER_STATUS_TEXT } from '../api/order';
 import { priceText } from '../api/product';
 import ItemThumb from '../components/ItemThumb.vue';
+import OrderItemPartialNote from '../components/OrderItemPartialNote.vue';
 import EmptyState from '../components/EmptyState.vue';
 
 const router = useRouter();
@@ -114,16 +115,40 @@ const orderNoText = (o) => o?.orderNo || '';
               <p class="truncate text-sm text-ink-900">{{ item.productName }}</p>
               <p v-if="item.optionName" class="muted truncate">{{ item.optionName }}</p>
               <p class="muted mt-0.5 tabular-nums">{{ priceText(item.price) }} × {{ item.quantity }}</p>
+              <!--
+                🔴 **부분 취소·반품 흔적**(2026-08-27, §I-7). 여기 없던 시절엔 목록이 원본 수량만
+                말해서 **같은 주문을 상세로 열면 다른 숫자가 나왔다.** 상세와 «같은 컴포넌트» 다 —
+                말이 갈리지 않게 하는 것이 요점이라 표시를 여기 다시 적지 않는다.
+                ⚠ 서버는 진작부터 이 값들을 내려주고 있었다(myOrders 가 full OrderResponse 를 준다).
+                   **막힌 곳은 화면뿐이었다.**
+              -->
+              <OrderItemPartialNote :item="item" />
             </div>
-            <span class="shrink-0 text-sm tabular-nums text-ink-700">{{ priceText(item.lineTotal) }}</span>
+            <div class="shrink-0 text-right">
+              <span class="text-sm tabular-nums"
+                    :class="item.remainingQuantity === 0 ? 'text-ink-400 line-through' : 'text-ink-700'"
+              >{{ priceText(item.lineTotal) }}</span>
+              <!-- 일부만 빠졌으면 «지금 살아 있는 금액» 을 아래 줄에 적는다(상세와 같은 모양). -->
+              <p v-if="(item.cancelledQuantity > 0 || item.returnedQuantity > 0) && item.remainingQuantity > 0"
+                 class="muted tabular-nums">→ {{ priceText(item.price * item.remainingQuantity) }}</p>
+            </div>
           </li>
         </ul>
 
         <!-- 카드 발: 합계 + 액션 -->
         <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3">
+          <!--
+            🔴 **«합계(totalPrice)» 를 «결제 금액(payAmount)» 으로 바꿨다**(2026-08-27, §I-7).
+            totalPrice 는 주문 시점 상품합계라 **부분 취소·반품이 있어도 안 줄어든다** — 그래서
+            목록은 원래 금액을, 상세는 남은 금액을 말하는 상태였다. payAmount 는 서버가 이미 뺄셈을
+            해 둔 값이고, 상세 화면이 쓰는 것과 **같은 칸**이다.
+            ⚠ 이름도 함께 바꾼다 — 「결제 금액」이라고만 하면 처음 낸 금액으로 읽힌다(상세와 같은 규칙).
+          -->
           <div class="flex items-baseline gap-2">
-            <span class="muted">합계</span>
-            <span class="text-lg font-bold tabular-nums text-ink-900">{{ priceText(o.totalPrice) }}</span>
+            <span class="muted">
+              {{ o.cancelledItemsTotal > 0 || o.returnedItemsTotal > 0 ? '남은 결제 금액' : '결제 금액' }}
+            </span>
+            <span class="text-lg font-bold tabular-nums text-ink-900">{{ priceText(o.payAmount) }}</span>
           </div>
           <button type="button" class="btn btn-secondary btn-sm" @click="router.push(`/orders/${o.id}`)">
             주문 상세

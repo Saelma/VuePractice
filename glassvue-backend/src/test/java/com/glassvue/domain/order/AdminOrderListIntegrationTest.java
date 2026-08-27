@@ -181,6 +181,108 @@ class AdminOrderListIntegrationTest {
                 .andExpect(jsonPath("$.data.totalElements").value(0));
     }
 
+    // ---------- 부분 수량이 목록에 보이는가 (BACKLOG §I-7) ----------
+
+    /**
+     * 🔴 <b>이 항목의 본체</b> — 「부분 반품 중인 {@code DELIVERED}」와 「멀쩡한 {@code DELIVERED}」가
+     * <b>목록 응답만으로 갈리는가</b>.
+     *
+     * <p>고치기 전에는 둘의 응답이 <b>글자 그대로 같았다</b>(상태도 {@code DELIVERED}, 금액도
+     * {@code payAmount} 그대로). 목록에서 «반품승인» 을 누르는 관리자가 무엇이 몇 개 돌아오는지
+     * 알 방법이 상세로 들어가는 것뿐이었다.
+     *
+     * <p>⚠ <b>한 주문의 세 시점을 같은 자리에서 본다</b> — 요청 전 · 요청 중 · 승인 후.
+     * 시점을 나눠 테스트하면 «요청 중인 몫» 과 «이미 빠진 몫» 이 서로의 자리로 새는 것을 놓친다.
+     */
+    @Test
+    @DisplayName("부분 수량: 반품 요청 중 → 승인 후로 값이 옮겨 가고, 멀쩡한 주문과 갈린다")
+    void partialQuantitiesAreVisibleInList() throws Exception {
+        String auth = login(adminLoginId);
+
+        // ── 대조군: 3개짜리 배송완료, 아무것도 안 뺐다 ──
+        String cleanNo = uniqueOrderNo();
+        saveDelivered(cleanNo, 3, o -> {});
+        expect(auth, cleanNo)
+                .andExpect(jsonPath("$.data.content[0].status").value("DELIVERED"))
+                .andExpect(jsonPath("$.data.content[0].totalQuantity").value(3))
+                .andExpect(jsonPath("$.data.content[0].remainingQuantity").value(3))
+                .andExpect(jsonPath("$.data.content[0].returnRequestedQuantity").value(0))
+                .andExpect(jsonPath("$.data.content[0].returnedQuantity").value(0))
+                .andExpect(jsonPath("$.data.content[0].cancelledQuantity").value(0));
+
+        // ── ① 3개 중 1개 반품 요청 ── 아직 안 빠졌다: remaining 은 3 그대로다.
+        String partialNo = uniqueOrderNo();
+        Order order = saveDelivered(partialNo, 3,
+                o -> o.requestReturn("사이즈", java.util.Map.of(o.getItems().get(0).getId(), 1L)));
+        expect(auth, partialNo)
+                .andExpect(jsonPath("$.data.content[0].status").value("RETURN_REQUESTED"))
+                .andExpect(jsonPath("$.data.content[0].totalQuantity").value(3))
+                .andExpect(jsonPath("$.data.content[0].returnRequestedQuantity").value(1))
+                // 🔴 요청은 «돌아올 것» 이지 «돌아온 것» 이 아니다 — 두 칸이 섞이면 안 된다.
+                .andExpect(jsonPath("$.data.content[0].returnedQuantity").value(0))
+                .andExpect(jsonPath("$.data.content[0].remainingQuantity").value(3));
+
+        // ── ② 승인 ── 값이 requested → returned 로 «옮겨 가고» remaining 이 줄어든다.
+        order.applyRequestedReturns();
+        orderRepository.saveAndFlush(order);
+        expect(auth, partialNo)
+                // ⚠ 전량이 아니라 **DELIVERED 로 되돌아온다** — 그래서 목록에서 대조군과 상태가 같아진다.
+                .andExpect(jsonPath("$.data.content[0].status").value("DELIVERED"))
+                .andExpect(jsonPath("$.data.content[0].totalQuantity").value(3))
+                .andExpect(jsonPath("$.data.content[0].returnRequestedQuantity").value(0))
+                .andExpect(jsonPath("$.data.content[0].returnedQuantity").value(1))
+                .andExpect(jsonPath("$.data.content[0].remainingQuantity").value(2));
+    }
+
+    /**
+     * ⚠ <b>{@code itemCount} 와 {@code totalQuantity} 는 다르다</b> — 「2종 5개」로 확인한다.
+     * 둘을 같은 값으로 쓰면 목록의 «몇 개» 가 품목 종류 수로 바뀌는데, 1종 1개 주문만
+     * 테스트하면 <b>영영 안 갈린다</b>.
+     */
+    @Test
+    @DisplayName("품목 «종류» 수와 «수량» 합은 다른 값이다 — 2종 5개")
+    void itemCountIsNotQuantity() throws Exception {
+        String orderNo = uniqueOrderNo();
+        Order order = Order.create(userId, MARK + "-구매자",
+                List.of(item(2), item(3)), "수령인", "010-1234-5678", "06134",
+                "서울시 강남구 테헤란로 1", "3층", null, 3_000, orderNo, null, 0L, null, 0L);
+        order.pay();
+        orderRepository.saveAndFlush(order);
+
+        expect(login(adminLoginId), orderNo)
+                .andExpect(jsonPath("$.data.content[0].itemCount").value(2))
+                .andExpect(jsonPath("$.data.content[0].totalQuantity").value(5))
+                .andExpect(jsonPath("$.data.content[0].remainingQuantity").value(5));
+    }
+
+    /** 주문번호로 한 건만 집어 온다 — setUp 이 넣은 3건과 섞이지 않게. */
+    private org.springframework.test.web.servlet.ResultActions expect(String auth, String orderNo)
+            throws Exception {
+        return mockMvc.perform(get("/api/admin/orders")
+                        .header("Authorization", auth).param("orderNo", orderNo))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+    }
+
+    /** 배송완료 상태의 주문 한 건. {@code transition} 으로 그 뒤 전이를 더한다. */
+    private Order saveDelivered(String orderNo, long quantity,
+                                java.util.function.Consumer<Order> transition) {
+        Order order = Order.create(userId, MARK + "-구매자",
+                List.of(item(quantity)), "수령인", "010-1234-5678", "06134",
+                "서울시 강남구 테헤란로 1", "3층", null, 3_000, orderNo, null, 0L, null, 0L);
+        order.pay();
+        order.ship(DeliveryCarrier.CJ, "123");
+        order.deliver();
+        orderRepository.saveAndFlush(order);   // ⚠ 품목 id 가 있어야 requestReturn 이 걸린다
+        transition.accept(order);
+        return orderRepository.saveAndFlush(order);
+    }
+
+    private OrderItem item(long quantity) {
+        return OrderItem.of(UUID.randomUUID(), UUID.randomUUID(), null,
+                MARK + "-상품", null, 10_000, 10_000L, null, quantity);
+    }
+
     /**
      * 테스트용 주문번호. {@code orders.order_no} 에 유니크 제약이 있어(V15)
      * 여러 건을 만드는 테스트가 같은 값을 쓰면 충돌한다 — 매번 다른 값을 준다.
