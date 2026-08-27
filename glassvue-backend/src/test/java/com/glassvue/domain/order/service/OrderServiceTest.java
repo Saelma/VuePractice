@@ -491,23 +491,28 @@ class OrderServiceTest {
         // 🔴 **사유도 함께 남는다** (2026-08-26, BACKLOG I-10) — `return_reason` 은 한 칸이라
         //    다음 회차 요청이 덮으므로, 회차가 쌓이면 «1회차는 왜» 를 알 곳이 원장뿐이다.
         //    ⚠ 거절 쪽이 2026-08-14 에 같은 논리로 먼저 그렇게 해 뒀고 승인만 빠져 있었다.
-        assertThat(e.detail()).isEqualTo("20260101-0020 / 지바 2개 반품 / 환불 20000원 / 사유: ZZ-반품사유");
+        // 🔴 **사유가 앞에 온다**(2026-08-27, §I-13 결정) — 품목 목록이 길면 뒤부터 잘리는데,
+        //    §I-10 이 원장에 사유를 남긴 이유가 그때 무효가 되기 때문이다.
+        assertThat(e.detail()).isEqualTo("20260101-0020 / 사유: ZZ-반품사유 / 지바 2개 반품 / 환불 20000원");
     }
 
     /**
-     * 🔴 <b>원장 detail 이 1000자를 넘으면 «자르되 잘렸다고 말한다»</b> (2026-08-26, I-10).
+     * 🔴 <b>여기서는 «자르지 않는다» — 사유를 «온전히» 실어 보낸다</b> (2026-08-27, BACKLOG §I-13).
      *
-     * <p>⚠ <b>이건 «보기 좋게» 가 아니라 «안 터지게» 다.</b> {@code AdminAuditLog.detail} 이
-     * {@code VARCHAR2(1000)} 인데 <b>저장소 어디에도 자르는 곳이 없었다</b> — 감사는 같은 트랜잭션에서
-     * 저장되므로({@code AdminAuditCommandService}) 길이 초과는 «원장만 못 남는 것» 이 아니라
-     * <b>반품 승인 자체가 롤백되는 것</b>이다({@code ORA-12899}).
+     * <p>2026-08-26(§I-10) 에는 이 자리가 «1000자로 잘린다» 를 단언했다. <b>절단이 감사 도메인으로
+     * 옮겨갔다</b>({@code AdminAuditLog.fit}) — 원장에 쓰는 길이 하나뿐이라 거기서 자르면
+     * <b>9개 도메인이 한꺼번에</b> 안전해지고, 도메인마다 각자 자르며 <b>방식이 갈리던 것</b>도 끝난다
+     * (주문은 «…(잘림)» 을 붙였고 상품은 조용히 잘랐다).
      *
-     * <p>🔴 <b>사유를 원장에 붙이기로 하면서 그 위험이 커졌다</b> — 사유는 500자까지 들어온다.
-     * 지금까지 안 터진 것은 문자열이 짧아서지 막혀 있어서가 아니었다.
+     * <p>⚠ 그래서 이 테스트가 지키는 것이 <b>뒤집혔다</b>: 「짧게 만들어 보냈나」가 아니라
+     * <b>「긴 것을 깎지 않고 넘겼나」</b> 다. 여기서 미리 자르면 <b>두 곳에서 자르게 되고</b>,
+     * 감사 쪽 규칙을 바꿔도 주문만 옛 규칙을 따르게 된다.
+     * 🔴 <b>«1000자 안으로 눕는가» 는 {@code AdminAuditLogDetailTest} 와
+     * {@code AdminAuditIntegrationTest} 가 지킨다.</b>
      */
     @Test
-    @DisplayName("🔴 원장 detail 이 1000자를 넘으면 «…(잘림)» 으로 눕는다 — 안 그러면 승인이 롤백된다")
-    void approveReturn_trimsOverlongDetail() {
+    @DisplayName("🔴 긴 사유를 깎지 않고 그대로 이벤트에 싣는다 — 자르는 것은 감사 도메인의 일이다")
+    void approveReturn_doesNotTrimDetailItself() {
         Order order = returnRequestedOrder("20260101-0022", "ZZ" + "가".repeat(1_200));
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
         when(memberService.loginIdOf(memberId)).thenReturn("zzbuyer");
@@ -515,7 +520,10 @@ class OrderServiceTest {
         orderService.approveReturn(order.getId(), admin);
 
         AdminActionEvent e = captureAudit();
-        assertThat(e.detail()).hasSize(1_000).endsWith("…(잘림)");
+        assertThat(e.detail()).hasSizeGreaterThan(1_000);
+        assertThat(e.detail()).doesNotContain("…(잘림)");
+        // ⚠ 사유가 **앞** 에 있으므로, 감사 쪽에서 잘려도 사유는 살아남는다(§I-13 결정 3).
+        assertThat(e.detail()).contains("/ 사유: ZZ가가가");
     }
 
     /**

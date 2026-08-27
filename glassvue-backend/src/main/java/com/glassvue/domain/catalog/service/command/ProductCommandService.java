@@ -330,14 +330,16 @@ public class ProductCommandService {
      * detail 을 따로 주는 갈래 — 등록·수정이 쓴다(삭제·복구는 상품명 하나로 충분하다).
      *
      * <p>⚠ {@code detail} 열은 <b>1000자</b>다. 넘칠 일이 없게 만들었지만
-     * ({@link #describeChanges} 가 긴 필드를 «바뀜» 으로 접는다) <b>넘치면 저장이 통째로 실패</b>하므로
-     * 여기서 한 번 더 자른다 — 🔴 <b>감사가 실패하면 조작도 롤백된다</b>(같은 트랜잭션).
-     * 상품 하나 못 고치는 것보다 원장 한 줄이 잘리는 편이 낫다.
+     * ({@link #describeChanges} 가 긴 필드를 «바뀜» 으로 접는다) <b>넘치면 저장이 통째로 실패</b>한다
+     * — 🔴 <b>감사가 실패하면 조작도 롤백된다</b>(같은 트랜잭션).
+     * <p>⚠ <b>전엔 여기서 조용히 잘랐다</b>(2026-08-27, §I-13 에서 걷어냄). 상한 처리는
+     * {@code AdminAuditLog} 한 곳으로 옮겼고, 이제 «…(잘림)» 표시가 붙는다 — 조용히 자르면
+     * 읽는 사람이 그게 전부인 줄 안다.
      */
     private void publishAudit(AuditAction action, AuthUser actor, Product product, String detail) {
         eventPublisher.publishEvent(new AdminActionEvent(
                 action, actor.id(), actor.nickname(), product.getId(), null,
-                detail != null && detail.length() > 1000 ? detail.substring(0, 1000) : detail));
+                detail));
     }
 
     /**

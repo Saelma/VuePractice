@@ -73,9 +73,52 @@ public class AdminAuditLog extends BaseTimeEntity {
     @Column(name = "target_login", updatable = false, length = 50)
     private String targetLogin;
 
-    /** 부가 설명. 역할변경이면 {@code "USER → ADMIN"} 같은 전/후. 정지·해제는 비어 있다. */
-    @Column(name = "detail", updatable = false, length = 1000)
+    /**
+     * 부가 설명. 역할변경이면 {@code "USER → ADMIN"} 같은 전/후. 정지·해제는 비어 있다.
+     *
+     * <p>🔴 <b>상한을 넘기면 여기서 자른다</b> — {@link #DETAIL_MAX} 참조 (2026-08-27, BACKLOG §I-13).
+     */
+    @Column(name = "detail", updatable = false, length = DETAIL_MAX)
     private String detail;
+
+    /**
+     * {@code detail} 열의 상한(자). ⚠ <b>DB 컬럼과 같은 값이어야 한다</b> —
+     * {@code VARCHAR2(1000 CHAR)}. 🔴 <b>늘릴 수 없다</b>: {@code MAX_STRING_SIZE=STANDARD} 라
+     * {@code VARCHAR2} 는 4000<b>바이트</b>가 천장인데, 1000자 × 최대 4바이트 = 정확히 4000 이라
+     * <b>이미 붙어 있다.</b> 더 담아야 하면 CLOB 으로 가는 수밖에 없다.
+     */
+    public static final int DETAIL_MAX = 1000;
+
+    /** 잘렸다는 표시. ⚠ 이것도 상한 안에 들어가야 하므로 그만큼 본문을 덜 담는다. */
+    private static final String TRUNCATION_MARK = "…(잘림)";
+
+    /**
+     * 🔴 <b>원장 detail 을 상한 안으로 눕힌다 — 자르되 «잘렸다» 고 말한다.</b>
+     * (2026-08-27, BACKLOG §I-13 — 사용자 결정)
+     *
+     * <p><b>왜 여기인가</b>: 감사는 발행측 트랜잭션에 <b>합류</b>하므로, detail 이 넘치면
+     * {@code ORA-12899} 로 <b>조작 전체가 롤백된다</b> — 상품 하나 못 고치는 것보다 원장 한 줄이
+     * 잘리는 편이 낫다. 그리고 <b>원장에 쓰는 길은 이 클래스 하나뿐</b>이라, 여기서 자르면
+     * <b>9개 도메인이 한꺼번에 안전해진다.</b>
+     *
+     * <p>⚠ <b>전에는 도메인마다 각자 잘랐고 서로 달랐다</b> — 주문은 «…(잘림)» 을 붙였고
+     * 상품은 <b>조용히</b> 잘랐다. 사본이 둘이면 둘이 갈린다는 것이 그대로 나왔다.
+     *
+     * <p>⚠ <b>조용히 자르지 않는다</b> — 읽는 사람이 그게 전부인 줄 알면 원장의 값이 사라진다.
+     * 🔴 감사 원장에서는 «모르는 것» 보다 «잘못 아는 것» 이 나쁘다.
+     */
+    private static String fit(String detail) {
+        if (detail == null || detail.length() <= DETAIL_MAX) {
+            return detail;
+        }
+        int keep = DETAIL_MAX - TRUNCATION_MARK.length();
+        // ⚠ **서로게이트 쌍 한가운데를 자르지 않는다** — 쪼개면 짝 없는 서로게이트가 남아
+        //    Oracle 이 거부하거나 깨진 글자가 저장된다(이모지가 들어오면 실제로 일어난다).
+        if (Character.isHighSurrogate(detail.charAt(keep - 1))) {
+            keep--;
+        }
+        return detail.substring(0, keep) + TRUNCATION_MARK;
+    }
 
     @Builder
     private AdminAuditLog(AuditAction action, UUID actorId, String actorName,
@@ -87,6 +130,6 @@ public class AdminAuditLog extends BaseTimeEntity {
         this.actorName = actorName;
         this.targetId = targetId;
         this.targetLogin = targetLogin;
-        this.detail = detail;
+        this.detail = fit(detail);
     }
 }

@@ -516,29 +516,17 @@ public class OrderService {
      * ⚠ <b>저장소 어디에도 자르는 곳이 없었다</b>(2026-08-26 확인) — 지금까지는 문자열이 짧아서
      * 안 터진 것이지 막혀 있던 것이 아니다.
      */
-    private static final int AUDIT_DETAIL_MAX = 1000;
 
+    /**
+     * ⚠ <b>여기서 자르지 않는다</b> (2026-08-27, §I-13). 상한 처리는 {@code AdminAuditLog} 한 곳으로
+     * 옮겼다 — 전엔 주문과 상품이 <b>각자 잘랐고 방식이 달랐다</b>(주문은 «…(잘림)» 을 붙였고
+     * 상품은 조용히 잘랐다). 🔴 원장에 쓰는 길이 하나뿐이라 거기서 자르면 <b>모든 도메인이</b> 안전하다.
+     */
     private void publishAudit(AuditAction action, AuthUser actor, Order order, String what) {
         eventPublisher.publishEvent(new AdminActionEvent(
                 action, actor.id(), actor.nickname(),
                 order.getMemberId(), memberService.loginIdOf(order.getMemberId()),
-                fitDetail(order.getOrderNo() + " / " + what)));
-    }
-
-    /**
-     * 원장 detail 을 상한 안으로 눕힌다 — <b>자르되 «잘렸다» 고 말한다.</b>
-     *
-     * <p>⚠ 조용히 자르면 읽는 사람이 <b>그게 전부인 줄</b> 안다. 특히 사유가 뒤에 붙으므로
-     * 잘리는 것은 대개 <b>사유의 꼬리</b>다({@code AuditAction.ORDER_RETURN_APPROVE} 주석 참조).
-     * 🔴 <b>품목이 아주 많은 주문은 사유가 통째로 날아갈 수도 있다</b> — 그건 detail 한 칸으로
-     * 풀 문제가 아니라서 BACKLOG §I-13 에 따로 적었다.
-     */
-    private static String fitDetail(String detail) {
-        if (detail.length() <= AUDIT_DETAIL_MAX) {
-            return detail;
-        }
-        String mark = "…(잘림)";
-        return detail.substring(0, AUDIT_DETAIL_MAX - mark.length()) + mark;
+                order.getOrderNo() + " / " + what));
     }
 
     private void requireCancellable(Order order) {
@@ -703,10 +691,14 @@ public class OrderService {
                 OrderReturnedEvent.of(order, settlement.refundAmount(), lines, returnedDetail));
         // ⚠ 원장에는 **무엇을 몇 개 되돌리고 얼마를 돌려줬나** 를 적는다. 부분 반품이 생기면서
         //   금액만으로는 «어느 품목이 빠졌나» 를 못 되짚는다(ORDER_ITEM_CANCEL 이 같은 자리에서 정한 것).
+        // 🔴 **사유를 «앞» 에 둔다** (2026-08-27, §I-13 결정). 전엔 「품목목록 / 환불액 / 사유」 순이라
+        //    품목이 아주 많은 주문에서는 **사유부터 잘려 나갔다** — §I-10 이 원장에 사유를 남긴
+        //    이유가 그때 무효가 된다. 잘려도 살아남아야 하는 것이 앞에 온다.
+        //    ⚠ 기존 원장 11 행과 **순서가 갈린다**. 읽는 쪽은 순서를 파싱하지 않으므로(사람이 읽는 칸)
+        //       마이그레이션은 하지 않는다.
         publishAudit(AuditAction.ORDER_RETURN_APPROVE, actor, order,
-                returnedDetail + " 반품 / 환불 " + settlement.refundAmount() + "원"
-                        + (returnReason == null || returnReason.isBlank()
-                                ? "" : " / 사유: " + returnReason));
+                (returnReason == null || returnReason.isBlank() ? "" : "사유: " + returnReason + " / ")
+                        + returnedDetail + " 반품 / 환불 " + settlement.refundAmount() + "원");
         log.info("Return approved: {} items={} refund={} earnedReversed={} admin={}",
                 id, requested.size(), settlement.refundAmount(), settlement.earnedToReverse(), actor.id());
     }

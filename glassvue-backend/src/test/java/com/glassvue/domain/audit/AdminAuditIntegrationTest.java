@@ -279,4 +279,41 @@ class AdminAuditIntegrationTest {
                 auditLogRepository.search(null, null, rollbackLogin, PageRequest.of(0, 10)).getContent());
         assertThat(rows).isEmpty();
     }
+
+    /**
+     * 🔴 <b>긴 detail 이 DB 까지 «실제로» 눕는가</b> (2026-08-27, BACKLOG §I-13).
+     *
+     * <p>{@code AdminAuditLogDetailTest} 는 <b>메서드</b>를 지킨다 — 자바 문자열이 1000자 안으로
+     * 들어오는지. 🔴 <b>그것만으로는 부족하다</b>: 컬럼이 {@code VARCHAR2(1000 CHAR)} 인데
+     * {@code MAX_STRING_SIZE=STANDARD} 라 <b>4000바이트</b>라는 또 하나의 천장이 있고, 한글은
+     * UTF-8 에서 <b>3바이트</b>다. 「1000자」를 통과해도 <b>바이트에서 걸릴 수 있다</b> —
+     * 그건 DB 에 실제로 넣어 봐야만 드러난다.
+     *
+     * <p>⚠ 이 자리가 없으면 {@code ORA-12899} 는 <b>운영에서</b> 처음 보게 된다. 그리고 감사는
+     * 조작과 같은 트랜잭션이라 그 순간 <b>조작이 통째로 롤백된다.</b>
+     */
+    @Test
+    @DisplayName("🔴 1000자를 넘는 detail 이 «…(잘림)» 으로 눕고 DB 에 실제로 저장된다 (§I-13)")
+    void overlongDetailIsTruncatedAndPersists() {
+        String login = "zzaudlong_" + suffix();
+        UUID targetId = member(login, "ZZ긴사유대상" + suffix(), Role.USER);
+
+        // ⚠ **한글로 채운다** — ASCII 로 채우면 «바이트 천장» 을 영영 안 밟는다(1자=1바이트).
+        String overlong = "ZZ" + "가".repeat(1_500);
+        auditLogRepository.save(AdminAuditLog.builder()
+                .action(AuditAction.MEMBER_SUSPEND)
+                .actorId(UUID.randomUUID()).actorName("ZZ감사관리자")
+                .targetId(targetId).targetLogin(login)
+                .detail(overlong)
+                .build());
+        // 🔴 **flush 해서 실제 INSERT 를 일으킨다** — 안 하면 트랜잭션 끝까지 SQL 이 안 나가고,
+        //    이 테스트는 «DB 가 받아 줬다» 가 아니라 «자바 객체가 만들어졌다» 만 보게 된다.
+        auditLogRepository.flush();
+
+        List<AdminAuditLog> rows =
+                auditLogRepository.search(null, null, login, PageRequest.of(0, 10)).getContent();
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).getDetail()).hasSize(AdminAuditLog.DETAIL_MAX);
+        assertThat(rows.get(0).getDetail()).endsWith("…(잘림)");
+    }
 }
