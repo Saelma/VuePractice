@@ -725,6 +725,81 @@ class OrderReturnIntegrationTest {
         assertLedgerConsistent();
     }
 
+    // ── 관리자 대행 반품 요청 (2026-08-27, BACKLOG §I-15) ──────────────────
+
+    /**
+     * 🔴 <b>이 항목의 존재 이유를 그대로 밟는다</b> — §I-9 이 7일 기한을 걸면서 <b>넘긴 건을 구제할
+     * 자리가 사라졌고</b>, 이 경로가 그 자리다. 여기서도 기한을 보면 <b>만드는 의미가 없다.</b>
+     *
+     * <p>⚠ <b>대조군을 같은 테스트에 둔다</b> — 같은 주문에 본인 경로로 걸면 {@code ORDER-400RW} 다.
+     * 둘을 나눠 놓으면 «대행이 되는가» 만 보고 «본인은 여전히 막히는가» 를 놓친다.
+     */
+    @Test
+    @DisplayName("🔴 기한이 지나도 관리자 대행 요청은 된다 — 본인 경로는 여전히 400RW (§I-15)")
+    void adminCanRequestReturnAfterDeadline() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+        backdateDelivery(orderId, 30);
+
+        // 대조군 — 본인은 막힌다.
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
+                        .contentType(JSON).content(fullReturnBody(buyer, orderId, "변심")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("ORDER-400RW"));
+
+        // 🔴 대행은 된다.
+        mockMvc.perform(post("/api/orders/" + orderId + "/admin-return-request").header("Authorization", admin)
+                        .contentType(JSON).content(fullReturnBody(admin, orderId, "ZZ-CS 사정")))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.status").value("RETURN_REQUESTED"));
+    }
+
+    @Test
+    @DisplayName("⚠ 기한 말고 다른 가드는 그대로 — 배송완료가 아니면 대행이라도 400R")
+    void adminDelegationStillRespectsOtherGuards() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        // 배송완료까지 안 간 주문(PAID) — «관리자니까 아무거나 된다» 가 아니다.
+        mockMvc.perform(post("/api/cart/items").header("Authorization", buyer).contentType(JSON)
+                .content("{\"variantId\":\"" + variantId + "\",\"quantity\":1}")).andExpect(status().isOk());
+        String body = mockMvc.perform(post("/api/orders").header("Authorization", buyer).contentType(JSON)
+                        .content("{\"recipient\":\"ZZ수령인\",\"phone\":\"010-0000-0000\",\"zipcode\":\"06134\","
+                                + "\"address1\":\"서울시 강남구 1\",\"address2\":null}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String orderId = JsonPath.read(body, "$.data");
+        mockMvc.perform(post("/api/orders/" + orderId + "/pay").header("Authorization", buyer)).andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/admin-return-request").header("Authorization", admin)
+                        .contentType(JSON)
+                        .content("{\"reason\":\"ZZ-사정\",\"items\":[{\"orderItemId\":\""
+                                + JsonPath.<java.util.List<String>>read(
+                                        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                                                .andReturn().getResponse().getContentAsString(),
+                                        "$.data.items[*].orderItemId").get(0)
+                                + "\",\"quantity\":1}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("ORDER-400R"));
+    }
+
+    @Test
+    @DisplayName("권한 — 대행 요청은 비로그인 401 · 일반 사용자 403 (자기 주문이어도)")
+    void adminReturnRequestPermission() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+        String payload = fullReturnBody(buyer, orderId, "변심");
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/admin-return-request")
+                        .contentType(JSON).content(payload))
+                .andExpect(status().isUnauthorized());
+        // 🔴 **자기 주문이어도 403** — 이 경로는 기한을 안 보므로, 고객이 탈 수 있으면 기한이 없어진다.
+        mockMvc.perform(post("/api/orders/" + orderId + "/admin-return-request").header("Authorization", buyer)
+                        .contentType(JSON).content(payload))
+                .andExpect(status().isForbidden());
+    }
+
     @Test
     @DisplayName("응답이 «언제까지인가»(returnDeadline)와 «지금 되나»(returnRequestable)를 나눠 싣는다")
     void responseCarriesDeadlineAndAnswer() throws Exception {

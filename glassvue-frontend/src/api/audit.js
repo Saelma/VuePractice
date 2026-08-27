@@ -61,6 +61,10 @@ export const AUDIT_ACTION_LABEL = {
   ORDER_ITEM_CANCEL: '부분 취소(대행)',
   ORDER_SHIP: '발송 처리',
   ORDER_DELIVER: '배송완료 처리',
+  // 🔴 **«(대행)» 을 붙인다** (2026-08-27, §I-15) — 반품 «요청» 은 원래 고객이 하는 일이라
+  //    원장에 안 남는다. 여기 뜨는 것은 **관리자가 대신 건 것뿐**이라, 그냥 «반품 요청» 이라고
+  //    적으면 «고객 요청도 다 남는다» 로 읽힌다(`ORDER_CANCEL` 이 «(대행)» 을 붙인 것과 같은 이유).
+  ORDER_RETURN_REQUEST: '반품 요청(대행)',
   ORDER_RETURN_APPROVE: '반품 승인',
   ORDER_RETURN_REJECT: '반품 거절',
   REVIEW_HIDE: '리뷰 숨김',
@@ -119,6 +123,9 @@ export const AUDIT_ACTION_BADGE = {
   ORDER_ITEM_CANCEL: 'badge-danger',
   ORDER_SHIP: 'badge-neutral',
   ORDER_DELIVER: 'badge-neutral',
+  // ⚠ 대행 «요청» 은 아직 **돈이 안 움직였다** — 승인 때 움직인다. 그래서 승인(danger)보다 가볍다.
+  //    다만 «관리자가 고객 대신 한 일» 이라 중립도 아니다 — 기한을 넘긴 건일 수 있다(§I-15).
+  ORDER_RETURN_REQUEST: 'badge-warning',
   // 반품 승인은 **환불이 나간다** — 취소와 같은 무게다.
   ORDER_RETURN_APPROVE: 'badge-danger',
   // 거절은 **고객의 요청을 뒤집는** 것이지 끝내는 것이 아니다 — 다시 요청할 수 있다.

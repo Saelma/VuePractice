@@ -26,6 +26,7 @@ import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderItemCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
+import com.glassvue.domain.order.event.OrderReturnRequestedByAdminEvent;
 import com.glassvue.domain.order.event.OrderReturnRequestedEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
 import com.glassvue.domain.order.event.SoldLine;
@@ -591,6 +592,51 @@ public class OrderService {
         // 관리자에게 알린다(2026-08-12, 08-11 이월). ⚠ 승인·거절과 달리 **받는 쪽이 관리자**라
         // 구독자가 AdminOrderEventListener 다 — 이벤트는 대상을 모르고 «무슨 일이 있었나» 만 싣는다.
         eventPublisher.publishEvent(OrderReturnRequestedEvent.from(order));
+    }
+
+    /**
+     * 🔴 <b>반품 요청 — 관리자 대행</b> (2026-08-27, BACKLOG §I-15).
+     *
+     * <p><b>왜 경로를 가르나</b> — {@code admin-cancel} 이 {@code /cancel} 과 갈린 것과 같은 이유다.
+     * 관리자가 본인 경로를 타면 <b>소유 검사에 막히고</b>(남의 주문이다), 우회하면 원장에 안 남아
+     * «누가 걸었나» 를 물을 방법이 사라진다.
+     *
+     * <p>🔴 <b>기한을 안 본다</b>(§I-15 결정 1). §I-9 이 7일 기한을 걸면서 <b>넘긴 건을 구제할 자리가
+     * 사라졌고</b>, 이 경로가 그 자리다 — 여기서도 기한을 보면 <b>만드는 의미가 없다.</b>
+     * ⚠ 대신 <b>넘긴 건이었다는 사실을 원장과 알림에 적는다</b>: 원장만 보는 사람이 «왜 34일 지난
+     * 주문이 반품됐나» 를 물을 때 답이 거기 있어야 하고, 고객은 «반품 기간이 지났다» 는 화면을 보다가
+     * 갑자기 접수 알림을 받으면 <b>앞뒤가 안 맞는다.</b>
+     *
+     * <p>⚠ <b>사유가 필수다</b> — 본인 요청도 필수지만(V47) 대행은 <b>고객이 안 한 일</b>이라
+     * 더 그렇다. 컨트롤러의 {@code @Valid} 가 막는다.
+     */
+    @Transactional
+    public void requestReturnByAdmin(UUID id, AuthUser actor, String reason,
+                                     Map<UUID, Long> quantitiesByItemId) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        // ⚠ 기한만 빼고 **나머지 가드는 그대로** 본다 — 배송완료가 아니거나 남은 것이 없으면
+        //    대행이라도 걸 수 없다(«관리자니까 아무거나 된다» 가 아니다).
+        if (order.getStatus() != OrderStatus.DELIVERED || order.hasNothingLeft()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_RETURNABLE);
+        }
+        validateReturnRequest(order, quantitiesByItemId);
+
+        boolean deadlinePassed =
+                !order.isWithinReturnWindow(orderProperties.returnGraceDays(), Instant.now());
+        order.requestReturn(reason, quantitiesByItemId);
+
+        publishAudit(AuditAction.ORDER_RETURN_REQUEST, actor, order,
+                "사유: " + reason + " / 대행 접수"
+                        + (deadlinePassed ? " (🔴 기한 경과 — " + orderProperties.returnGraceDays()
+                                + "일 지남)" : ""));
+        // 🔴 **고객에게 알린다** — 내 주문이 내가 안 한 일로 움직이는 것을 모르면 안 된다
+        //    (B-25 가 대행 취소에 `cancelledBy` 를 남긴 것과 같은 판단).
+        //    ⚠ 관리자에게 가는 OrderReturnRequestedEvent 는 **안 낸다** — 요청한 사람이 관리자다.
+        eventPublisher.publishEvent(
+                OrderReturnRequestedByAdminEvent.of(order, actor.nickname(), deadlinePassed));
+        log.info("Return requested by admin: {} admin={} deadlinePassed={}",
+                id, actor.id(), deadlinePassed);
     }
 
     /**

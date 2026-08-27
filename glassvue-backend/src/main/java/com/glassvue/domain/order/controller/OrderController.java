@@ -108,10 +108,30 @@ public interface OrderController {
     ResponseEntity<ApiResponse<Void>> cancelItemByAdmin(@Parameter(hidden = true) AuthUser admin, UUID id,
             @Valid OrderItemCancelRequest request);
 
-    @Operation(summary = "반품 요청 (본인, DELIVERED만)",
-            description = "관리자 승인 시 옵션 재고 복원 + 결제금액을 적립금으로 환불하고 그 주문의 적립을 회수한다.")
+    @Operation(summary = "반품 요청 (본인, DELIVERED만 · 배송완료 후 7일 이내)", description = """
+            관리자 승인 시 요청한 품목의 재고가 복원되고 그 몫이 적립금으로 환불되며 적립도 회수된다.
+
+            ⚠ **배송완료 후 7일이 지나면 `ORDER-400RW`** (2026-08-27, I-9). 「배송완료가 아니다」
+            (`ORDER-400R`)와 **코드가 다르다** — 앞은 기다리면 되고 뒤는 영영 안 된다.
+            기한을 넘긴 건은 관리자가 `admin-return-request` 로 대신 걸 수 있다.
+            """)
     ResponseEntity<ApiResponse<Void>> requestReturn(
             @Parameter(hidden = true) AuthUser user, UUID id, ReturnRequest request);
+
+    @Operation(summary = "반품 요청 — 관리자 대행 (DELIVERED만 · 🔴 기한 무시)", description = """
+            CS 로 "기간이 지났는데 사정이 있다" 가 들어왔을 때 관리자가 대신 건다 (I-15, 2026-08-27).
+
+            🔴 **이 경로만 7일 기한을 안 본다.** I-9 이 기한을 걸면서 넘긴 건을 구제할 자리가
+            사라졌고, 이 경로가 그 자리다 — 여기서도 기한을 보면 만드는 의미가 없다.
+
+            **본인 요청과 같은 것**: 품목·수량을 골라 보낸다 · 승인 절차도 같다.
+            **다른 것**: 원장에 `ORDER_RETURN_REQUEST` 로 남고(사유 · 대행 접수 · **기한 경과 여부**),
+            **고객에게 알림이 간다**(내 주문이 내가 안 한 일로 움직이는 것을 모르면 안 된다).
+
+            ⚠ **기한 말고 다른 가드는 그대로** — 배송완료가 아니거나 남은 것이 없으면 대행이라도 안 된다.
+            """)
+    ResponseEntity<ApiResponse<Void>> requestReturnByAdmin(
+            @Parameter(hidden = true) AuthUser admin, UUID id, ReturnRequest request);
 
     @Operation(summary = "반품 승인 (관리자, RETURN_REQUESTED→RETURNED)")
     ResponseEntity<ApiResponse<Void>> approveReturn(@Parameter(hidden = true) AuthUser admin, UUID id);

@@ -139,6 +139,18 @@ export function requestReturn(id, reason, items) {
   return apiPost(`/api/orders/${id}/return-request`, { reason, items });
 }
 
+/**
+ * 반품 요청 — <b>관리자 대행</b> (2026-08-27, BACKLOG §I-15).
+ *
+ * ⚠ 경로가 본인 것(`/return-request`)과 **다르다** — `admin-cancel` 이 `/cancel` 과 갈린 것과
+ * 같은 이유다. 관리자가 본인 경로를 타면 소유 검사에 막히고, 원장에도 안 남는다.
+ * 🔴 **이 경로만 7일 기한을 안 본다** — I-9 이 기한을 걸면서 넘긴 건을 구제할 자리가 사라졌고,
+ * 이 경로가 그 자리다. 그래서 서버가 ADMIN 으로 막는다.
+ */
+export function requestReturnByAdmin(id, reason, items) {
+  return apiPost(`/api/orders/${id}/admin-return-request`, { reason, items });
+}
+
 export function approveReturn(id) {
   return apiPost(`/api/orders/${id}/return-approve`);
 }

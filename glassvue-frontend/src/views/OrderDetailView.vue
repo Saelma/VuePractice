@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router';
 import {
   getOrder, payOrder, shipOrder, deliverOrder, cancelOrder,
   cancelOrderItem, cancelOrderItemByAdmin,
-  requestReturn, approveReturn, rejectReturn, returnApproveConfirm,
+  requestReturn, requestReturnByAdmin, approveReturn, rejectReturn, returnApproveConfirm,
   orderStatusText, orderStatusClass, DELIVERY_CARRIERS,
 } from '../api/order';
 import { priceText, hasDiscount, discountRate, strikePrice } from '../api/product';
@@ -170,8 +170,18 @@ const returnForm = ref(null);
 const returnableItems = computed(() =>
   (order.value?.items || []).filter((i) => i.returnableQuantity > 0));
 
-function openReturnForm() {
+/**
+ * @param byAdmin 관리자 대행인가 (2026-08-27, §I-15). 🔴 **폼은 하나를 쓴다** — 품목·수량·사유를
+ *   고르는 일이 똑같아서다. 갈리는 것은 **어느 API 로 보내나**와 **문구**뿐이다.
+ *
+ * ⚠ 🔴 **템플릿에서 `@click="openReturnForm"` 로 쓰면 안 된다** — Vue 가 **DOM 이벤트를 첫 인자로**
+ *   넘겨서 `byAdmin` 이 MouseEvent(truthy)가 되고, **고객의 반품이 전부 대행 경로로 나간다**(403).
+ *   실제로 그렇게 썼다가 테스트가 잡았다(2026-08-27). 반드시 **`openReturnForm()`** 로 부른다.
+ *   그래서 아래에서 `Boolean(...)` 이 아니라 `=== true` 로 눕힌다 — 실수해도 대행으로 안 샌다.
+ */
+function openReturnForm(byAdmin = false) {
   returnForm.value = {
+    byAdmin: byAdmin === true,
     reason: '',
     quantities: Object.fromEntries(returnableItems.value.map((i) => [i.orderItemId, i.returnableQuantity])),
   };
@@ -240,7 +250,10 @@ async function submitReturn() {
   if (items.length === 0) { error.value = '반품할 품목을 하나 이상 골라 주세요.'; return; }
   error.value = '';
   try {
-    await requestReturn(props.id, reason, items);
+    // ⚠ **경로가 갈린다** — 대행은 기한을 안 보고 원장에 남으며 고객에게 알림이 간다(§I-15).
+    await (returnForm.value.byAdmin
+      ? requestReturnByAdmin(props.id, reason, items)
+      : requestReturn(props.id, reason, items));
     returnForm.value = null;
     await load();
   } catch (e) {
@@ -744,7 +757,7 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
               class="btn btn-secondary"
               :disabled="!order.returnRequestable"
               :title="order.returnRequestable ? undefined : returnClosedText"
-              @click="openReturnForm"
+              @click="openReturnForm()"
             >반품 요청</button>
           </template>
 
@@ -761,6 +774,19 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             class="btn btn-primary"
             @click="onDeliver"
           >배송완료 처리</button>
+          <!--
+            🔴 **대행 반품 요청** (2026-08-27, §I-15). §I-9 이 7일 기한을 걸면서 «기한을 넘긴 건을
+            구제할 자리» 가 사라졌고, 이 버튼이 그 자리다.
+            ⚠ **`returnRequestable` 을 안 본다** — 그 값은 «고객이 지금 걸 수 있나» 이고, 이 버튼은
+            **기한이 지났을 때가 존재 이유**다. 서버도 이 경로에서만 기한을 안 본다.
+            ⚠ **남의 주문일 때만** 뜬다 — 관리자 본인 주문이면 위쪽 「반품 요청」이 이미 있다.
+          -->
+          <button
+            v-if="isAdmin && !isMine && order.status === 'DELIVERED' && !returnForm"
+            type="button"
+            class="btn btn-secondary"
+            @click="openReturnForm(true)"
+          >반품 대행 접수</button>
           <template v-if="isAdmin && order.status === 'RETURN_REQUESTED'">
             <button type="button" class="btn btn-primary" @click="onApproveReturn">반품 승인</button>
             <button type="button" class="btn btn-secondary" @click="openRejectForm">반품 거절</button>
@@ -808,7 +834,16 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
         🔴 **품목·수량을 여기서 고른다**(G-10 결정 2) — 승인은 «요청한 대로» 해 주므로 고객이 말해야 한다.
       -->
       <div v-if="returnForm" class="card mt-4 p-5">
-        <h2 class="section-title">반품 요청</h2>
+        <h2 class="section-title">{{ returnForm.byAdmin ? '반품 요청 — 관리자 대행' : '반품 요청' }}</h2>
+        <!--
+          🔴 **대행이면 «누구 대신인지» 와 «기한을 무시한다» 를 말한다** (2026-08-27, §I-15).
+          관리자가 자기 반품인 줄 알고 누르면 안 되고, 기한 넘긴 건을 여기서 통과시키는 것이
+          **의도된 동작**이라는 것도 화면이 말해 줘야 한다.
+        -->
+        <p v-if="returnForm.byAdmin" class="alert-warning mt-1">
+          <strong>{{ order.buyerNickname }}</strong> 님을 대신해 접수합니다.
+          <strong>반품 가능 기간이 지났어도 접수됩니다</strong> — 원장에 남고 고객에게 알림이 갑니다.
+        </p>
         <p class="muted mt-1">
           관리자 승인 시 <strong>요청한 품목의 금액</strong>이 <strong>적립금으로 환불</strong>됩니다(배송비 제외).
           그 몫만큼 적립금과 등급 반영분도 회수됩니다.

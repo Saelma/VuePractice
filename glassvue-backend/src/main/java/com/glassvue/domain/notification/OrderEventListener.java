@@ -5,6 +5,7 @@ import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderItemCancelledEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
+import com.glassvue.domain.order.event.OrderReturnRequestedByAdminEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
@@ -80,6 +81,19 @@ public class OrderEventListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrderItemCancelled(OrderItemCancelledEvent event) {
+        notificationHandler.handle(event);
+    }
+
+    /**
+     * 관리자 대행 반품 «요청» (2026-08-27, §I-15).
+     *
+     * <p>🔴 <b>{@code OrderReturnRequestedEvent} 는 여기 없다</b> — 그건 <b>관리자에게</b> 가는
+     * 이벤트라 {@code AdminOrderEventListener} 가 받는다(이 클래스 주석의 규약).
+     * 이쪽은 관리자가 한 일이라 <b>모르고 있는 쪽이 고객</b>이고, 그래서 자리가 여기다.
+     */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderReturnRequestedByAdmin(OrderReturnRequestedByAdminEvent event) {
         notificationHandler.handle(event);
     }
 }

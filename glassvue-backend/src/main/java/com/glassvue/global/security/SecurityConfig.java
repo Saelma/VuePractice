@@ -92,6 +92,10 @@ public class SecurityConfig {
                         // 관리자 대행 **부분** 취소(G-4, 2026-08-24). ⚠ 본인 경로(/cancel-item)와 갈라 둔다 —
                         //    admin-cancel 이 /cancel 과 갈린 것과 같은 이유다(한 경로에 두 권한을 담지 않는다).
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/admin-cancel-item").hasRole("ADMIN")
+                        // 🔴 대행 반품 «요청» (2026-08-27, §I-15). §I-9 이 7일 기한을 걸면서
+                        //    기한 넘긴 건을 구제할 자리가 사라졌고, 이 경로가 그 자리다.
+                        //    ⚠ 이 경로만 기한을 안 본다 — 그래서 더더욱 ADMIN 으로 막혀 있어야 한다.
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/admin-return-request").hasRole("ADMIN")
                         .requestMatchers("/api/orders/**").authenticated()
                         // 이미지 업로드는 로그인만 — 포토 리뷰(2026-07-20)부터 일반 사용자도 올린다.
                         // 원래 ADMIN 전용이었지만 그건 상품 이미지가 유일한 용도였을 때 얘기다.

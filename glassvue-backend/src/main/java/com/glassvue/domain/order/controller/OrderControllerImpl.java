@@ -116,6 +116,15 @@ public class OrderControllerImpl implements OrderController {
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
+    // 관리자 대행 반품 요청은 관리자만 — SecurityConfig 의 /admin-return-request 매처가 막는다.
+    @Override
+    @PostMapping("/{id}/admin-return-request")
+    public ResponseEntity<ApiResponse<Void>> requestReturnByAdmin(
+            @LoginUser AuthUser admin, @PathVariable UUID id, @Valid @RequestBody ReturnRequest request) {
+        orderService.requestReturnByAdmin(id, admin, request.reason(), request.quantitiesByItemId());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
     @Override
     @PostMapping("/{id}/return-request")
     public ResponseEntity<ApiResponse<Void>> requestReturn(

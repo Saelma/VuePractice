@@ -144,11 +144,32 @@ public enum AuditAction {
      * 덮으므로, 회차가 쌓이면 «1회차는 왜 반품했나» 를 알 곳이 <b>여기뿐</b>이다.
      * <b>거절 쪽이 2026-08-14 에 정확히 같은 논리로 먼저 그렇게 해 뒀고</b>({@code ORDER_RETURN_REJECT}),
      * 승인 쪽만 빠져 있던 <b>짝의 비대칭</b>이었다.
-     * ⚠ detail 이 1000자를 넘으면 <b>«…(잘림)» 으로 눕힌다</b>({@code OrderService.fitDetail}) —
-     * 넘긴 채로 두면 {@code ORA-12899} 로 <b>반품 승인 자체가 롤백된다.</b>
+     * ⚠ detail 이 1000자를 넘으면 <b>«…(잘림)» 으로 눕힌다</b> — 넘긴 채로 두면 {@code ORA-12899} 로
+     * <b>반품 승인 자체가 롤백된다.</b> 🔴 <b>자르는 곳은 {@code AdminAuditLog} 하나다</b>
+     * (2026-08-27, §I-13 — 전엔 도메인마다 각자 잘랐고 방식이 갈렸다).
+     * ⚠ 그리고 <b>사유가 «앞» 에 온다</b> — 품목 목록이 길면 뒤부터 잘리기 때문이다(§I-13 결정 3).
      */
     ORDER_SHIP(AuditTargetType.MEMBER),
     ORDER_DELIVER(AuditTargetType.MEMBER),
+    /**
+     * 🔴 <b>관리자가 «대신» 건 반품 요청</b> (2026-08-27, BACKLOG §I-15 · V60).
+     *
+     * <p><b>왜 요청까지 남기나</b> — 반품 요청은 원래 <b>고객만</b> 하는 일이라 원장에 남길 이유가
+     * 없었다(관리자는 승인·거절만 하고 그 둘은 이미 남는다). §I-9 이 7일 기한을 걸면서
+     * <b>기한을 넘긴 건을 구제할 자리가 사라졌고</b>, 그 자리를 메우려고 대행 경로를 만들었다 —
+     * 그 순간 «관리자가 대신 요청했다» 가 <b>물어볼 값어치가 있는 사실</b>이 된다.
+     *
+     * <p>🔴 <b>이 값이 붙는 요청은 «기한을 넘긴 것일 수 있다»</b>(§I-15 결정 1). 그래서 detail 에
+     * <b>기한 경과 여부를 적는다</b> — 원장만 보는 사람이 «왜 34일 지난 주문이 반품됐나» 를
+     * 물을 때 답이 거기 있어야 한다.
+     *
+     * <p>⚠ <b>고객 본인의 요청은 안 남는다</b> — 원장은 «관리자가 한 일» 을 적는 곳이고,
+     * 고객 요청은 주문 자체({@code return_requested_at})가 이미 갖고 있다.
+     *
+     * <p>⚠ 이름이 <b>정확히 20자</b>다 — {@code action} 열이 {@code VARCHAR2(20 CHAR)} 라
+     * <b>한 글자만 길었어도 컬럼을 함께 넓혀야 했다.</b> 🔴 다음에 값을 더할 때 <b>이름 길이부터 센다.</b>
+     */
+    ORDER_RETURN_REQUEST(AuditTargetType.MEMBER),
     ORDER_RETURN_APPROVE(AuditTargetType.MEMBER),
     ORDER_RETURN_REJECT(AuditTargetType.MEMBER),
     /**

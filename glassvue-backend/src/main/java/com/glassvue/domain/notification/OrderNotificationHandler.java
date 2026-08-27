@@ -7,6 +7,7 @@ import com.glassvue.domain.order.event.OrderItemCancelledEvent;
 import com.glassvue.domain.order.event.OrderDeliveredEvent;
 import com.glassvue.domain.order.event.OrderPlacedEvent;
 import com.glassvue.domain.order.event.OrderReturnRejectedEvent;
+import com.glassvue.domain.order.event.OrderReturnRequestedByAdminEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -109,6 +110,31 @@ public class OrderNotificationHandler {
                 "/orders/" + event.orderId());
         log.info("[알림] 부분 취소 — order={} member={} refund={} point={}",
                 event.orderId(), event.memberId(), event.refundedAmount(), event.refundedPoint());
+    }
+
+    /**
+     * 🔴 <b>관리자가 대신 건 반품 요청</b> (2026-08-27, BACKLOG §I-15).
+     *
+     * <p><b>왜 알리나</b> — 내 주문이 <b>내가 안 한 일로</b> 움직인다. 승인까지 기다렸다 알리면
+     * 그 사이 고객은 «내가 언제 반품을 걸었지» 를 알 방법이 없고, 거절되면 <b>영영 모른다.</b>
+     * (B-25 가 대행 취소에 {@code cancelledByName} 을 남긴 것과 같은 판단.)
+     *
+     * <p>🔴 <b>기한 경과 건이면 그 말을 한다.</b> 고객 화면은 §I-9 로 «반품 가능 기간이 지났습니다» 를
+     * 띄우고 있는데 갑자기 접수 알림이 오면 <b>화면과 알림이 어긋나 보인다.</b> «기간이 지났지만
+     * 접수됐다» 고 말해 줘야 앞뒤가 맞는다.
+     *
+     * <p>⚠ <b>누가 했는지 이름을 넣는다</b> — «관리자가» 로만 적으면 고객이 CS 에 되물을 때
+     * 짚을 곳이 없다.
+     */
+    public void handle(OrderReturnRequestedByAdminEvent event) {
+        String message = event.adminName() + " 관리자가 대신 반품을 접수했습니다."
+                + (event.deadlinePassed() ? " (반품 가능 기간이 지난 건입니다.)" : "")
+                + " 사유: " + event.reason();
+        notificationService.create(event.memberId(), NotificationType.ORDER,
+                "반품이 대신 접수되었어요", withOrderNo(event.orderNo(), message),
+                "/orders/" + event.orderId());
+        log.info("[알림] 대행 반품 요청 — order={} member={} deadlinePassed={}",
+                event.orderId(), event.memberId(), event.deadlinePassed());
     }
 
     /**

@@ -23,6 +23,7 @@ const getOrder = vi.fn();
 const cancelOrderItem = vi.fn();
 const cancelOrderItemByAdmin = vi.fn();
 const requestReturn = vi.fn();
+const requestReturnByAdmin = vi.fn();
 
 vi.mock('../api/order', async (importOriginal) => ({
   // ⚠ **`returnApproveConfirm` 은 진짜를 쓴다** — 이 화면이 그 함수를 «실제로 부르는가» 가
@@ -33,6 +34,7 @@ vi.mock('../api/order', async (importOriginal) => ({
   cancelOrderItemByAdmin: (...a) => cancelOrderItemByAdmin(...a),
   payOrder: vi.fn(), shipOrder: vi.fn(), deliverOrder: vi.fn(), cancelOrder: vi.fn(),
   requestReturn: (...a) => requestReturn(...a),
+  requestReturnByAdmin: (...a) => requestReturnByAdmin(...a),
   approveReturn: vi.fn(), rejectReturn: vi.fn(),
   orderStatusText: (s) => s,
   orderStatusClass: () => '',
@@ -698,5 +700,94 @@ describe('OrderDetailView — 반품 기한 (§I-9)', () => {
     const w = await open(order({ status: 'PAID', returnRequestable: false, returnDeadline: null }));
 
     expect(w.text()).not.toContain('반품을 요청할 수 없습니다');
+  });
+});
+
+/**
+ * 관리자 대행 반품 요청 (2026-08-27, BACKLOG §I-15).
+ *
+ * 🔴 **§I-9 이 만든 구멍을 메우는 경로다** — 7일 기한을 걸면서 「넘긴 건을 구제할 자리」가
+ *    사라졌고, 이 버튼이 그 자리다. 그래서 `returnRequestable`(고객이 지금 걸 수 있나)을
+ *    **안 본다** — 기한이 지났을 때가 이 버튼의 존재 이유다.
+ */
+describe('OrderDetailView — 관리자 대행 반품 요청 (§I-15)', () => {
+  let w;
+
+  const othersDelivered = (overrides = {}) => order({
+    status: 'DELIVERED', memberId: 'someone-else', buyerNickname: 'ZZ구매자', ...overrides,
+  });
+
+  beforeEach(() => {
+    authState.user = { id: 'admin-1', role: 'ADMIN' };
+    push.mockReset();
+    // 🔴 **API 목을 비운다** — 이 묶음은 «어느 API 로 갔나» 를 단언하므로, 앞 테스트의 호출이
+    //    남아 있으면 `not.toHaveBeenCalled()` 가 **거짓으로 빨개진다**(실제로 그렇게 걸렸다).
+    requestReturn.mockReset();
+    requestReturnByAdmin.mockReset();
+  });
+  afterEach(() => { if (w) w.unmount(); w = null; authState.user = null; });
+
+  async function open(data) {
+    getOrder.mockReset().mockResolvedValue(data);
+    w = mount(OrderDetailView, {
+      props: { id: 'o1' },
+      global: { stubs: { RouterLink: true, ItemThumb: true } },
+    });
+    await flushPromises();
+    return w;
+  }
+
+  const btn = (w, text) => w.findAll('button').find((b) => b.text() === text);
+
+  it('🔴 기한이 지난 주문에도 «반품 대행 접수» 가 보인다 — 그때가 존재 이유다', async () => {
+    const w = await open(othersDelivered({ returnRequestable: false }));
+
+    expect(btn(w, '반품 대행 접수')).toBeTruthy();
+  });
+
+  it('⚠ 관리자 «본인» 주문에는 안 뜬다 — 위쪽 「반품 요청」이 이미 있다', async () => {
+    const w = await open(order({ status: 'DELIVERED', memberId: ME }));
+    authState.user = { id: ME, role: 'ADMIN' };
+    await flushPromises();
+
+    expect(btn(w, '반품 대행 접수')).toBeFalsy();
+  });
+
+  it('🔴 대행 폼은 «누구 대신인지» 와 «기한을 무시한다» 를 말한다', async () => {
+    const w = await open(othersDelivered({ returnRequestable: false }));
+    await btn(w, '반품 대행 접수').trigger('click');
+    await flushPromises();
+
+    expect(w.text()).toContain('ZZ구매자');
+    expect(w.text()).toContain('반품 가능 기간이 지났어도 접수됩니다');
+  });
+
+  it('🔴 대행 버튼은 «대행 API» 로 보낸다', async () => {
+    const w = await open(othersDelivered({ returnRequestable: false }));
+    await btn(w, '반품 대행 접수').trigger('click');
+    await flushPromises();
+    // ⚠ 선택자는 기존 반품 폼 테스트와 **같은 것**을 쓴다 — 사유는 number 가 아닌 input,
+    //    제출 버튼은 «반품 요청» 중 **마지막** 것이다(여는 버튼과 글자가 같다).
+    await w.find('input:not([type="number"])').setValue('ZZ-CS 사정');
+    await w.findAll('button').filter((b) => b.text() === '반품 요청').at(-1).trigger('click');
+    await flushPromises();
+
+    expect(requestReturnByAdmin).toHaveBeenCalled();
+    expect(requestReturn).not.toHaveBeenCalled();
+  });
+
+  it('🔴 고객의 «반품 요청» 은 대행 API 로 새지 않는다 — click 이벤트가 인자로 들어가던 자리', async () => {
+    // ⚠ 실제로 낸 실수다(2026-08-27): `@click="openReturnForm"` 로 쓰면 Vue 가 **MouseEvent 를
+    //    첫 인자로** 넘겨 byAdmin 이 truthy 가 되고, **고객 반품이 전부 대행 경로로 나간다**(403).
+    authState.user = { id: ME, role: 'USER' };
+    const w = await open(order({ status: 'DELIVERED', memberId: ME }));
+    await btn(w, '반품 요청').trigger('click');
+    await flushPromises();
+    await w.find('input:not([type="number"])').setValue('ZZ-단순 변심');
+    await w.findAll('button').filter((b) => b.text() === '반품 요청').at(-1).trigger('click');
+    await flushPromises();
+
+    expect(requestReturn).toHaveBeenCalled();
+    expect(requestReturnByAdmin).not.toHaveBeenCalled();
   });
 });
