@@ -21,6 +21,7 @@ import com.glassvue.domain.catalog.service.command.ProductCommandService;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.config.DeliveryProperties;
+import com.glassvue.domain.order.config.OrderProperties;
 import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
@@ -71,6 +72,17 @@ class OrderServiceTest {
     // 설정 객체라 목이 아니라 실제 인스턴스를 넣는다 — 조회 링크 생성은 순수 문자열 조립이고,
     // 목으로 두면 null을 돌려줘 "링크가 안 만들어지는" 경로만 검증하게 된다.
     @Spy DeliveryProperties deliveryProperties = new DeliveryProperties();
+    /**
+     * 반품 기한 설정(§I-9). ⚠ **여기 7 은 «설정과 같아야 하는 값» 이 아니다** — 이 파일의 테스트는
+     * 기한 경계를 밟지 않으므로 <b>0 보다 크기만 하면 된다</b>(방금 배송완료된 주문은 어느 값이든
+     * 창이 열려 있다).
+     *
+     * <p>🔴 <b>«7» 을 실제로 지키는 곳은 여기가 아니다</b> — {@code OrderReturnIntegrationTest} 가
+     * <b>진짜 설정을 로드한 채</b> 배송일을 8일 전·6일 전으로 당겨 밟는다. {@code application.yml} 의
+     * {@code order.return-grace-days} 를 바꾸면 <b>그쪽이 빨개진다.</b>
+     * ⚠ 그래서 여기에 드리프트 가드를 또 두지 않았다 — 같은 것을 두 곳에서 지키면 한쪽이 낡는다.
+     */
+    @Spy OrderProperties orderProperties = new OrderProperties(7);
     // 설정 객체라 목이 아니라 실제 인스턴스를 넣는다 — 배송비 계산은 순수 산술이고,
     // 목으로 두면 항상 0을 돌려줘 "배송비가 안 붙는" 경로만 검증하게 된다.
     @Spy ShippingPolicy shippingPolicy = new ShippingPolicy();

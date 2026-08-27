@@ -15,6 +15,7 @@ import com.glassvue.domain.order.dto.OrderCreateRequest;
 import com.glassvue.domain.order.dto.OrderResponse;
 import com.glassvue.domain.order.dto.OrderSearchCondition;
 import com.glassvue.domain.order.config.DeliveryProperties;
+import com.glassvue.domain.order.config.OrderProperties;
 import com.glassvue.domain.order.entity.DeliveryCarrier;
 import com.glassvue.domain.order.entity.Order;
 import com.glassvue.domain.order.entity.OrderItem;
@@ -35,6 +36,7 @@ import com.glassvue.global.policy.ShippingPolicy;
 import com.glassvue.global.response.PageResponse;
 import com.glassvue.global.security.AuthUser;
 import org.springframework.context.ApplicationEventPublisher;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -60,6 +62,7 @@ public class OrderService {
     private final ProductCommandService productCommandService;
     private final ApplicationEventPublisher eventPublisher;
     private final DeliveryProperties deliveryProperties;
+    private final OrderProperties orderProperties;
     private final ShippingPolicy shippingPolicy;
     private final CouponService couponService;
     private final PointService pointService;
@@ -234,8 +237,12 @@ public class OrderService {
 
     /** 조회 링크는 설정으로 만들어 응답에 실어 준다 — 화면이 택배사별 URL 형식을 알 필요가 없게. */
     private OrderResponse toResponse(Order order) {
+        // ⚠ 배송 조회 링크와 **같은 길**로 반품 기한도 실어 준다 — 둘 다 «설정에서 오는 값» 이라
+        //    화면이 알 필요가 없다. 🔴 «언제까지인가» 를 화면이 계산하면 서버와 어긋난다(§I-9).
         return OrderResponse.from(order,
-                deliveryProperties.resolve(order.getShipCarrier(), order.getShipTrackingNo()));
+                deliveryProperties.resolve(order.getShipCarrier(), order.getShipTrackingNo()),
+                order.returnDeadline(orderProperties.returnGraceDays()),
+                order.isReturnRequestable(orderProperties.returnGraceDays(), Instant.now()));
     }
 
     /** 결제 완료 처리 — 본인 주문·ORDERED만. 실제 결제는 이후 PG 연동으로 대체(지금은 상태 전이만). */
@@ -581,8 +588,14 @@ public class OrderService {
     public void requestReturn(UUID id, UUID memberId, String reason, Map<UUID, Long> quantitiesByItemId) {
         Order order = orderRepository.findByIdAndMemberId(id, memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        if (!order.isReturnRequestable()) {
+        // 🔴 **기한을 «상태 다음» 으로 가른다** (2026-08-27, §I-9). 둘을 한 에러로 뭉치면
+        //    고객은 «배송완료가 아니라서» 와 «기한이 지나서» 를 구분 못 한다 — 앞의 것은 기다리면
+        //    되고 뒤의 것은 영영 안 된다. **할 수 있는 일이 다르면 에러도 달라야 한다.**
+        if (order.getStatus() != OrderStatus.DELIVERED || order.hasNothingLeft()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_RETURNABLE);
+        }
+        if (!order.isReturnRequestable(orderProperties.returnGraceDays(), Instant.now())) {
+            throw new BusinessException(ErrorCode.ORDER_RETURN_WINDOW_CLOSED);
         }
         validateReturnRequest(order, quantitiesByItemId);
         order.requestReturn(reason, quantitiesByItemId);

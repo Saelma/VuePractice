@@ -8,6 +8,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -594,15 +595,49 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
-     * 배송완료 주문만 반품 요청할 수 있다(운송 중·미결제 주문은 취소로 처리).
+     * 배송완료 주문만, 그리고 <b>기한 안에서만</b> 반품 요청할 수 있다
+     * (운송 중·미결제 주문은 취소로 처리).
+     *
+     * <p>🔴 <b>인자를 받는 것이 일부러다</b> (2026-08-27, §I-9). 무인자 판이 남아 있으면
+     * <b>기한을 안 보는 질문</b>을 누구나 부를 수 있고, 그게 WA §1-2-1 이 말하는 «짝 중 한쪽» 이 된다.
+     * 시그니처를 바꿔 <b>컴파일러가 모든 호출자를 열게</b> 했다.
+     * ⚠ {@code now} 도 인자다 — {@code Instant.now()} 를 안에서 부르면 <b>경계를 테스트할 수 없다.</b>
      *
      * <p>🔴 <b>남은 것이 있어야 한다</b> (2026-08-25, G-10). 부분 반품 승인은 주문을 {@code DELIVERED}
      * 로 되돌리므로 <b>상태만 보면 이미 다 반품된 주문도 다시 요청할 수 있는 것처럼 보인다.</b>
      * 실제로는 {@code hasNothingLeft()} 면 {@code RETURNED} 로 떨어져 여기 안 오지만, 이 가드가
      * 상태와 수량 <b>둘 다</b>를 보게 해서 그 둘이 어긋나도 조용히 통과하지 않는다.
      */
-    public boolean isReturnRequestable() {
-        return status == OrderStatus.DELIVERED && !hasNothingLeft();
+    public boolean isReturnRequestable(int returnGraceDays, Instant now) {
+        return status == OrderStatus.DELIVERED && !hasNothingLeft()
+                && isWithinReturnWindow(returnGraceDays, now);
+    }
+
+    /**
+     * 반품 요청 마감 시각 = <b>배송완료 시각 + 유예일</b>. 배송 전이면 {@code null}.
+     *
+     * <p>🔴 <b>«최초» 배송완료다</b> (2026-08-27, §I-9 결정 2). 부분 반품 승인과 거절은 주문을
+     * {@code DELIVERED} 로 되돌리지만 <b>{@code deliveredAt} 은 안 건드린다</b> — 갱신하면 한 개씩
+     * 나눠 요청하는 것만으로 기한이 무한히 늘어 <b>기한이 없는 것과 거의 같아진다.</b>
+     * ⚠ 그 성질은 {@code OrderPartialReturnTest} 가 지킨다 — 여기서 다시 보장하지 않는다.
+     *
+     * <p>⚠ <b>화면에도 이 값을 그대로 내려준다</b>({@code OrderResponse.returnDeadline}) —
+     * «언제까지인가» 를 화면이 계산하면 서버와 어긋난다.
+     */
+    public Instant returnDeadline(int returnGraceDays) {
+        return deliveredAt == null ? null : deliveredAt.plus(Duration.ofDays(returnGraceDays));
+    }
+
+    /**
+     * 지금이 반품 요청 기간 안인가.
+     *
+     * <p>⚠ <b>경계는 «마감 시각 이전» 이다</b> — 정확히 마감 시각이면 닫힌 것으로 본다.
+     * 하루 단위 정책에 초 단위 경계가 생기는 것이 어색해 보이지만, 기준이 «배송완료 시각» 이라
+     * 애초에 시각 단위다({@code catalog.purge-grace-days} 와 같은 모양).
+     */
+    public boolean isWithinReturnWindow(int returnGraceDays, Instant now) {
+        Instant deadline = returnDeadline(returnGraceDays);
+        return deadline != null && now.isBefore(deadline);
     }
 
     /** 요청된 반품만 승인·거절할 수 있다. */
@@ -614,7 +649,7 @@ public class Order extends BaseTimeEntity {
      * 고객의 반품 요청.
      *
      * <p>⚠ <b>거절당한 뒤 다시 요청할 수 있다</b> — 거절은 {@code DELIVERED} 로 되돌리므로
-     * {@link #isReturnRequestable()} 이 다시 참이 된다. 그때 <b>이전 거절 기록을 지운다</b>(2026-08-11):
+     * {@link #isReturnRequestable(int, Instant)} 이 (기한 안이라면) 다시 참이 된다. 그때 <b>이전 거절 기록을 지운다</b>(2026-08-11):
      * 안 지우면 화면에 «요청됨» 과 «거절됨» 이 <b>동시에</b> 뜨고, 어느 쪽이 지금인지 알 수 없다.
      * ⚠ 지우는 것이 이력 손실이긴 하다. 주문 한 건이 반품 사이클을 <b>하나만</b> 들고 있는 구조라
      * ({@code returnReason} 도 덮어쓴다) 여기서만 특별히 쌓아 둘 수 없다 —

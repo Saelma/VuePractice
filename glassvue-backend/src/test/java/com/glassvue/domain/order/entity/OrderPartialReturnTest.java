@@ -3,6 +3,8 @@ package com.glassvue.domain.order.entity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -91,7 +93,8 @@ class OrderPartialReturnTest {
         assertThat(o.remainingEarnedPoint()).isEqualTo(160);
         // ⚠ 남은 것이 있으므로 **배송완료로 되돌아간다** — 다시 요청할 수 있어야 한다.
         assertThat(o.getStatus()).isEqualTo(OrderStatus.DELIVERED);
-        assertThat(o.isReturnRequestable()).isTrue();
+        // ⚠ 기한은 여기 관심사가 아니라 «지금» 을 넣는다 — 방금 배송완료된 주문이라 창이 열려 있다.
+        assertThat(o.isReturnRequestable(7, Instant.now())).isTrue();
 
         // ── 2회차: A(20,000). 마지막이라 분모와 분자가 같아져 **남은 몫이 전부** 넘어간다.
         request(o, 0, 1);
@@ -107,7 +110,7 @@ class OrderPartialReturnTest {
 
         assertThat(o.getStatus()).isEqualTo(OrderStatus.RETURNED);
         assertThat(o.hasNothingLeft()).isTrue();
-        assertThat(o.isReturnRequestable()).isFalse();
+        assertThat(o.isReturnRequestable(7, Instant.now())).isFalse();
     }
 
     @Test
@@ -326,5 +329,120 @@ class OrderPartialReturnTest {
         assertThat(s.earnedToReverse()).isZero();
         assertThat(s.purchaseToRemove()).isZero();
         assertThat(s.refundAmount()).isEqualTo(4_000);   // 10,000 − 쿠폰 몫 6,000
+    }
+
+    // ── 🔴 반품 기한의 기산점 — BACKLOG §I-9 결정 2 (2026-08-27) ──────────────
+
+    /**
+     * 🔴 <b>이 테스트가 없으면 결정 2 를 아무도 안 지킨다.</b>
+     *
+     * <p>§I-9 은 반품 기한을 <b>「최초 배송완료」 하나로 고정</b>한다 — 회차마다 갱신하면 한 개씩
+     * 나눠 요청하는 것만으로 기한이 무한히 늘어 <b>기한이 없는 것과 거의 같아진다.</b>
+     *
+     * <p>⚠ <b>지금 코드는 이미 그렇게 돈다</b> — {@code deliveredAt} 을 쓰는 곳은 {@link Order#deliver()}
+     * 하나뿐이고, 반품 승인·거절은 <b>상태만 직접 대입</b>한다. 그래서 이건 «고치는» 테스트가 아니라
+     * <b>«깨지는 것을 막는»</b> 테스트다.
+     *
+     * <p>🔴 <b>어떻게 깨지나</b>: 누가 그 두 줄을 «중복이네» 하며 {@code deliver()} 호출로 정리하면
+     * {@code deliveredAt} 이 <b>그때의 시각으로 갱신되고</b>, 기한이 조용히 늘어난다.
+     * 상태는 여전히 {@code DELIVERED} 라 <b>다른 어떤 테스트도 안 빨개진다.</b>
+     */
+    @Test
+    @DisplayName("🔴 부분 반품 «승인» 이 deliveredAt 을 안 덮는다 — 기한이 회차마다 늘면 안 된다 (§I-9 결정 2)")
+    void approveDoesNotResetDeliveredAt() {
+        Order o = delivered(280, 5_000, 2_000, 20_000, 15_000);
+        Instant firstDelivered = o.getDeliveredAt();
+        assertThat(firstDelivered).isNotNull();
+
+        request(o, 1, 1);
+        o.applyRequestedReturns();
+
+        // 부분 반품은 주문을 DELIVERED 로 «되돌린다» — 그때 시각을 다시 찍으면 안 된다.
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(o.getDeliveredAt()).isEqualTo(firstDelivered);
+    }
+
+    @Test
+    @DisplayName("🔴 반품 «거절» 도 deliveredAt 을 안 덮는다 — 거절 뒤 재요청이 기한을 되살리면 안 된다")
+    void rejectDoesNotResetDeliveredAt() {
+        Order o = delivered(280, 5_000, 2_000, 20_000, 15_000);
+        Instant firstDelivered = o.getDeliveredAt();
+
+        request(o, 1, 1);
+        o.rejectReturn("ZZ-사용 흔적");
+
+        // ⚠ 거절은 DELIVERED 로 되돌려 «다시 요청할 수 있게» 한다(2026-08-11).
+        //    그 자리에서 시각을 다시 찍으면 **거절이 기한 연장 수단이 된다.**
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(o.getDeliveredAt()).isEqualTo(firstDelivered);
+    }
+
+    // ── 반품 기한의 경계 — §I-9 결정 1·2 ──────────────
+
+    /**
+     * ⚠ <b>{@code now} 를 인자로 받게 만든 이유가 이 테스트다</b> — 안에서 {@code Instant.now()} 를
+     * 부르면 <b>경계를 밟을 방법이 없다</b>(7일을 실제로 기다릴 수는 없다).
+     */
+    @Test
+    @DisplayName("기한 경계 — 마감 «직전» 은 되고, 마감 «정각»·그 뒤는 안 된다")
+    void returnWindowBoundary() {
+        Order o = delivered(280, 5_000, 2_000, 20_000, 15_000);
+        Instant deadline = o.returnDeadline(7);
+        assertThat(deadline).isEqualTo(o.getDeliveredAt().plus(Duration.ofDays(7)));
+
+        assertThat(o.isReturnRequestable(7, deadline.minusMillis(1))).isTrue();
+        // 🔴 정각은 «닫힘» 이다 — 경계를 어느 쪽에 두는지 여기서 못 박는다.
+        assertThat(o.isReturnRequestable(7, deadline)).isFalse();
+        assertThat(o.isReturnRequestable(7, deadline.plusMillis(1))).isFalse();
+    }
+
+    /**
+     * 🔴 <b>§I-9 이 지목한 구멍을 직접 밟는다</b> — 「한 개씩 나눠 요청하면 기한이 무한히 는다」.
+     *
+     * <p>1회차를 <b>기한 안에</b> 돌린 뒤 시계를 마감 너머로 옮기면, 남은 품목이 있어도
+     * <b>더는 요청할 수 없어야 한다.</b> 기산점이 회차마다 갱신되면 이 단언이 뒤집힌다.
+     */
+    @Test
+    @DisplayName("🔴 회차를 돌려도 기한은 안 늘어난다 — 나눠 요청으로 창을 넓힐 수 없다 (§I-9 결정 2)")
+    void roundsDoNotExtendTheWindow() {
+        Order o = delivered(280, 5_000, 2_000, 20_000, 15_000);
+        Instant deadline = o.returnDeadline(7);
+
+        // 1회차 — 기한 안. 승인하면 DELIVERED 로 되돌아오고 A 가 남는다.
+        request(o, 1, 1);
+        o.applyRequestedReturns();
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(o.hasNothingLeft()).isFalse();
+        assertThat(o.isReturnRequestable(7, deadline.minusMillis(1))).isTrue();
+
+        // 마감을 넘기면 — 남은 품목이 있어도 닫힌다.
+        assertThat(o.isReturnRequestable(7, deadline.plusSeconds(1))).isFalse();
+    }
+
+    @Test
+    @DisplayName("배송 전이면 마감 시각이 없다 — null 로 답하지 «지금» 으로 때우지 않는다")
+    void noDeadlineBeforeDelivery() {
+        Order o = order(0, 0, 0, 10_000);
+        o.pay();
+
+        assertThat(o.returnDeadline(7)).isNull();
+        assertThat(o.isWithinReturnWindow(7, Instant.now())).isFalse();
+        assertThat(o.isReturnRequestable(7, Instant.now())).isFalse();
+    }
+
+    @Test
+    @DisplayName("여러 회차를 돌려도 deliveredAt 은 처음 그대로다 — 나눠 요청해도 창이 안 늘어난다")
+    void manyRoundsKeepTheFirstDeliveredAt() {
+        Order o = delivered(280, 5_000, 2_000, 20_000, 15_000);
+        Instant firstDelivered = o.getDeliveredAt();
+
+        request(o, 1, 1);
+        o.applyRequestedReturns();
+        request(o, 0, 1);
+        o.applyRequestedReturns();
+
+        // 전량이 빠졌으니 이번엔 RETURNED 로 떨어진다 — 그래도 시각은 그대로여야 한다.
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.RETURNED);
+        assertThat(o.getDeliveredAt()).isEqualTo(firstDelivered);
     }
 }

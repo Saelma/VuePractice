@@ -136,14 +136,34 @@ public record OrderResponse(
         DeliveryCarrier shipCarrier,
         String shipCarrierName,
         String shipTrackingNo,
-        String trackingUrl
+        String trackingUrl,
+
+        /**
+         * 반품 요청 <b>마감 시각</b> = 최초 배송완료 + {@code order.return-grace-days}
+         * (2026-08-27, BACKLOG §I-9). 배송 전이면 {@code null}.
+         *
+         * <p>⚠ <b>«언제까지인가» 만 말한다</b> — «지금 되나» 는 {@link #returnRequestable} 이 답한다.
+         * 화면이 이 시각을 «지금» 과 비교해 판정하면 <b>서버와 두 벌</b>이 되고, 시계가 어긋난
+         * 기기에서 둘이 갈린다. <b>이 값은 문구용이다</b>(「2026-07-31까지」).
+         */
+        Instant returnDeadline,
+        /**
+         * 🔴 <b>지금 반품을 요청할 수 있나 — 서버의 답</b>.
+         *
+         * <p>상태·남은 수량·기한을 <b>다 본</b> 결과다. 화면은 이 값 하나로 버튼을 정한다.
+         * ⚠ <b>거짓인 이유는 이 칸이 말하지 않는다</b> — 화면이 이유를 말하려면
+         * {@code status}·{@code returnDeadline} 을 함께 읽는다(§I-9: 버튼을 숨기지 않고
+         * «왜 안 되는지» 를 말한다).
+         */
+        boolean returnRequestable
 ) {
     /**
      * {@code trackingUrl}은 설정({@code glassvue.delivery})으로 만들어져 들어온다 —
      * 화면이 택배사별 URL 형식을 알 필요가 없게 서버가 완성해서 준다. 만들 수 없으면 null이고,
      * 그때 화면은 조회 링크를 감추고 송장번호만 보여준다.
      */
-    public static OrderResponse from(Order o, String trackingUrl) {
+    public static OrderResponse from(Order o, String trackingUrl,
+                                     Instant returnDeadline, boolean returnRequestable) {
         return new OrderResponse(
                 o.getId(),
                 o.getOrderNo(),
@@ -187,7 +207,9 @@ public record OrderResponse(
                 o.getShipCarrier(),
                 o.getShipCarrier() == null ? null : o.getShipCarrier().getDisplayName(),
                 o.getShipTrackingNo(),
-                trackingUrl);
+                trackingUrl,
+                returnDeadline,
+                returnRequestable);
     }
 
     /**

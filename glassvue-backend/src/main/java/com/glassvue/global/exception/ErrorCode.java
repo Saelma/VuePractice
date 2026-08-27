@@ -130,6 +130,15 @@ public enum ErrorCode {
     ORDER_NOT_SHIPPABLE("ORDER-400H", HttpStatus.BAD_REQUEST, "발송할 수 없는 주문입니다(결제 완료 상태만 발송 가능)."),
     ORDER_NOT_DELIVERABLE("ORDER-400D", HttpStatus.BAD_REQUEST, "배송완료 처리할 수 없는 주문입니다(발송된 주문만 가능)."),
     ORDER_NOT_RETURNABLE("ORDER-400R", HttpStatus.BAD_REQUEST, "반품할 수 없는 주문입니다(배송완료된 주문만 요청 가능)."),
+    /**
+     * 🔴 {@link #ORDER_NOT_RETURNABLE} 과 <b>일부러 갈라 둔다</b> (2026-08-27, BACKLOG §I-9).
+     *
+     * <p>«배송완료가 아니라서» 는 <b>기다리면 되는</b> 상태고, «기한이 지나서» 는 <b>영영 안 되는</b>
+     * 상태다. 고객이 할 수 있는 일이 다르면 에러도 달라야 한다 — 한 코드로 뭉치면 화면이
+     * 두 경우에 같은 말을 하게 된다.
+     */
+    ORDER_RETURN_WINDOW_CLOSED("ORDER-400RW", HttpStatus.BAD_REQUEST,
+            "반품 가능 기간이 지났습니다."),
     ORDER_NOT_RETURN_PENDING("ORDER-400RP", HttpStatus.BAD_REQUEST, "반품 요청 상태가 아닙니다."),
     // 🔴 취소와 코드를 나눈다 (2026-08-25, G-10). 문구가 «취소 수량» 이라 반품에 그대로 쓰면
     //    고객이 «취소한 적 없는데?» 를 보게 된다. 같은 모양의 규칙이라도 **말은 갈려야 한다.**

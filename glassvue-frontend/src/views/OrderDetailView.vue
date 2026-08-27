@@ -318,6 +318,18 @@ async function submitShip() {
 function fmt(v) {
   return v ? new Date(v).toLocaleString('ko-KR') : '';
 }
+
+/**
+ * 반품이 왜 안 되는지 한 줄 (2026-08-27, §I-9).
+ *
+ * ⚠ **«되나 안 되나» 는 서버가 이미 답했다**(`returnRequestable`) — 여기서 다시 판정하지 않는다.
+ *   이 함수가 하는 일은 **이유를 말하는 것**뿐이라, 마감 시각은 «문구» 로만 쓴다.
+ * ⚠ 마감 시각이 없으면(배송 전 등) 날짜를 지어내지 말고 일반 문구로 떨어진다.
+ */
+const returnClosedText = computed(() => {
+  const at = order.value?.returnDeadline;
+  return at ? `반품 가능 기간이 지났습니다 (${fmt(at)}까지).` : '지금은 반품을 요청할 수 없습니다.';
+});
 // 주문번호(V15) — CS에서 고객이 불러줄 수 있는 값이다(UUID 앞자리 대신).
 const orderNoText = computed(() => order.value?.orderNo || '');
 
@@ -690,6 +702,15 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
         </p>
       </div>
 
+      <!--
+        🔴 **반품이 왜 안 되는지 «보이는 줄» 로 말한다** (2026-08-27, §I-9).
+        버튼의 `title` 툴팁만으론 «말한다» 가 안 된다 — 터치 기기에는 툴팁이 없다.
+        ⚠ **판정은 서버가 했다**(`returnRequestable`) — 여기서 마감 시각을 «지금» 과 비교하지 않는다.
+        ⚠ 배송완료 주문에만 뜬다 — 그 전에는 «아직» 이지 «지났다» 가 아니다.
+      -->
+      <p v-if="isMine && order.status === 'DELIVERED' && !order.returnRequestable"
+         class="alert-warning mt-6">{{ returnClosedText }}</p>
+
       <!-- 액션: 조건은 그대로, 스타일만 정리 -->
       <div class="mt-6 flex flex-wrap items-center justify-between gap-2">
         <button type="button" class="btn btn-secondary" @click="router.push('/orders')">주문 목록</button>
@@ -709,10 +730,20 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
               class="btn btn-primary"
               @click="onPay"
             >결제하기</button>
+            <!--
+              🔴 **기한이 지나도 버튼을 안 숨긴다**(2026-08-27, §I-9). 있던 것이 그냥 사라지면
+              고객은 **화면이 고장 났다**고 읽는다 — 발송 후 취소 버튼을 «안 그리는» 것과
+              반대 방향인데, 그쪽은 «될 것처럼 보여 주지 않는다» 이고 이쪽은 «있던 것이
+              사라졌다» 라서다.
+              ⚠ **판정은 서버가 한다**(`returnRequestable`). 화면이 마감 시각을 «지금» 과
+              비교하면 서버와 두 벌이 되고, 시계가 어긋난 기기에서 둘이 갈린다.
+            -->
             <button
               v-if="order.status === 'DELIVERED' && !returnForm"
               type="button"
               class="btn btn-secondary"
+              :disabled="!order.returnRequestable"
+              :title="order.returnRequestable ? undefined : returnClosedText"
               @click="openReturnForm"
             >반품 요청</button>
           </template>

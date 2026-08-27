@@ -57,6 +57,9 @@ function order(overrides = {}) {
     // 반품이 회수해 간 몫(G-10). 취소 쪽 셋과 **짝**이라 픽스처에서도 나란히 둔다.
     returnedItemsTotal: 0, returnedCouponDiscount: 0, returnedPoint: 0, refundAmount: 0,
     reversedEarnedPoint: 0,
+    // 반품 기한(§I-9, 2026-08-27). ⚠ **둘을 나란히 둔다** — `returnDeadline` 은 «언제까지인가»(문구용),
+    //    `returnRequestable` 은 «지금 되나»(서버의 판정). 화면이 앞의 것으로 판정하면 서버와 두 벌이 된다.
+    returnDeadline: '2026-08-31T00:00:00Z', returnRequestable: true,
     items: [
       item({ orderItemId: 'i-a', productName: 'ZZ-A', price: 20_000, lineTotal: 20_000 }),
       item({ orderItemId: 'i-b', productName: 'ZZ-B', price: 15_000, lineTotal: 15_000 }),
@@ -624,5 +627,76 @@ describe('OrderDetailView — 부분 반품된 주문의 표시 (§I-3 · §I-4)
     // 회수가 없으면 원본을 그대로 말한다.
     expect(w.text()).toContain('이 주문으로');
     expect(w.text()).toContain('500원');
+  });
+});
+
+/**
+ * 반품 기한 (2026-08-27, BACKLOG §I-9) — **화면이 판정하지 않는다**.
+ *
+ * 🔴 §I-9 이 정한 것: **버튼을 숨기지 않고 «왜 안 되는지» 를 말한다.** 있던 것이 그냥 사라지면
+ *    고객은 «화면이 고장 났다»고 읽는다 — 발송 후 취소 버튼을 «안 그리는» 것과 반대 방향인데,
+ *    그쪽은 «될 것처럼 보여 주지 않는다» 이고 이쪽은 «있던 것이 사라졌다» 라서다.
+ *
+ * ⚠ **여기가 지키는 것은 «되나 안 되나» 가 아니다** — 그건 서버가 `returnRequestable` 로 답한다.
+ *    화면이 `returnDeadline` 을 «지금» 과 비교해 다시 판정하면 **서버와 두 벌**이 되고,
+ *    시계가 어긋난 기기에서 둘이 갈린다. 그래서 **날짜가 과거인지 미래인지로 시험하지 않는다.**
+ */
+describe('OrderDetailView — 반품 기한 (§I-9)', () => {
+  let w;
+
+  const delivered = (overrides = {}) => order({ status: 'DELIVERED', ...overrides });
+
+  beforeEach(() => { authState.user = { id: ME, role: 'USER' }; push.mockReset(); });
+  afterEach(() => { if (w) w.unmount(); w = null; authState.user = null; });
+
+  async function open(data) {
+    getOrder.mockReset().mockResolvedValue(data);
+    w = mount(OrderDetailView, {
+      props: { id: 'o1' },
+      global: { stubs: { RouterLink: true, ItemThumb: true } },
+    });
+    await flushPromises();
+    return w;
+  }
+
+  const returnBtn = (w) => w.findAll('button').find((b) => b.text() === '반품 요청');
+
+  it('기한 안이면 버튼이 그대로 눌린다', async () => {
+    const w = await open(delivered({ returnRequestable: true }));
+
+    expect(returnBtn(w).attributes('disabled')).toBeUndefined();
+    expect(w.text()).not.toContain('반품 가능 기간이 지났습니다');
+  });
+
+  it('🔴 기한이 지나도 버튼이 **사라지지 않는다** — 막히되 보인다', async () => {
+    const w = await open(delivered({ returnRequestable: false }));
+
+    // 있던 것이 그냥 없어지면 «화면이 고장 났다»로 읽힌다.
+    expect(returnBtn(w)).toBeTruthy();
+    expect(returnBtn(w).attributes('disabled')).toBeDefined();
+  });
+
+  it('🔴 «왜 안 되는지» 를 마감 날짜와 함께 말한다 — 툴팁이 아니라 보이는 줄로', async () => {
+    const w = await open(delivered({
+      returnRequestable: false,
+      returnDeadline: '2026-07-31T12:00:00Z',
+    }));
+
+    // ⚠ 터치 기기엔 툴팁이 없다 — 본문에 실제로 있어야 한다.
+    expect(w.text()).toContain('반품 가능 기간이 지났습니다');
+    expect(w.text()).toContain('2026');
+  });
+
+  it('마감 시각을 서버가 안 주면 날짜를 지어내지 않는다', async () => {
+    const w = await open(delivered({ returnRequestable: false, returnDeadline: null }));
+
+    expect(w.text()).toContain('지금은 반품을 요청할 수 없습니다');
+    expect(w.text()).not.toContain('까지');
+  });
+
+  it('⚠ 배송완료 «전» 에는 기한 안내를 안 띄운다 — 그건 «아직» 이지 «지났다» 가 아니다', async () => {
+    const w = await open(order({ status: 'PAID', returnRequestable: false, returnDeadline: null }));
+
+    expect(w.text()).not.toContain('반품을 요청할 수 없습니다');
   });
 });

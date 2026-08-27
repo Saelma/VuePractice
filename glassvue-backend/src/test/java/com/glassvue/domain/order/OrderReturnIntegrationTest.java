@@ -23,6 +23,8 @@ import com.glassvue.domain.point.repository.PointHistoryRepository;
 import com.glassvue.domain.point.service.PointService;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManager;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -645,5 +647,100 @@ class OrderReturnIntegrationTest {
                 .andExpect(jsonPath("$.data.grade").value("BRONZE"))
                 .andExpect(jsonPath("$.data.totalPurchase").value(0));
         assertLedgerConsistent();
+    }
+
+    // ── 반품 기한 (2026-08-27, BACKLOG §I-9) ──────────────────────────────
+    //
+    // 🔴 **여기가 «7일» 을 실제로 지키는 유일한 곳이다.** 아래 테스트들은 진짜 설정을 로드한 채
+    //    배송일을 8일 전·6일 전으로 당겨 밟으므로, `application.yml` 의 `order.return-grace-days` 를
+    //    바꾸면 **여기가 빨개진다.** ⚠ 값을 바꿀 일이 생기면 이 숫자들도 함께 옮긴다.
+
+    /**
+     * 배송완료 시각을 <b>과거로 당긴다</b> — 7일을 실제로 기다릴 수는 없다.
+     *
+     * <p>⚠ JPQL 벌크 update 는 영속성 컨텍스트를 <b>거치지 않고</b> DB 로 간다. 그래서
+     * <b>먼저 {@code flush()}</b> 해서 앞선 변경을 내보내고, <b>그 다음 {@code clear()}</b> 해서
+     * 뒤에 읽는 주문이 DB 에서 새로 오게 한다.
+     * 🔴 <b>{@code flush()} 없이 {@code clear()} 를 부르면 앞선 변경이 통째로 버려진다</b> —
+     * 2026-08-26 에 그 실수로 «수렴이 안 된다» 를 반나절 쫓았다(§I-8).
+     */
+    private void backdateDelivery(String orderId, int daysAgo) {
+        entityManager.flush();
+        entityManager.createQuery("update Order o set o.deliveredAt = :t where o.id = :id")
+                .setParameter("t", Instant.now().minus(Duration.ofDays(daysAgo)))
+                .setParameter("id", UUID.fromString(orderId))
+                .executeUpdate();
+        entityManager.clear();
+    }
+
+    @Test
+    @DisplayName("🔴 기한(7일)이 지나면 반품 요청이 400 — 그리고 코드가 «상태 때문» 과 다르다")
+    void returnRequestRejectedAfterGracePeriod() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+        backdateDelivery(orderId, 8);
+
+        // ⚠ **본문은 멀쩡해야 한다.** 처음엔 `items:[]` 로 보냈다가 @Valid 가 먼저 COMMON-400 을 내서
+        //    가드까지 오지도 않았다 — 「400 이 났으니 됐다」로 넘어갔으면 **엉뚱한 것을 검증할 뻔했다.**
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-request").header("Authorization", buyer)
+                        .contentType(JSON).content(fullReturnBody(buyer, orderId, "변심")))
+                .andExpect(status().isBadRequest())
+                // 🔴 «배송완료가 아니라서»(ORDER-400R) 와 갈라져야 한다 — 앞은 기다리면 되고
+                //    뒤는 영영 안 된다. 한 코드로 뭉치면 화면이 두 경우에 같은 말을 한다(§I-9).
+                .andExpect(jsonPath("$.error.code").value("ORDER-400RW"));
+    }
+
+    @Test
+    @DisplayName("기한 안(6일 전)이면 그대로 된다 — 가드가 멀쩡한 주문을 막지 않는다")
+    void returnRequestStillWorksWithinGracePeriod() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+        backdateDelivery(orderId, 6);
+
+        requestReturn(buyer, orderId, "변심");
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.status").value("RETURN_REQUESTED"));
+    }
+
+    /**
+     * 🔴 <b>고객이 통제할 수 없는 사유로 권리가 사라지면 안 된다</b> (§I-9 «규칙에서 따라 나오는 것»).
+     *
+     * <p>기한 안에 요청했는데 관리자가 늦게 처리하는 사이 기한이 지나는 경우 —
+     * <b>승인은 되어야 한다.</b> 가드는 «요청» 에만 걸려 있다.
+     */
+    @Test
+    @DisplayName("🔴 기한 안에 요청했으면 관리자가 늦어도 승인된다 — 가드는 «요청» 에만 건다")
+    void approvalStillWorksAfterDeadlineIfRequestedInTime() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+
+        requestReturn(buyer, orderId, "변심");      // 기한 안에 요청
+        backdateDelivery(orderId, 30);              // 그 사이 한 달이 흘렀다
+
+        mockMvc.perform(post("/api/orders/" + orderId + "/return-approve").header("Authorization", admin))
+                .andExpect(status().isOk());
+        assertLedgerConsistent();
+    }
+
+    @Test
+    @DisplayName("응답이 «언제까지인가»(returnDeadline)와 «지금 되나»(returnRequestable)를 나눠 싣는다")
+    void responseCarriesDeadlineAndAnswer() throws Exception {
+        String buyer = login(buyerLoginId);
+        String admin = login(adminLoginId);
+        String orderId = orderDelivered(buyer, admin, 1, null);
+
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                .andExpect(jsonPath("$.data.returnDeadline").isNotEmpty())
+                .andExpect(jsonPath("$.data.returnRequestable").value(true));
+
+        backdateDelivery(orderId, 8);
+
+        mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer))
+                // ⚠ 마감 시각은 **지나도 여전히 실린다** — 화면이 「2026-07-31까지였습니다」를 말해야 한다.
+                .andExpect(jsonPath("$.data.returnDeadline").isNotEmpty())
+                .andExpect(jsonPath("$.data.returnRequestable").value(false));
     }
 }
