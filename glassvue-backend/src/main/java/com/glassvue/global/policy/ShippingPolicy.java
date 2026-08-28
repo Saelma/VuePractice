@@ -29,26 +29,54 @@ public class ShippingPolicy {
     private long freeThreshold = 30000;
 
     /**
-     * 상품 합계로 배송비를 계산한다.
+     * 상품 합계로 배송비를 계산한다 — <b>기본 기준</b>으로.
      *
      * <p>합계가 0 이하면 0 — 빈 장바구니에 배송비를 붙이면 화면에 "0원 + 배송비 3,000원"이 떠서
      * 담지도 않은 값을 청구하는 것처럼 보인다.
      */
     public long feeFor(long itemsTotal) {
+        return feeFor(itemsTotal, freeThreshold);
+    }
+
+    /**
+     * 상품 합계와 <b>적용할 기준 금액</b>으로 배송비를 계산한다 (2026-08-28, BACKLOG G-6).
+     *
+     * <p>🔴 <b>회원 등급을 받지 않는다 — 「금액」을 받는다.</b> 등급별 무료배송을 넣으면서
+     * {@code MemberGrade}(point 도메인)를 인자로 받고 싶어지는데, 그러면 global 이 도메인을 알게 되어
+     * <b>MSA 로 쪼갤 때 policy 가 point 를 끌고 간다</b>. 등급 → 기준 금액 변환은
+     * {@code MemberGrade.discountedThreshold} 가 하고, <b>호출자가 조회해서 넘긴다</b>.
+     *
+     * <p>⚠ 그래서 이 메서드는 «누구의» 기준인지 모른다 — 등급이 늘어나든 혜택 규칙이 바뀌든
+     * <b>여기는 안 고쳐진다.</b> 그게 이 형태를 고른 이유다.
+     *
+     * @param freeThresholdToApply 이 계산에 쓸 무료배송 기준. 0 이하면 무료배송 없음(항상 부과)
+     */
+    public long feeFor(long itemsTotal, long freeThresholdToApply) {
         if (itemsTotal <= 0) {
             return 0;
         }
-        if (freeThreshold > 0 && itemsTotal >= freeThreshold) {
+        if (freeThresholdToApply > 0 && itemsTotal >= freeThresholdToApply) {
             return 0;
         }
         return fee;
     }
 
-    /** 무료배송까지 남은 금액. 이미 무료이거나 무료배송 정책이 없으면 0. */
+    /** 무료배송까지 남은 금액 — <b>기본 기준</b>으로. 이미 무료이거나 무료배송 정책이 없으면 0. */
     public long amountUntilFree(long itemsTotal) {
-        if (freeThreshold <= 0 || itemsTotal <= 0 || itemsTotal >= freeThreshold) {
+        return amountUntilFree(itemsTotal, freeThreshold);
+    }
+
+    /**
+     * 무료배송까지 남은 금액 — <b>적용할 기준 금액</b>으로 (2026-08-28, BACKLOG G-6).
+     *
+     * <p>🔴 <b>{@code feeFor} 와 반드시 같은 기준으로 불러야 한다.</b> 한쪽만 등급 기준을 쓰면
+     * 화면이 «12,000원 더 담으면 무료배송» 이라 말해 놓고 실제로는 <b>이미 무료</b>인
+     * 상태가 된다 — 백로그 G-6 은 {@code feeFor} 만 말하고 이 메서드를 안 적었다.
+     */
+    public long amountUntilFree(long itemsTotal, long freeThresholdToApply) {
+        if (freeThresholdToApply <= 0 || itemsTotal <= 0 || itemsTotal >= freeThresholdToApply) {
             return 0;
         }
-        return freeThreshold - itemsTotal;
+        return freeThresholdToApply - itemsTotal;
     }
 }

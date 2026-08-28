@@ -8,6 +8,7 @@ import com.glassvue.domain.catalog.dto.ProductResponse;
 import com.glassvue.domain.catalog.dto.VariantResponse;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
+import com.glassvue.domain.point.service.PointService;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.policy.ShippingPolicy;
@@ -34,6 +35,8 @@ public class CartService {
     private final CartStore cartStore;
     private final ProductQueryService productQueryService;
     private final ShippingPolicy shippingPolicy;
+    /** 등급별 무료배송 기준에만 쓴다 — cart 는 적립금을 만지지 않는다(G-6, 2026-08-28). */
+    private final PointService pointService;
 
     /** 옵션 존재 확인 후 담기(수량 증가). 없는 옵션이면 VARIANT_NOT_FOUND. */
     public void add(UUID memberId, CartItemAddRequest req) {
@@ -107,8 +110,18 @@ public class CartService {
             totalQuantity += qty;
             totalPrice += lineTotal;
         }
-        long shippingFee = shippingPolicy.feeFor(totalPrice);
+        // 등급별 무료배송 기준 (2026-08-28, BACKLOG G-6).
+        //
+        // 🔴 **등급을 ShippingPolicy 에 넘기지 않는다** — global 이 point 도메인을 알면 MSA 로 쪼갤 때
+        //    policy 가 point 를 끌고 간다. 등급 → 「적용할 기준 금액」 변환은 point 도메인이 하고
+        //    (MemberGrade.discountedThreshold), 여기서는 **금액만** 넘긴다.
+        // 🔴 **feeFor 와 amountUntilFree 에 같은 기준을 넘긴다** — 한쪽만 등급 기준을 쓰면 화면이
+        //    "12,000원 더 담으면 무료배송"이라 말해 놓고 실제로는 이미 무료인 상태가 된다.
+        long freeThreshold = pointService.gradeOf(memberId)
+                .discountedThreshold(shippingPolicy.getFreeThreshold());
+        long shippingFee = shippingPolicy.feeFor(totalPrice, freeThreshold);
         return new CartResponse(lines, totalQuantity, totalPrice,
-                shippingFee, totalPrice + shippingFee, shippingPolicy.amountUntilFree(totalPrice));
+                shippingFee, totalPrice + shippingFee,
+                shippingPolicy.amountUntilFree(totalPrice, freeThreshold));
     }
 }

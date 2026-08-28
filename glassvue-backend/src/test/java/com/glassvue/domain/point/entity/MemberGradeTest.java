@@ -76,4 +76,47 @@ class MemberGradeTest {
     void earn_nonPositive(long amount) {
         assertThat(MemberGrade.VIP.earn(amount)).isZero();
     }
+
+    // ─────────── 무료배송 기준 인하 (2026-08-28, BACKLOG G-6) ───────────
+
+    @ParameterizedTest(name = "{0} → 기본 30,000원 기준이 {1}원")
+    @DisplayName("등급이 무료배송 기준을 인하한다 — BRONZE 는 기본 그대로")
+    @CsvSource({
+            "BRONZE, 30000",   // 0%  — 인하 없음
+            "SILVER, 24000",   // 20%
+            "GOLD,   18000",   // 40%
+            "VIP,    12000",   // 60%
+    })
+    void discountedThreshold(MemberGrade grade, long expected) {
+        assertThat(grade.discountedThreshold(30_000L)).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("🔴 기본 기준이 0(무료배송 없음)이면 어느 등급도 0 — VIP 만 무료가 되지 않는다")
+    void noFreeShippingPolicyStaysNoFreeShipping() {
+        for (MemberGrade g : MemberGrade.values()) {
+            assertThat(g.discountedThreshold(0L)).as("%s", g).isZero();
+            assertThat(g.discountedThreshold(-1L)).as("%s", g).isZero();
+        }
+    }
+
+    @Test
+    @DisplayName("인하 결과는 **내림** — 깎아 준 금액이 한 푼도 모자라지 않는다")
+    void discountedThreshold_floors() {
+        // 25,001 × 40% 인하 = 15,000.6 → 15,000 (올림이면 15,001 이라 1원 덜 깎인다)
+        assertThat(MemberGrade.GOLD.discountedThreshold(25_001L)).isEqualTo(15_000L);
+        assertThat(MemberGrade.VIP.discountedThreshold(1L)).isZero();  // 0.4 → 0
+    }
+
+    @Test
+    @DisplayName("등급이 높을수록 기준이 낮거나 같다 — 순서가 뒤집히지 않는다")
+    void higherGradeNeverHasHigherThreshold() {
+        // 🔴 인하율을 손으로 고칠 때 이 순서가 깨지면 «등급을 올렸더니 배송비가 붙는다» 가 된다.
+        MemberGrade[] all = MemberGrade.values();
+        for (int i = 1; i < all.length; i++) {
+            assertThat(all[i].discountedThreshold(30_000L))
+                    .as("%s vs %s", all[i], all[i - 1])
+                    .isLessThanOrEqualTo(all[i - 1].discountedThreshold(30_000L));
+        }
+    }
 }

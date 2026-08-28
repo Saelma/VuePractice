@@ -14,6 +14,7 @@ import com.glassvue.domain.point.entity.PointAccount;
 import com.glassvue.domain.point.entity.PointHistory;
 import com.glassvue.domain.point.entity.PointType;
 import com.glassvue.domain.point.repository.PointAccountRepository;
+import com.glassvue.global.policy.ShippingPolicy;
 import com.glassvue.domain.point.repository.PointHistoryRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
@@ -26,6 +27,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
@@ -48,6 +50,8 @@ class PointServiceTest {
 
     @Mock PointAccountRepository accountRepository;
     @Mock PointHistoryRepository historyRepository;
+    /** 무료배송 «기본» 기준(30,000원)만 읽힌다 — 등급별 인하는 MemberGrade 가 한다(G-6, 2026-08-28). */
+    @Spy ShippingPolicy shippingPolicy = new ShippingPolicy();
     @InjectMocks PointService service;
 
     private final UUID memberId = UUID.randomUUID();
@@ -298,5 +302,39 @@ class PointServiceTest {
         assertThat(service.balanceOf(memberId)).isZero();
 
         verify(accountRepository, never()).save(any());   // 동시 조회에서 유니크 충돌이 난다
+    }
+
+    // ─────────── 등급 조회·무료배송 기준 (2026-08-28, BACKLOG G-6) ───────────
+
+    @Test
+    @DisplayName("🔴 gradeOf: 계정이 없으면 BRONZE — 장바구니를 여는 것만으로 계정이 생기지 않는다")
+    void gradeOf_noAccountIsBronzeAndDoesNotPersist() {
+        when(accountRepository.findByMemberId(memberId)).thenReturn(Optional.empty());
+
+        assertThat(service.gradeOf(memberId)).isEqualTo(MemberGrade.BRONZE);
+
+        // myAccount 와 같은 판단이다 — 읽기 경로가 쓰기를 하면 동시 조회에서 유니크 충돌이 난다.
+        verify(accountRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("gradeOf: 계정이 있으면 그 등급을 그대로 돌려준다")
+    void gradeOf_returnsStoredGrade() {
+        PointAccount account = PointAccount.openFor(memberId);
+        account.addPurchase(600_000L);                       // GOLD 임계값(500,000) 이상
+        when(accountRepository.findByMemberId(memberId)).thenReturn(Optional.of(account));
+
+        assertThat(service.gradeOf(memberId)).isEqualTo(MemberGrade.GOLD);
+    }
+
+    @Test
+    @DisplayName("내 적립금 응답이 **등급별 무료배송 기준**을 함께 싣는다 — 화면이 인하율을 모른다")
+    void myAccount_carriesGradeFreeShippingThreshold() {
+        PointAccount account = PointAccount.openFor(memberId);
+        account.addPurchase(600_000L);                       // GOLD → 40% 인하
+        when(accountRepository.findByMemberId(memberId)).thenReturn(Optional.of(account));
+
+        // 설정 기본값 30,000 에서 GOLD 의 40% 를 깎은 18,000 이다.
+        assertThat(service.myAccount(memberId).freeShippingThreshold()).isEqualTo(18_000L);
     }
 }

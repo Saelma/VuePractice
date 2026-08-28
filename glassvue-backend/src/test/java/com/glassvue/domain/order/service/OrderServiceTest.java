@@ -1,6 +1,7 @@
 package com.glassvue.domain.order.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -36,6 +37,7 @@ import com.glassvue.domain.order.event.OrderReturnRequestedEvent;
 import com.glassvue.domain.order.event.OrderReturnedEvent;
 import com.glassvue.domain.order.repository.OrderRepository;
 import com.glassvue.global.exception.BusinessException;
+import com.glassvue.domain.point.entity.MemberGrade;
 import com.glassvue.global.policy.ShippingPolicy;
 import com.glassvue.global.exception.ErrorCode;
 import com.glassvue.global.security.AuthUser;
@@ -43,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -87,6 +90,18 @@ class OrderServiceTest {
     // 목으로 두면 항상 0을 돌려줘 "배송비가 안 붙는" 경로만 검증하게 된다.
     @Spy ShippingPolicy shippingPolicy = new ShippingPolicy();
     @InjectMocks OrderService orderService;
+
+    /**
+     * 등급을 말하지 않는 결제 테스트는 전부 <b>BRONZE</b>(기본 기준 30,000원)로 읽는다
+     * (2026-08-28, BACKLOG G-6). 그래야 G-6 이전에 쓰인 배송비 단언들이 «그대로 참» 이다.
+     *
+     * <p>⚠ {@code lenient} 인 이유: 이 파일의 대부분은 결제가 아니라 <b>주문 뒤의 조작</b>
+     * (취소·발송·반품)을 보므로 {@code gradeOf} 를 안 부른다.
+     */
+    @BeforeEach
+    void defaultGrade() {
+        lenient().when(pointService.gradeOf(any())).thenReturn(MemberGrade.BRONZE);
+    }
 
     private final UUID memberId = UUID.randomUUID();
     private final AuthUser buyer = new AuthUser(memberId, Role.USER, "구매자닉");
@@ -748,6 +763,44 @@ class OrderServiceTest {
         verify(productCommandService).decreaseStock(eq(pid), eq(2L), any());
         verify(cartService).clear(memberId);
         verify(eventPublisher).publishEvent(any(OrderPlacedEvent.class));
+    }
+
+    @Test
+    @DisplayName("🔴 결제: 등급별 무료배송 기준이 **주문에 스냅샷**된다 (G-6, 2026-08-28)")
+    void checkout_snapshotsGradeAwareShippingFee() {
+        // 24,000원 — 기본 기준(30,000)엔 못 미치고 SILVER 기준(24,000)엔 «이상» 인 금액이다.
+        UUID pid = UUID.randomUUID();
+        CartItemResponse item = new CartItemResponse(UUID.randomUUID(), pid, "지바", null,
+                12_000, 12_000, null, ProductStatus.SELLING, 2, 24_000, true, null);
+        when(cartService.getCart(memberId)).thenReturn(cartWith(item));
+        when(pointService.gradeOf(memberId)).thenReturn(MemberGrade.SILVER);
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        when(orderRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.checkout(buyer, SHIP);
+
+        // 🔴 스냅샷이라는 것이 요점이다 — 나중에 등급이 내려가도 이 주문의 배송비는 0으로 남는다
+        //    (G-4 결정 2 「무료배송 기준 소급 안 함」과 같은 방향).
+        Order saved = captor.getValue();
+        assertThat(saved.getShippingFee()).isZero();
+        assertThat(saved.getPayAmount()).isEqualTo(24_000);
+    }
+
+    @Test
+    @DisplayName("결제: BRONZE 는 같은 24,000원에 배송비를 낸다 — 위 테스트의 짝")
+    void checkout_bronzePaysShippingOnSameAmount() {
+        UUID pid = UUID.randomUUID();
+        CartItemResponse item = new CartItemResponse(UUID.randomUUID(), pid, "지바", null,
+                12_000, 12_000, null, ProductStatus.SELLING, 2, 24_000, true, null);
+        when(cartService.getCart(memberId)).thenReturn(cartWith(item));
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        when(orderRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.checkout(buyer, SHIP);
+
+        // 짝을 나란히 두는 이유: 「등급이 배송비를 가른다」는 **두 값의 차이**로만 보인다.
+        assertThat(captor.getValue().getShippingFee()).isEqualTo(3_000);
+        assertThat(captor.getValue().getPayAmount()).isEqualTo(27_000);
     }
 
     @Test

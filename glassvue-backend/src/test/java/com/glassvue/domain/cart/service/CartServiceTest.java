@@ -1,6 +1,7 @@
 package com.glassvue.domain.cart.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -13,10 +14,13 @@ import com.glassvue.domain.catalog.dto.ProductResponse;
 import com.glassvue.domain.catalog.dto.VariantResponse;
 import com.glassvue.domain.catalog.entity.ProductStatus;
 import com.glassvue.domain.catalog.service.query.ProductQueryService;
+import com.glassvue.domain.point.entity.MemberGrade;
+import com.glassvue.domain.point.service.PointService;
 import com.glassvue.global.policy.ShippingPolicy;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,7 +39,16 @@ class CartServiceTest {
     @Mock CartStore cartStore;
     @Mock ProductQueryService productQueryService;
     @Spy ShippingPolicy shippingPolicy = new ShippingPolicy();
+    /** 등급별 무료배송 기준에만 쓴다(2026-08-28, G-6) — cart 는 적립금 잔액을 안 만진다. */
+    @Mock PointService pointService;
     @InjectMocks CartService service;
+
+    @BeforeEach
+    void defaultGrade() {
+        // 등급을 말하지 않는 테스트는 전부 BRONZE(기본 기준 30,000원)로 읽는다 —
+        // 그래야 G-6 이전에 쓰인 배송비 단언들이 «그대로 참» 인지 이 파일에서 보인다.
+        lenient().when(pointService.gradeOf(any())).thenReturn(MemberGrade.BRONZE);
+    }
 
     private final UUID memberId = UUID.randomUUID();
     private final UUID productId = UUID.randomUUID();
@@ -145,5 +158,51 @@ class CartServiceTest {
         CartResponse res = service.getCart(memberId);
         assertThat(res.items()).isEmpty();
         verify(cartStore).remove(memberId, variantId);
+    }
+
+    // ─────────── 등급별 무료배송 (2026-08-28, BACKLOG G-6) ───────────
+    //
+    // 기본 기준은 30,000원(ShippingPolicy 기본값)이고 담긴 금액은 12,000 × 2 = 24,000원이다.
+    // 즉 **같은 장바구니가 등급에 따라 배송비가 갈리는** 자리를 고른 것이다.
+
+    @Test
+    @DisplayName("BRONZE — 24,000원은 기준(30,000) 미만이라 배송비가 붙는다")
+    void bronzePaysShipping() {
+        when(pointService.gradeOf(memberId)).thenReturn(MemberGrade.BRONZE);
+        stubResolve(12_000, 5, ProductStatus.SELLING);
+
+        CartResponse res = service.getCart(memberId);
+
+        assertThat(res.totalPrice()).isEqualTo(24_000);
+        assertThat(res.shippingFee()).isEqualTo(3_000);
+        assertThat(res.payAmount()).isEqualTo(27_000);
+        assertThat(res.amountUntilFree()).isEqualTo(6_000);   // 30,000 − 24,000
+    }
+
+    @Test
+    @DisplayName("🔴 SILVER — 같은 24,000원인데 기준이 24,000으로 내려와 무료가 된다")
+    void silverGetsFreeShipping() {
+        when(pointService.gradeOf(memberId)).thenReturn(MemberGrade.SILVER);
+        stubResolve(12_000, 5, ProductStatus.SELLING);
+
+        CartResponse res = service.getCart(memberId);
+
+        assertThat(res.shippingFee()).isZero();              // 경계값: 24,000 «이상»
+        assertThat(res.payAmount()).isEqualTo(24_000);
+        // 🔴 여기가 G-6 에서 가장 틀리기 쉬운 자리다 — feeFor 만 등급을 쓰고 amountUntilFree 가
+        //    설정값(30,000)을 그대로 보면 «6,000원 더 담으면 무료배송» 이라 말하면서 이미 무료다.
+        assertThat(res.amountUntilFree()).isZero();
+    }
+
+    @Test
+    @DisplayName("VIP — 기준이 12,000까지 내려간다")
+    void vipThresholdIsLowest() {
+        when(pointService.gradeOf(memberId)).thenReturn(MemberGrade.VIP);
+        stubResolve(5_000, 5, ProductStatus.SELLING);        // 10,000원
+
+        CartResponse res = service.getCart(memberId);
+
+        assertThat(res.shippingFee()).isEqualTo(3_000);      // 12,000 미만이라 아직 붙는다
+        assertThat(res.amountUntilFree()).isEqualTo(2_000);  // 12,000 − 10,000
     }
 }

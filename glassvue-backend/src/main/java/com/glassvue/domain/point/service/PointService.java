@@ -2,12 +2,14 @@ package com.glassvue.domain.point.service;
 
 import com.glassvue.domain.point.dto.PointAccountResponse;
 import com.glassvue.domain.point.dto.PointHistoryResponse;
+import com.glassvue.domain.point.entity.MemberGrade;
 import com.glassvue.domain.point.entity.PointAccount;
 import com.glassvue.domain.point.entity.PointHistory;
 import com.glassvue.domain.point.repository.PointAccountRepository;
 import com.glassvue.domain.point.repository.PointHistoryRepository;
 import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
+import com.glassvue.global.policy.ShippingPolicy;
 import com.glassvue.global.response.PageResponse;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +43,12 @@ public class PointService {
 
     private final PointAccountRepository accountRepository;
     private final PointHistoryRepository historyRepository;
+    /**
+     * 무료배송 <b>기본</b> 기준을 읽는 데만 쓴다 — 등급별 인하는 {@link MemberGrade#discountedThreshold}
+     * 가 한다 (2026-08-28, BACKLOG G-6). ⚠ global 정책을 도메인이 읽는 것은 허용된다
+     * (금지된 것은 <b>도메인끼리</b> 직접 참조하는 것이다).
+     */
+    private final ShippingPolicy shippingPolicy;
 
     /** 가입 시 계정을 연다 — 정상 경로. 없을 때의 대비는 {@link #accountOrOpen} 참조. */
     public void openAccount(UUID memberId) {
@@ -60,13 +68,31 @@ public class PointService {
     @Transactional(readOnly = true)
     public PointAccountResponse myAccount(UUID memberId) {
         return PointAccountResponse.from(accountRepository.findByMemberId(memberId)
-                .orElseGet(() -> PointAccount.openFor(memberId)));   // save 하지 않는다
+                .orElseGet(() -> PointAccount.openFor(memberId)),    // save 하지 않는다
+                shippingPolicy.getFreeThreshold());
     }
 
     /** 사용 가능한 잔액만 — 주문서가 한도를 계산할 때 쓴다. */
     @Transactional(readOnly = true)
     public long balanceOf(UUID memberId) {
         return accountRepository.findByMemberId(memberId).map(PointAccount::getBalance).orElse(0L);
+    }
+
+    /**
+     * 등급만 — 장바구니·주문이 <b>무료배송 기준</b>을 정할 때 쓴다 (2026-08-28, BACKLOG G-6).
+     *
+     * <p>{@code balanceOf} 와 같은 성격의 <b>좁은 공개 API</b> 다. {@code myAccount} 를 부르면
+     * «다음 등급까지 얼마» 같은 표시용 계산까지 딸려 오는데, 부르는 쪽은 등급 하나만 필요하다.
+     *
+     * <p>🔴 <b>계정이 없으면 {@code BRONZE}</b> — {@code myAccount} 가 «빈 계정을 보여주되 저장하지
+     * 않는다» 로 정한 것과 같은 판단이다. 여기서 계정을 만들면 <b>장바구니를 여는 것만으로</b>
+     * 적립금 계정이 생긴다.
+     */
+    @Transactional(readOnly = true)
+    public MemberGrade gradeOf(UUID memberId) {
+        return accountRepository.findByMemberId(memberId)
+                .map(PointAccount::getGrade)
+                .orElse(MemberGrade.BRONZE);
     }
 
     @Transactional(readOnly = true)

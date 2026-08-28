@@ -56,4 +56,53 @@ class ShippingPolicyTest {
         assertThat(p.amountUntilFree(0)).isZero();          // 빈 장바구니에 "N원 더" 안내는 안 띄운다
         assertThat(policy(3000, 0).amountUntilFree(10)).isZero(); // 무료배송 정책 자체가 없음
     }
+
+    // ─────────── 「적용할 기준 금액」을 받는 형태 (2026-08-28, BACKLOG G-6) ───────────
+
+    @Test
+    @DisplayName("기준 금액을 넘겨 받으면 그걸로 판정한다 — 설정값을 안 본다")
+    void usesGivenThresholdNotConfigured() {
+        ShippingPolicy p = policy(3000, 30_000);
+        // 설정은 30,000 인데 12,000 을 넘겼다 — VIP 의 인하된 기준이 이렇게 들어온다.
+        assertThat(p.feeFor(12_000, 12_000)).isZero();          // 경계: '이상'이므로 무료
+        assertThat(p.feeFor(11_999, 12_000)).isEqualTo(3000);
+        assertThat(p.amountUntilFree(11_999, 12_000)).isEqualTo(1);
+        assertThat(p.amountUntilFree(12_000, 12_000)).isZero();
+    }
+
+    @Test
+    @DisplayName("인자 없는 형태는 설정값으로 부른 것과 같다 — 두 경로가 갈리지 않는다")
+    void noArgFormDelegatesToConfigured() {
+        ShippingPolicy p = policy(3000, 30_000);
+        for (long total : new long[] {-1, 0, 1, 29_999, 30_000, 30_001}) {
+            assertThat(p.feeFor(total)).isEqualTo(p.feeFor(total, 30_000));
+            assertThat(p.amountUntilFree(total)).isEqualTo(p.amountUntilFree(total, 30_000));
+        }
+    }
+
+    @Test
+    @DisplayName("넘긴 기준이 0 이하면 무료배송 없음 — 설정이 30,000 이어도 무료가 되지 않는다")
+    void givenZeroThresholdMeansNoFreeShipping() {
+        // 🔴 설정값으로 슬쩍 되돌아가면 «무료배송 없음» 을 넘겼는데 무료가 나온다.
+        ShippingPolicy p = policy(3000, 30_000);
+        assertThat(p.feeFor(1_000_000, 0)).isEqualTo(3000);
+        assertThat(p.feeFor(1_000_000, -1)).isEqualTo(3000);
+        assertThat(p.amountUntilFree(1_000, 0)).isZero();
+    }
+
+    @Test
+    @DisplayName("🔴 feeFor 와 amountUntilFree 는 같은 기준에서 서로 어긋나지 않는다")
+    void feeAndRemainingAgreeOnSameThreshold() {
+        // 한쪽만 등급 기준을 쓰면 "N원 더 담으면 무료배송"이라 말해 놓고 이미 무료인 상태가 된다.
+        ShippingPolicy p = policy(3000, 30_000);
+        for (long threshold : new long[] {12_000, 18_000, 24_000, 30_000}) {
+            for (long total = 0; total <= 32_000; total += 1_000) {
+                boolean free = p.feeFor(total, threshold) == 0 && total > 0;
+                boolean saysAlreadyFree = p.amountUntilFree(total, threshold) == 0;
+                assertThat(saysAlreadyFree)
+                        .as("total=%d threshold=%d", total, threshold)
+                        .isEqualTo(free || total == 0);
+            }
+        }
+    }
 }

@@ -55,7 +55,12 @@ onMounted(async () => {
         </div>
         <div class="text-right">
           <span class="badge badge-neutral">{{ gradeText(account.grade) }}</span>
+          <!-- 등급 혜택은 «적립률 + 무료배송 기준» 둘이다 (2026-08-28, G-6).
+               🔴 기준 금액은 서버가 등급별로 낸 값을 그대로 쓴다 — 화면은 인하율도 기본 기준도 모른다. -->
           <p class="muted mt-1">구매 시 {{ account.earnPercent }}% 적립</p>
+          <p v-if="account.freeShippingThreshold > 0" class="muted mt-0.5">
+            {{ priceText(account.freeShippingThreshold) }} 이상 무료배송
+          </p>
         </div>
       </div>
 

@@ -106,7 +106,15 @@ public class OrderService {
         //
         // ⚠ 배송비는 **할인 전** 상품합계로 정한다(2026-07-23 결정) — 쿠폰을 썼다고 배송비가 붙으면
         // 고객이 손해 본 기분이 든다. 덕분에 이 줄은 쿠폰이 생겨도 그대로다.
-        long shippingFee = shippingPolicy.feeFor(cart.totalPrice());
+        //
+        // ⚠ 등급별 무료배송 기준을 쓴다(2026-08-28, BACKLOG G-6). 🔴 **장바구니가 이미 같은 값을
+        //   계산해 두었지만**(CartResponse.shippingFee) 여기서 다시 낸다 — 그게 원래 구조였고,
+        //   G-6 이 그걸 바꾸는 항목은 아니다. **둘 중 하나를 고치면 나머지를 연다.**
+        // 🔴 여기서 정해진 금액은 orders.shipping_fee 로 **스냅샷**된다 — 나중에 등급이 올라도
+        //   과거 주문의 배송비는 안 바뀐다(G-4 결정 2 「무료배송 기준 소급 안 함」과 같은 방향).
+        long freeThreshold = pointService.gradeOf(memberId)
+                .discountedThreshold(shippingPolicy.getFreeThreshold());
+        long shippingFee = shippingPolicy.feeFor(cart.totalPrice(), freeThreshold);
 
         // 쿠폰은 coupon 도메인의 공개 API로만 다룬다(엔티티·리포지토리를 직접 만지지 않는다).
         // 검증과 사용처리가 redeem 한 번에 끝나므로 "검증했으니 이제 써도 되겠지" 사이의 틈이 없다.
