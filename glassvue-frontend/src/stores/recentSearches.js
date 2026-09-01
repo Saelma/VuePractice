@@ -78,6 +78,35 @@ export function clearRecentSearches() {
   save([]);
 }
 
+/**
+ * 🔴 <b>비회원으로 친 검색어를 이 계정으로 옮긴다 — «가입할 때만» 부른다</b> (2026-09-01, BACKLOG J-5).
+ *
+ * <p>⚠ <b>«검색어도 옮긴다» 는 결정이 필요했다</b> — 검색어는 «무엇을 찾고 있었나» 라서 본 상품보다
+ * 사적이고, 이 파일이 계정별 키를 고른 이유가 그것이다. 그런데도 옮기기로 한 것은
+ * <b>①가입 시점 한정이라 귀속이 명확하고 ②옮긴 뒤 guest 를 비워 오히려 노출이 줄기</b> 때문이다
+ * (사용자 결정 2026-09-01). 🔴 <b>규칙을 둘로 가르지 않은 것도 이유다</b> — «본 상품은 옮기는데
+ * 검색어만 사라진다» 는 화면에서 설명할 길이 없다.
+ *
+ * <p>자세한 판단은 {@code recentlyViewed.adoptGuestRecentlyViewed} 주석과 같다.
+ */
+export function adoptGuestRecentSearches() {
+  const key = activeKey();
+  if (key === keyFor(null)) return;
+  const guest = load(keyFor(null));
+  if (!guest.length) return;
+  // ⚠ 중복 판정은 이 파일의 규칙(대소문자 무시)을 그대로 쓴다 — 여기서 다시 정하지 않는다.
+  const mine = recentSearches.value;
+  const lower = mine.map((t) => t.toLowerCase());
+  const merged = [...mine, ...guest.filter((g) => !lower.includes(g.toLowerCase()))].slice(0, MAX);
+  recentSearches.value = merged;
+  try {
+    localStorage.setItem(key, JSON.stringify(merged));
+    localStorage.removeItem(keyFor(null));      // 🔴 이동이라 원본을 지운다
+  } catch (e) {
+    /* 저장 실패 — 화면 상태는 이미 갱신했다 */
+  }
+}
+
 // 로그인·로그아웃·계정 전환 시 그 계정의 목록으로 갈아끼운다 — 브라우저에 남아 있어도 계정끼리 안 섞인다.
 // flush:'sync' 인 이유는 recentlyViewed 와 같다: 전환 직후~렌더 사이에 push 가 끼면 이전(guest) 목록에
 // 얹혀 새 계정 키에 섞일 여지가 있다. 전환은 드물어 동기 비용이 무의미하다.

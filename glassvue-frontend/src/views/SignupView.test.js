@@ -20,16 +20,28 @@ vi.mock('vue-router', () => ({
   useRoute: () => route,
   RouterLink: { name: 'RouterLink', props: ['to'], template: '<a><slot /></a>' },
 }));
-vi.mock('../api/auth', () => ({
-  signup: (...a) => signup(...a),
-  login: (...a) => login(...a),
-}));
+vi.mock('../api/auth', async () => {
+  // ⚠ **진짜 login 은 세션을 세운다**(setTokens + setUser). 목이 그걸 안 하면 스토어가 «계정 키» 로
+  //    안 갈아끼워져 **adoptGuestHistory 가 할 일이 없는 상태**가 된다 — 그러면 배선을 못 본다.
+  const { setTokens, setUser } = await import('../stores/auth');
+  return {
+    signup: (...a) => signup(...a),
+    login: async (...a) => {
+      login(...a);
+      setTokens('zz-access', 'zz-refresh');
+      setUser({ id: 'NEW' });
+    },
+  };
+});
 vi.mock('../api/coupon', () => ({
   fetchWelcomeCoupon: () => Promise.resolve(null),
   couponDiscountText: () => '',
 }));
 
 import SignupView from './SignupView.vue';
+import { recentlyViewed, pushRecentlyViewed } from '../stores/recentlyViewed';
+import { recentSearches, pushRecentSearch } from '../stores/recentSearches';
+import { clearSession } from '../stores/auth';
 
 const GLOBAL = {
   components: { RouterLink: { name: 'RouterLink', props: ['to'], template: '<a><slot /></a>' } },
@@ -51,6 +63,10 @@ async function fillAndSubmit(w) {
 }
 
 beforeEach(() => {
+  localStorage.clear();
+  clearSession();
+  recentlyViewed.value = [];
+  recentSearches.value = [];
   push.mockReset();
   signup.mockReset().mockResolvedValue({});
   login.mockReset().mockResolvedValue({});
@@ -74,5 +90,37 @@ describe('SignupView — 가입 뒤 어디로 가나 (J-3)', () => {
     wrapper = mount(SignupView, { global: GLOBAL });
     await fillAndSubmit(wrapper);
     expect(push).toHaveBeenLastCalledWith('/');
+  });
+});
+
+describe('SignupView — 비회원 기록 이관 (J-5)', () => {
+  it('🔴 가입하면 비회원으로 쌓은 것이 **따라온다** — 가입 직후가 가장 아까운 순간이다', async () => {
+    pushRecentlyViewed({ id: 'p1', name: 'ZZ상품', price: 1000, images: [] });
+    pushRecentSearch('지바');
+
+    wrapper = mount(SignupView, { global: GLOBAL });
+    await fillAndSubmit(wrapper);
+
+    expect(recentlyViewed.value.map((p) => p.id)).toEqual(['p1']);
+    expect(recentSearches.value).toEqual(['지바']);
+  });
+
+  it('🔴 옮긴 뒤 **guest 는 빈다** — 그 브라우저를 쓰는 다음 사람이 못 본다', async () => {
+    pushRecentSearch('지바');
+
+    wrapper = mount(SignupView, { global: GLOBAL });
+    await fillAndSubmit(wrapper);
+
+    expect(localStorage.getItem('glassvue.recentSearches.guest')).toBeNull();
+  });
+
+  it('⚠ 이관은 **login 뒤**에 일어난다 — 그 전이면 옮길 계정이 없어 조용히 아무 일도 안 한다', async () => {
+    pushRecentSearch('지바');
+
+    wrapper = mount(SignupView, { global: GLOBAL });
+    await fillAndSubmit(wrapper);
+
+    // 계정 키에 실제로 들어갔는지로 «순서가 맞았나» 를 본다(화면 상태만 보면 못 가른다).
+    expect(JSON.parse(localStorage.getItem('glassvue.recentSearches.NEW'))).toEqual(['지바']);
   });
 });

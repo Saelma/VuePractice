@@ -18,9 +18,21 @@ vi.mock('vue-router', () => ({
   useRoute: () => route,
   RouterLink: { name: 'RouterLink', props: ['to'], template: '<a><slot /></a>' },
 }));
-vi.mock('../api/auth', () => ({ login: (...a) => login(...a) }));
+vi.mock('../api/auth', async () => {
+  // ⚠ 진짜 login 은 세션을 세운다 — 목이 그걸 해야 «로그인했는데도 안 옮겼다» 를 볼 수 있다.
+  const { setTokens, setUser } = await import('../stores/auth');
+  return {
+    login: async (...a) => {
+      login(...a);
+      setTokens('zz-access', 'zz-refresh');
+      setUser({ id: 'A' });
+    },
+  };
+});
 
 import LoginView from './LoginView.vue';
+import { recentSearches, pushRecentSearch } from '../stores/recentSearches';
+import { clearSession } from '../stores/auth';
 
 let wrapper;
 
@@ -49,9 +61,11 @@ async function submit(w) {
 }
 
 beforeEach(() => {
+  localStorage.clear();
+  clearSession();
+  recentSearches.value = [];
   push.mockReset();
   login.mockReset();
-  login.mockResolvedValue({});
   route.query = {};
 });
 afterEach(() => wrapper?.unmount());
@@ -83,5 +97,20 @@ describe('LoginView — 복귀 경로 (J-3)', () => {
     wrapper = mountView();
     await submit(wrapper);
     expect(push).toHaveBeenLastCalledWith('/');
+  });
+});
+
+describe('LoginView — 🔴 로그인은 비회원 기록을 **안 옮긴다** (J-5 결정 ①)', () => {
+  it('로그인해도 guest 기록은 그 자리에 남는다 — 공용 PC 에서 앞사람 것이 내 계정으로 오면 안 된다', async () => {
+    pushRecentSearch('앞사람이친말');
+    expect(localStorage.getItem('glassvue.recentSearches.guest')).not.toBeNull();
+
+    wrapper = mountView();
+    await submit(wrapper);
+
+    // 계정 목록은 비어 있고(그 계정 것이 없으니), guest 는 **그대로** 있다.
+    expect(recentSearches.value).toEqual([]);
+    expect(JSON.parse(localStorage.getItem('glassvue.recentSearches.guest'))).toEqual(['앞사람이친말']);
+    expect(localStorage.getItem('glassvue.recentSearches.A')).toBeNull();
   });
 });

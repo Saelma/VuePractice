@@ -3,6 +3,7 @@ import { computed, reactive, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { signup, login } from '../api/auth';
+import { adoptGuestHistory } from '../stores/guestHistory';
 import { fetchWelcomeCoupon, couponDiscountText } from '../api/coupon';
 
 const route = useRoute();
@@ -82,6 +83,10 @@ async function onSubmit() {
       agreeMarketing: form.agreeMarketing,
     });
     await login({ loginId: form.loginId, password: form.password }); // 가입 후 자동 로그인
+    // 🔴 비회원으로 둘러본 것·검색한 것을 방금 만든 계정으로 옮긴다 (2026-09-01, BACKLOG J-5).
+    //    ⚠ **가입에서만** 부른다 — 로그인에서 하면 공용 PC 에서 앞사람 기록이 남의 계정으로 들어간다.
+    //    ⚠ login() 뒤여야 한다: 그 안의 setUser 가 스토어를 «계정 키» 로 갈아끼운 뒤라야 옮길 곳이 있다.
+    adoptGuestHistory();
     // 🔴 왔던 자리로 돌려보낸다 (2026-09-01, BACKLOG J-3) — LoginView 와 **같은 한 줄**이다.
     //    ⚠ 자동 로그인이 위에서 끝나므로 보호 경로로 보내도 가드가 다시 튕기지 않는다(착수 전 실측).
     router.push(route.query.redirect || '/');
