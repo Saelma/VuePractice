@@ -381,6 +381,16 @@ audit           관리자 조작 감사 이력 (append-only, 이벤트로만 유
 > `ShippingPolicy` 는 **global** 에 있다: 장바구니(주문 전 미리보기)와 주문(부과)이 둘 다 읽어야 하는데
 > 이미 `order → cart` 의존이 있어 order 에 두면 `cart → order` 로 **순환**이 된다.
 >
+> 🔴 **등급별 무료배송 (2026-08-28, G-6)**: 등급이 무료배송 **기준을 인하**한다(BRONZE 0% · SILVER 20% ·
+> GOLD 40% · VIP 60%). ⚠ **`ShippingPolicy` 는 `MemberGrade` 를 모른다** — `feeFor(itemsTotal, freeThresholdToApply)`
+> 처럼 **금액**을 받고, 등급 → 금액 변환은 point 도메인(`MemberGrade.discountedThreshold`)이 한다.
+> 반대로 **등급은 «원» 을 모른다**(인하율만 갖는다 — 기준 금액은 설정에 하나만 산다).
+> 그래서 global 과 point 사이에 **화살표가 생기지 않는다** — MSA 로 쪼갤 때 policy 가 point 를 끌고 가지 않는다.
+> ⚠ 대신 **`cart → point` 의존이 새로 생겼다**(`order → point` 는 이미 있었다). 장바구니가 등급을 알아야
+> 배송비를 낸다 — 공개 API(`PointService.gradeOf`, 계정 없으면 `BRONZE`·저장 안 함)로만 부른다.
+> ⚠ **주문의 `shipping_fee` 는 스냅샷이라 등급이 올라도 소급되지 않는다**(정책이 바뀌어도 과거 주문이
+> 안 바뀌는 것과 같은 규칙).
+>
 > **적립금 · 회원 등급 (2026-07-24, V21)**: `point_account`(잔액·누적구매·등급) + `point_history`(원장) +
 > `orders.used_point·earned_point`(스냅샷). 잔액·등급을 `member` 가 아니라 point 도메인이 갖는다
 > (coupon 이 member_coupon 을 갖는 것과 같은 경계).
