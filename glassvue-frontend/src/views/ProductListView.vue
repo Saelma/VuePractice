@@ -15,6 +15,8 @@ import { authState, isLoggedIn } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
 import EmptyState from '../components/EmptyState.vue';
 import ProductCard from '../components/ProductCard.vue';
+import RecentSearches from '../components/RecentSearches.vue';
+import { pushRecentSearch } from '../stores/recentSearches';
 
 const router = useRouter();
 const route = useRoute();
@@ -95,12 +97,21 @@ watch(() => route.query, () => {
 
 function apply() {
   applied.name = form.name?.trim() || null;
+  // 🔴 여기도 «검색을 실행한 순간» 이다(G-7, 2026-09-01 사용자 확정) — 좁은 화면에선 헤더 검색이
+  //    감춰져 **이쪽이 유일한 입구**다. 헤더와 같은 함수를 부른다(규칙은 스토어 한 곳에 있다).
+  //    ⚠ 이 함수는 URL 을 안 건드리므로, ?name= 을 지켜보는 watch 로는 이 자리를 절대 못 잡는다.
+  if (applied.name) pushRecentSearch(applied.name);
   applied.categoryId = form.categoryId;
   applied.minPrice = form.minPrice ?? null;
   applied.maxPrice = form.maxPrice ?? null;
   applied.status = form.status;
   filterOpen.value = false;
   load(0);
+}
+/** 최근 검색어를 누르면 그 말을 검색어 칸에 넣고 바로 적용한다(누른 뒤 「적용」을 또 누르게 하지 않는다). */
+function pickRecent(term) {
+  form.name = term;
+  apply();
 }
 /** 사이드바에서 카테고리를 고르면 바로 반영한다(커머스에선 즉시 적용이 자연스럽다). */
 function pickCategory(id) {
@@ -217,6 +228,9 @@ const chips = computed(() => {
               <span class="field-label">상품명</span>
               <DxTextBox v-model:value="form.name" placeholder="검색어" @enter-key="apply" />
             </label>
+            <!-- 최근 검색어 (G-7) — 헤더와 **같은 컴포넌트**다. 여기선 떠 있지 않고 인라인으로 선다:
+                 필터 패널은 이미 열려 있는 자리라 덮을 것이 없다. -->
+            <RecentSearches @pick="pickRecent" />
             <label class="field">
               <span class="field-label">최소 가격</span>
               <DxNumberBox v-model:value="form.minPrice" :min="0" :show-clear-button="true" format="#,##0" />

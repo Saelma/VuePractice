@@ -9,9 +9,13 @@ import NotificationBell from './components/NotificationBell.vue';
 import NotificationToaster from './components/NotificationToaster.vue';
 import AdminMenu from './components/AdminMenu.vue';
 import AccountMenu from './components/AccountMenu.vue';
+import RecentSearches from './components/RecentSearches.vue';
+import { recentSearches, pushRecentSearch } from './stores/recentSearches';
 
 const router = useRouter();
 const searchQuery = ref('');
+/** 최근 검색어 패널이 펴져 있나 (G-7). 목록이 비어 있으면 아예 안 편다 — 빈 상자가 뜨면 고장으로 읽힌다. */
+const searchOpen = ref(false);
 
 onMounted(() => {
   // 저장된 토큰으로 내 정보 갱신. 라우터 가드가 보호 경로 진입 때 이미 로드했으면(authState.user 존재)
@@ -42,7 +46,17 @@ function onLogo() {
 /** 헤더 전역 검색 — 상품 목록으로 이름 쿼리를 넘긴다. 목록 화면이 ?name= 을 읽어 필터한다(B-8). */
 function onSearch() {
   const q = searchQuery.value.trim();
+  // 🔴 «검색을 실행한 순간» 에만 담는다(G-7) — ?name= 이 적용될 때마다 담으면 남이 공유한 링크를
+  //    열기만 해도 내 검색어가 된다. 목록 필터(ProductListView.apply)도 같은 함수를 부른다.
+  if (q) pushRecentSearch(q);
+  searchOpen.value = false;
   router.push(q ? { path: '/products', query: { name: q } } : { path: '/products' });
+}
+
+/** 최근 검색어를 누르면 그 말로 다시 검색한다 — 담기·이동이 onSearch 한 곳에만 있게 되짚어 부른다. */
+function onPickRecent(term) {
+  searchQuery.value = term;
+  onSearch();
 }
 
 const year = new Date().getFullYear();
@@ -66,14 +80,24 @@ const year = new Date().getFullYear();
 
         <!-- 전역 상품 검색 (좁은 화면에선 감춘다 — /products 안의 검색으로 대체) -->
         <form class="hidden flex-1 sm:block" role="search" @submit.prevent="onSearch">
-          <div class="mx-auto max-w-xs">
+          <div class="relative mx-auto max-w-xs">
             <input
               v-model="searchQuery"
               type="search"
               placeholder="상품 검색"
               aria-label="상품 검색"
               class="w-full rounded-control border border-line bg-canvas px-3 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              @focus="searchOpen = true"
+              @keydown.escape="searchOpen = false"
             />
+
+            <!-- 최근 검색어 (G-7). 바깥 클릭으로 닫는다 — AccountMenu 와 같은 패턴(오버레이 z-40 / 패널 z-50). -->
+            <template v-if="searchOpen && recentSearches.length">
+              <div class="fixed inset-0 z-40" @click="searchOpen = false"></div>
+              <div class="absolute left-0 right-0 z-50 mt-2 rounded-card border border-line bg-surface p-2 shadow-lift">
+                <RecentSearches @pick="onPickRecent" />
+              </div>
+            </template>
           </div>
         </form>
 
