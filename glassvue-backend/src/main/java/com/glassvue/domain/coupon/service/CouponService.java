@@ -162,7 +162,17 @@ public class CouponService {
         if (welcome) {
             couponRepository.findByWelcomeTrue()
                     .filter(current -> !current.getId().equals(couponId))
-                    .ifPresent(current -> current.markWelcome(false));
+                    .ifPresent(current -> {
+                        current.markWelcome(false);
+                        // 🔴 **여기서 flush 해야 «먼저 해제» 가 DB 에서도 «먼저» 다** (2026-09-01).
+                        //    같은 트랜잭션이라 안전하다고 적어 뒀지만, Hibernate 는 «필드를 고친 순서» 가
+                        //    아니라 **자기 순서**로 UPDATE 를 내보낸다. 새 쿠폰의 welcome=1 이 먼저 나가면
+                        //    ux_coupon_welcome(함수기반 유니크)에 걸려 **ORA-00001 로 조작 전체가 실패**한다.
+                        // ⚠ 이 경로는 «이미 지정된 쿠폰이 있을 때» 만 도는데, 지정이 32일간 0 이라
+                        //    (2026-09-01 §9) **한 번도 진짜로 밟힌 적이 없었다.** 테스트가 초록이던 것은
+                        //    영속성 컨텍스트에 옛 쿠폰이 **먼저 올라와 있어서 생긴 우연**이다.
+                        couponRepository.flush();
+                    });
         }
         coupon.markWelcome(welcome);
         publishAudit(AuditAction.COUPON_WELCOME_SET, actor, couponId, null,

@@ -29,17 +29,16 @@ public class ShippingPolicy {
     private long freeThreshold = 30000;
 
     /**
-     * 상품 합계로 배송비를 계산한다 — <b>기본 기준</b>으로.
+     * 상품 합계와 <b>적용할 기준 금액</b>으로 배송비를 계산한다 (2026-08-28, BACKLOG G-6).
+     *
+     * <p>🔴 <b>기준 금액을 안 받는 형태는 2026-09-01 에 지웠다</b>(BACKLOG §J 뒤). G-6 이 등급별
+     * 기준을 만든 뒤로 «설정의 기본 기준으로 계산» 은 <b>거의 언제나 틀린 답</b>이 됐는데, 그 형태가
+     * 남아 있으면 <b>부르는 것만으로 등급이 조용히 무시된다.</b> 부르는 곳이 0 이던 참에 없앴다 —
+     * ⚠ <b>«쓰지 않는 것» 이 아니라 «틀리게 쓰기 쉬운 것» 이라 지웠다.</b>
+     * 기본 기준이 필요하면 호출자가 {@link #getFreeThreshold()} 로 <b>명시해서</b> 넘긴다.
      *
      * <p>합계가 0 이하면 0 — 빈 장바구니에 배송비를 붙이면 화면에 "0원 + 배송비 3,000원"이 떠서
      * 담지도 않은 값을 청구하는 것처럼 보인다.
-     */
-    public long feeFor(long itemsTotal) {
-        return feeFor(itemsTotal, freeThreshold);
-    }
-
-    /**
-     * 상품 합계와 <b>적용할 기준 금액</b>으로 배송비를 계산한다 (2026-08-28, BACKLOG G-6).
      *
      * <p>🔴 <b>회원 등급을 받지 않는다 — 「금액」을 받는다.</b> 등급별 무료배송을 넣으면서
      * {@code MemberGrade}(point 도메인)를 인자로 받고 싶어지는데, 그러면 global 이 도메인을 알게 되어
@@ -61,13 +60,9 @@ public class ShippingPolicy {
         return fee;
     }
 
-    /** 무료배송까지 남은 금액 — <b>기본 기준</b>으로. 이미 무료이거나 무료배송 정책이 없으면 0. */
-    public long amountUntilFree(long itemsTotal) {
-        return amountUntilFree(itemsTotal, freeThreshold);
-    }
-
     /**
      * 무료배송까지 남은 금액 — <b>적용할 기준 금액</b>으로 (2026-08-28, BACKLOG G-6).
+     * 이미 무료이거나 무료배송 정책이 없으면 0. ⚠ 기준을 안 받는 형태는 {@link #feeFor} 와 함께 지웠다.
      *
      * <p>🔴 <b>{@code feeFor} 와 반드시 같은 기준으로 불러야 한다.</b> 한쪽만 등급 기준을 쓰면
      * 화면이 «12,000원 더 담으면 무료배송» 이라 말해 놓고 실제로는 <b>이미 무료</b>인

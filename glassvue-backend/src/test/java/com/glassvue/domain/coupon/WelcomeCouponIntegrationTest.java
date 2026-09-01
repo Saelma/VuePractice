@@ -59,6 +59,7 @@ class WelcomeCouponIntegrationTest {
     @Autowired WelcomeCouponHandler handler;
     @Autowired org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     @Autowired ApplicationEvents events;
+    @jakarta.persistence.PersistenceContext jakarta.persistence.EntityManager entityManager;
 
     private static final String JSON = "application/json";
     // ⚠ 가입 API 는 비밀번호 정책(E-3)을 탄다 — 10자 이상 + 흔한 목록·아이디/닉네임 포함 금지.
@@ -159,6 +160,32 @@ class WelcomeCouponIntegrationTest {
         mockMvc.perform(get("/api/coupons/welcome"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    /**
+     * 🔴 <b>이미 지정된 쿠폰이 «영속성 컨텍스트 밖» 에 있을 때도 갈아탈 수 있어야 한다</b>
+     * (2026-09-01, 실제로 터진 자리).
+     *
+     * <p>⚠ 아래 {@code designatingAnotherClearsPrevious} 는 <b>둘 다 이 테스트가 만든</b> 쿠폰이라
+     * 옛 쿠폰이 컨텍스트에 <b>먼저</b> 올라와 있고, 그러면 Hibernate 가 그 UPDATE 를 먼저 내보내
+     * <b>우연히</b> 통과한다. 🔴 <b>운영은 그 순서를 약속하지 않는다</b> — 2026-09-01 에 관리자가
+     * 「가입 쿠폰 10000원」을 지정해 두자 그 다음 전수에서 <b>ORA-00001 로 셋이 빨개졌다.</b>
+     *
+     * <p>여기서는 {@code entityManager.clear()} 로 <b>컨텍스트를 비워</b> 그 상황을 만든다 —
+     * 즉 «새 쿠폰이 먼저, 옛 쿠폰이 나중에» 올라오는 순서다.
+     */
+    @Test
+    @DisplayName("🔴 이미 지정된 쿠폰이 **컨텍스트 밖**에 있어도 갈아탄다 (ORA-00001 재현 자리)")
+    void designatingSwapsEvenWhenPreviousIsNotInContext() throws Exception {
+        String admin = adminToken();
+        UUID previous = designateWelcomeCoupon(admin);
+        entityManager.flush();
+        entityManager.clear();                 // 🔴 옛 쿠폰을 컨텍스트에서 내린다
+
+        UUID next = designateWelcomeCoupon(admin);   // 여기서 ORA-00001 이 났었다
+
+        assertThat(couponRepository.findById(previous).orElseThrow().isWelcome()).isFalse();
+        assertThat(couponRepository.findById(next).orElseThrow().isWelcome()).isTrue();
     }
 
     @Test
