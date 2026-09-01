@@ -15,9 +15,11 @@ import { mount, flushPromises } from '@vue/test-utils';
 //    **여기서는 «담는가 · 펴지는가 · 눌러서 검색되는가» 만** 본다.
 
 const push = vi.fn();
+// ⚠ `fullPath` 가 있어야 한다 — `useLoginRedirect` 가 복귀 경로로 그걸 쓴다(J-2).
+const route = { path: '/products/p1', fullPath: '/products/p1?x=1', query: {} };
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
-  useRoute: () => ({ path: '/', query: {} }),
+  useRoute: () => route,
   RouterLink: { name: 'RouterLink', props: ['to'], template: '<a><slot /></a>' },
   RouterView: { name: 'RouterView', template: '<div />' },
 }));
@@ -73,6 +75,8 @@ async function search(w, term) {
 
 beforeEach(() => {
   push.mockReset();
+  route.path = '/products/p1';
+  route.fullPath = '/products/p1?x=1';
   localStorage.clear();
   clearSession();
   recentSearches.value = [];
@@ -184,5 +188,29 @@ describe('App 헤더 검색 — 최근 검색어를 누르면 (G-7)', () => {
     expect(push).not.toHaveBeenCalled();
     expect(recentSearches.value).toEqual([]);
     expect(panel(w).exists()).toBe(false);   // 비면 패널째 사라진다
+  });
+});
+
+describe('App 헤더 — 로그인·회원가입이 돌아올 자리를 들고 간다 (J-2)', () => {
+  const linkTo = (w, text) => w.findAllComponents({ name: 'RouterLink' })
+    .find((l) => l.text() === text)?.props('to');
+
+  it('🔴 헤더 「로그인」이 지금 보던 자리를 들고 간다 — 전에는 쿼리가 없어 홈으로 떨어졌다', async () => {
+    const w = await mountApp();
+    expect(linkTo(w, '로그인')).toEqual({ path: '/login', query: { redirect: '/products/p1?x=1' } });
+  });
+
+  it('「회원가입」도 같이 들고 간다 — 신규 사용자가 기존 회원보다 나쁘면 안 된다', async () => {
+    const w = await mountApp();
+    expect(linkTo(w, '회원가입')).toEqual({ path: '/signup', query: { redirect: '/products/p1?x=1' } });
+  });
+
+  it('🔴 인증 화면에서는 **안 붙인다** — redirect=/login 이면 자기 자신으로 도는 고리가 된다', async () => {
+    route.path = '/login';
+    route.fullPath = '/login';
+    const w = await mountApp();
+
+    expect(linkTo(w, '로그인')).toEqual({ path: '/login' });
+    expect(linkTo(w, '회원가입')).toEqual({ path: '/signup' });
   });
 });

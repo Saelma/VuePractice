@@ -61,7 +61,14 @@ async function onSubmit() {
 
       <p class="mt-4 text-center text-sm text-ink-500">
         계정이 없나요?
-        <RouterLink to="/signup" class="font-medium text-ink-900 underline underline-offset-2">회원가입</RouterLink>
+        <!--
+          🔴 **쿼리를 물려준다** (2026-09-01, BACKLOG J-3). 여기서 안 물려주면 «찜을 누르다 로그인까지
+          왔다가 가입을 고른» 사람만 복귀 경로를 잃는다 — **유입 사슬이 가장 긴 경로가 가장 먼저 끊긴다.**
+        -->
+        <RouterLink
+          :to="{ path: '/signup', query: route.query }"
+          class="font-medium text-ink-900 underline underline-offset-2"
+        >회원가입</RouterLink>
       </p>
     </div>
   </section>

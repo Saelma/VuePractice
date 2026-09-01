@@ -11,9 +11,17 @@ import AdminMenu from './components/AdminMenu.vue';
 import AccountMenu from './components/AccountMenu.vue';
 import RecentSearches from './components/RecentSearches.vue';
 import { recentSearches, pushRecentSearch } from './stores/recentSearches';
+import { useLoginRedirect } from './composables/useLoginRedirect';
 
 const router = useRouter();
 const searchQuery = ref('');
+
+/**
+ * 헤더의 「로그인」·「회원가입」이 **지금 보던 자리를 들고 간다** (2026-09-01, BACKLOG J-2).
+ * 🔴 **전에는 `to="/login"` 이라 쿼리가 없어, 상품 상세에서 «로그인이 필요해요» 를 읽고 헤더로 온
+ * 사람이 로그인 후 홈으로 떨어졌다.** 규칙 자체는 `useLoginRedirect` 한 곳에 있다.
+ */
+const { loginTo, signupTo } = useLoginRedirect();
 /** 최근 검색어 패널이 펴져 있나 (G-7). 목록이 비어 있으면 아예 안 편다 — 빈 상자가 뜨면 고장으로 읽힌다. */
 const searchOpen = ref(false);
 
@@ -120,9 +128,9 @@ const year = new Date().getFullYear();
             <AccountMenu />
           </template>
           <template v-else>
-            <RouterLink to="/login" class="nav-link">로그인</RouterLink>
+            <RouterLink :to="loginTo" class="nav-link">로그인</RouterLink>
             <RouterLink
-              to="/signup"
+              :to="signupTo"
               class="rounded-control bg-brand-600 px-3 py-1.5 font-medium text-white transition-colors hover:bg-brand-700"
             >회원가입</RouterLink>
           </template>

@@ -10,9 +10,9 @@
  * 돌아올 곳(redirect)을 함께 넘겨 로그인 후 보던 화면으로 복귀시킨다.
  */
 import { ref } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
 import { isWishlisted, toggleWishlist } from '../stores/wishlist';
 import { isLoggedIn } from '../stores/auth';
+import { useLoginRedirect } from '../composables/useLoginRedirect';
 
 const props = defineProps({
   productId: { type: String, required: true },
@@ -21,13 +21,14 @@ const props = defineProps({
 });
 const emit = defineEmits(['changed']);
 
-const router = useRouter();
-const route = useRoute();
+const { goLogin } = useLoginRedirect();
 const busy = ref(false);
 
 async function onClick() {
   if (!isLoggedIn.value) {
-    router.push({ path: '/login', query: { redirect: route.fullPath } });
+    // ⚠ 이 자리가 **원본**이었다 — 헤더·상품 상세가 이걸 안 따라 해서 J-2·J-1 이 났다(2026-09-01).
+    //    이제 규칙은 `useLoginRedirect` 하나이고 여기도 그걸 부른다.
+    goLogin();
     return;
   }
   if (busy.value) return;

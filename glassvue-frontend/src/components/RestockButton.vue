@@ -7,22 +7,23 @@
  * 서버가 신청·취소를 멱등으로 처리하므로 화면은 낙관적으로 토글하고 실패 시 되돌린다.
  */
 import { ref } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
 import { isRestockSubscribed, toggleRestock } from '../stores/restock';
 import { isLoggedIn } from '../stores/auth';
+import { useLoginRedirect } from '../composables/useLoginRedirect';
 
 const props = defineProps({
   productId: { type: String, required: true },
 });
 const emit = defineEmits(['changed']);
 
-const router = useRouter();
-const route = useRoute();
+const { goLogin } = useLoginRedirect();
 const busy = ref(false);
 
 async function onClick() {
   if (!isLoggedIn.value) {
-    router.push({ path: '/login', query: { redirect: route.fullPath } });
+    // ⚠ 이 자리가 **원본**이었다 — 헤더·상품 상세가 이걸 안 따라 해서 J-2·J-1 이 났다(2026-09-01).
+    //    이제 규칙은 `useLoginRedirect` 하나이고 여기도 그걸 부른다.
+    goLogin();
     return;
   }
   if (busy.value) return;

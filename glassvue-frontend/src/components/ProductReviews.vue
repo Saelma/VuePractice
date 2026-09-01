@@ -5,12 +5,15 @@ import {
   fetchProductReviews, createReview, updateReview, deleteReview,
   REVIEW_IMAGE_MAX, REVIEW_SORT_OPTIONS,
 } from '../api/review';
+import { RouterLink } from 'vue-router';
 import { authState, isLoggedIn, isAdmin } from '../stores/auth';
+import { useLoginRedirect } from '../composables/useLoginRedirect';
 import StarRating from './StarRating.vue';
 import ImageUploader from './ImageUploader.vue';
 import EmptyState from './EmptyState.vue';
 import SkeletonList from './SkeletonList.vue';
 
+const { loginTo } = useLoginRedirect();
 const props = defineProps({ productId: { type: String, required: true } });
 
 const summary = ref({ averageRating: 0, reviewCount: 0 });
@@ -147,7 +150,15 @@ onMounted(() => load(0));
         <button type="button" class="btn btn-primary" :disabled="submitting" @click="submit">리뷰 등록</button>
       </div>
     </div>
-    <p v-else class="mb-6 text-sm text-ink-500">리뷰 작성은 로그인 후 가능합니다.</p>
+    <!--
+      🔴 **문구를 «갈 수 있는 말» 로 바꿨다** (2026-09-01, BACKLOG J-4). 전에는 누를 수 없는 `<p>` 라
+      비회원이 «그래서 어디로 가나» 를 스스로 찾아야 했고, 헤더로 가면 **보던 상품을 잃었다**(J-2).
+    -->
+    <p v-else class="mb-6 text-sm text-ink-500">
+      리뷰 작성은
+      <RouterLink :to="loginTo" class="font-medium text-ink-900 underline underline-offset-2">로그인</RouterLink>
+      후 가능합니다.
+    </p>
 
     <!--
       정렬·사진만 보기 (B-22). ⚠ **리뷰가 없으면 통째로 감춘다** — 고를 게 없는데 컨트롤만

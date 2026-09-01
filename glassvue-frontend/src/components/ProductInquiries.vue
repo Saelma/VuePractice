@@ -7,11 +7,14 @@ import {
   fetchProductInquiries, createInquiry, updateInquiry, deleteInquiry, answerInquiry, inquiryStatusText,
   INQUIRY_IMAGE_MAX,
 } from '../api/inquiry';
+import { RouterLink } from 'vue-router';
 import { authState, isLoggedIn, isAdmin } from '../stores/auth';
+import { useLoginRedirect } from '../composables/useLoginRedirect';
 import ImageUploader from './ImageUploader.vue';
 import EmptyState from './EmptyState.vue';
 import SkeletonList from './SkeletonList.vue';
 
+const { loginTo } = useLoginRedirect();
 const props = defineProps({ productId: { type: String, required: true } });
 
 const page = ref({ content: [], page: 0, totalPages: 0, last: true });
@@ -128,6 +131,17 @@ onMounted(() => load(0));
 
     <div v-if="error" class="alert-error mb-3">{{ error }}</div>
 
+    <!--
+      🔴 **비회원에게 아무 말도 안 하던 자리다** (2026-09-01, BACKLOG J-4). 폼만 감추고 이유도
+      유도도 없어서, 로그인하면 문의를 쓸 수 있다는 사실 자체가 화면에 없었다.
+      ⚠ 리뷰는 «말은 하는데 길이 없었고»(J-4) 문의는 «말도 안 했다» — 한 화면 아래위에서 갈렸다.
+    -->
+    <p v-if="!isLoggedIn" class="mb-6 text-sm text-ink-500">
+      문의 작성은
+      <RouterLink :to="loginTo" class="font-medium text-ink-900 underline underline-offset-2">로그인</RouterLink>
+      후 가능합니다.
+    </p>
+
     <!-- 작성 폼 (로그인 시) -->
     <div v-if="isLoggedIn" class="card mb-6 flex flex-col gap-4 p-5">
       <label class="field">
@@ -153,7 +167,9 @@ onMounted(() => load(0));
     <!-- 로딩: 텍스트 대신 스켈레톤 (DESIGN.md §5) -->
     <SkeletonList v-if="loading" />
 
-    <!-- 빈 상태 -->
+    <!-- 빈 상태.
+         ⚠ 비회원에게 hint 를 안 주는 것은 **그대로 뒀다** — 위에 「문의 작성은 로그인 후 가능합니다」가
+         이미 서 있어 같은 말을 두 번 하게 된다(빈 상태는 «왜 비었나» 를 말하는 자리지 유도하는 자리가 아니다). -->
     <EmptyState
       v-else-if="!page.content.length"
       density="section"

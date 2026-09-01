@@ -9,6 +9,7 @@ import { DxNumberBox } from 'devextreme-vue/number-box';
 import { getProduct, deleteProduct, statusText, priceText, hasDiscount, discountRate, strikePrice, isOnSale } from '../api/product';
 import { addToCart } from '../api/cart';
 import { loadCartCount } from '../stores/cart';
+import { useLoginRedirect } from '../composables/useLoginRedirect';
 import { authState, isLoggedIn, isAdmin } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
 import { loadRestockIds } from '../stores/restock';
@@ -45,6 +46,12 @@ const selectedVariant = computed(() =>
 const images = computed(() => product.value?.images ?? []);
 const selected = ref(0);
 const mainImage = computed(() => images.value[selected.value] ?? images.value[0] ?? null);
+
+/**
+ * 비회원이 「로그인하고 담기」를 누르면 — **찜 버튼과 같은 길**이다 (2026-09-01, BACKLOG J-1).
+ * 🔴 지금 보던 상품 경로를 들고 가야 로그인 후 이 화면으로 돌아온다(규칙은 `useLoginRedirect`).
+ */
+const { goLogin } = useLoginRedirect();
 
 /** 담기 전에 얼마인지 바로 보이게 — 옵션 가격 × 수량. 옵션 미선택이면 기본가로 미리 보여준다. */
 const unitPrice = computed(() => selectedVariant.value?.price ?? product.value?.price ?? 0);
@@ -340,8 +347,18 @@ async function onDelete() {
             </template>
             <div v-else class="mt-5 border-t border-line pt-5">
               <p class="text-sm text-ink-500">구매하려면 로그인이 필요해요.</p>
-              <!-- 비로그인에게도 하트는 보여준다. 누르면 로그인으로 보내므로 유입 경로가 된다. -->
-              <WishlistButton :product-id="id" size="md" class="mt-3" />
+              <!--
+                🔴 **문구만 두지 않는다** (2026-09-01, BACKLOG J-1). 전에는 이 자리가 «누를 수 없는
+                `<p>` 한 줄» 이라 **주 행동(담기)만 막다른 길**이었다 — 바로 아래 찜 하트는 비회원이
+                눌러도 로그인으로 보내며 **돌아올 경로까지 들고 가는데**, 정작 담기에는 그 길이 없었다.
+                ⚠ 새 규칙이 아니라 **찜 버튼과 같은 모양**이다(베낄 원본이 이미 저장소에 있었다).
+                ⚠ 담으려던 수량·옵션까지 이어 주지는 않는다 — 그건 별개 결정이다(BACKLOG J-5 와 같은 성질).
+              -->
+              <div class="mt-4 flex gap-2">
+                <button type="button" class="btn btn-primary flex-1" @click="goLogin">로그인하고 담기</button>
+                <!-- 비로그인에게도 하트는 보여준다. 누르면 로그인으로 보내므로 유입 경로가 된다. -->
+                <WishlistButton :product-id="id" size="md" />
+              </div>
             </div>
 
             <!-- 상품 전체가 품절이면 재입고 알림 신청 (B-9). 다시 들어오면(총재고 0→양수) 알림이 온다. -->

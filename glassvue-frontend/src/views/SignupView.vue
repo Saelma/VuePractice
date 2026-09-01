@@ -1,10 +1,11 @@
 <script setup>
 import { computed, reactive, ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { signup, login } from '../api/auth';
 import { fetchWelcomeCoupon, couponDiscountText } from '../api/coupon';
 
+const route = useRoute();
 const router = useRouter();
 // 동의(B-21): agreeTerms 는 필수, agreeMarketing 은 선택. 서버도 같은 이름으로 받는다.
 const form = reactive({
@@ -81,7 +82,9 @@ async function onSubmit() {
       agreeMarketing: form.agreeMarketing,
     });
     await login({ loginId: form.loginId, password: form.password }); // 가입 후 자동 로그인
-    router.push('/');
+    // 🔴 왔던 자리로 돌려보낸다 (2026-09-01, BACKLOG J-3) — LoginView 와 **같은 한 줄**이다.
+    //    ⚠ 자동 로그인이 위에서 끝나므로 보호 경로로 보내도 가드가 다시 튕기지 않는다(착수 전 실측).
+    router.push(route.query.redirect || '/');
   } catch (e) {
     error.value = e.message;
   } finally {
