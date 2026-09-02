@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 운영 DB 의 «돈과 수량» 불변식을 센다 (2026-09-02, 「돈과 수량이 맞는가」 축).
+# 운영 DB 의 «돈과 수량» 불변식 **11개**를 센다 (2026-09-02, 「돈과 수량이 맞는가」 축).
 #
 # 왜 스크립트인가: 2026-09-02 에 이 일곱 개를 sqlplus 로 **손으로** 돌려 sold_count 어긋남을
 # 찾았는데, 손으로 돌린 SQL 은 그 세션이 끝나면 사라진다. 아침 기준값 재계수(WA §3-5)가
@@ -80,6 +80,32 @@ select 'product.sold_count = 실판매|'||count(*) from (
    having nvl(p.sold_count,0) <> nvl(sum(
      case when o.status in ('CANCELLED','RETURNED') then 0
           else i.quantity-nvl(i.cancelled_quantity,0)-nvl(i.returned_quantity,0) end),0));
+
+-- ⑨⑩⑪ 재고 원장 (2026-09-02, §K-5). 🔴 **적립금 원장(⑦)과 같은 모양이다** —
+--    `stock_history` 가 `stock_after` 를 들고 있으므로 «이력이 현재 값을 설명하는가» 를 물을 수 있다.
+--    ⚠ 처음 여덟 개를 세울 때 이 자리를 **안 봤다**(적립금만 원장으로 취급했다).
+
+-- ⑨ 마지막 이력의 `stock_after` 가 지금 재고와 같다.
+select 'stock 마지막 이력 = 현재 재고|'||count(*) from (
+  select v.id from product_variant v
+    join (select variant_id, max(created_at) mx from stock_history group by variant_id) l on l.variant_id=v.id
+    join stock_history h on h.variant_id=v.id and h.created_at=l.mx
+   where h.stock_after <> v.stock);
+
+-- ⑩ 이력의 증감 합이 «최초 이전 → 현재» 변화와 같다(중간에 이력 없이 움직인 적이 없다).
+select 'stock 이력 합 = 재고 변화|'||count(*) from (
+  select h.variant_id from stock_history h group by h.variant_id
+   having sum(h.quantity) <> (select v.stock from product_variant v where v.id=h.variant_id)
+                           - (select min(h2.stock_after - h2.quantity) keep (dense_rank first order by h2.created_at)
+                                from stock_history h2 where h2.variant_id=h.variant_id));
+
+-- ⑪ 재고가 «이력 없이» 생기지 않는다 — 등록도 `ADMIN_CREATE` 로 남긴다.
+--    🔴 **날짜를 박지 않고 자기보정한다**: 첫 `ADMIN_CREATE` **이후에 생긴 옵션**만 본다.
+--    ⚠ 그전 옵션(`무선 키보드`, 07-24 생성)은 **그 기능이 있기 전** 것이라 이력이 없는 게 맞다 —
+--       하드코딩하면 다음에 같은 일이 또 나도 이 줄이 못 잡는다.
+select 'stock 이력 없이 생긴 재고|'||count(*) from product_variant v
+ where v.created_at >= (select min(created_at) from stock_history where reason='ADMIN_CREATE')
+   and not exists (select 1 from stock_history h where h.variant_id=v.id);
 exit
 SQL
 )
@@ -88,7 +114,7 @@ if [ $? -ne 0 ]; then
   echo "⚠ DB 에 못 붙었거나 쿼리가 실패했다 — 판정 불가:"; echo "$OUT" | sed 's/^/    /'; exit 2
 fi
 
-# ⚠ 알려진 위반은 **없다**. 2026-09-02 실측: 여덟 개 전부 0.
+# ⚠ 알려진 위반은 **없다**. 2026-09-02 실측: 열한 개 전부 0.
 # 🔴 «sold_count 에 08-25 이전의 잔재가 남아 있다» 는 오래 물려받힌 주장은 **실측하니 거짓**이었다
 #    (백로그 §K-1). 값을 다시 0 이 아닌 것으로 두려면 **왜 그런지를 여기 적고** 기준을 올린다.
 KNOWN_SOLD_COUNT=0
@@ -109,8 +135,8 @@ while IFS='|' read -r name n; do
 done <<< "$OUT"
 
 # ⚠ 불변식 여덟 개를 다 읽었는가 — 덜 읽었으면 «성립» 이 아니라 «못 셌다» 다.
-if [ "$SEEN" -ne 8 ]; then
-  echo "  ⚠ 불변식 8개 중 ${SEEN}개만 읽혔다 — **판정 불가**."; exit 2
+if [ "$SEEN" -ne 11 ]; then
+  echo "  ⚠ 불변식 11개 중 ${SEEN}개만 읽혔다 — **판정 불가**."; exit 2
 fi
 
 if [ "$FAIL" -eq 1 ]; then
