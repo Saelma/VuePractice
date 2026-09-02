@@ -289,4 +289,101 @@ class OrderPartialCancelTest {
         assertThat(o.getPayAmount()).isEqualTo(10_000 - 5_000 - 2_000 + 3_000);
         assertThat(o.isFullyCancelledByItems()).isFalse();
     }
+
+    // ── 🔴 I-11 「잔돈이 «현금» 버킷으로 샌다」 재현 (2026-09-02, BACKLOG §K-3) ──────────
+
+    /**
+     * 🔴 <b>쿠폰+적립금이 상품합계를 «정확히» 덮는 주문에서, 마지막 회차의 환불액이 음수가 된다.</b>
+     *
+     * <p>I-11 이 *"내가 재검산하지 않았다 — 수치를 다시 세워 재현되는지 본 뒤에 올린다"* 며
+     * 보류해 둔 주장이다. 세워 보니 <b>재현된다.</b>
+     *
+     * <p><b>왜 그런가</b>: 결제 시 상한이 {@code 상품합계 − 쿠폰할인} 이라 주문 시점엔
+     * {@code 쿠폰 + 적립금 ≤ 상품합계} 다. 그런데 <b>내림 배분이 그 부등식을 깬다</b> —
+     * 회차마다 쿠폰·적립금 몫이 각각 내림되어 <b>덜 빠지므로</b>, 남은 쿠폰+적립금이
+     * 남은 상품합계를 <b>1원 앞지른다.</b> 그 1원이 회차마다 쌓이고, 마지막 회차는 분모와 분자가
+     * 같아 <b>앞지른 만큼이 그대로 환불액에서 빠진다.</b>
+     *
+     * <p>⚠ <b>합계는 맞는다</b>(1 + 0 − 1 = 0 = 결제금액). 그래서 전액 수렴 테스트로는 안 잡힌다 —
+     * 🔴 <b>«회차별로 말이 되는가» 는 «합계가 맞는가» 와 다른 질문이다.</b>
+     *
+     * <p>⚠ <b>돈이 잘못 가지는 않았다</b> — 적립금은 {@code refundedPoint}(≥0)가 움직인다.
+     * 샌 것은 <b>«얼마 돌려받았나» 라는 말</b>이었고, 그나마 알림은 {@code refundedAmount() > 0}
+     * 가드에, 화면은 «응답을 안 읽는다» 는 사정에 <b>우연히</b> 막혀 있었다(API 응답에는 나갔다).
+     * 🔴 <b>막혀 있던 이유가 «아무도 그 값을 안 본다» 였다</b> — 그래서 고쳤다.
+     *
+     * <p>✅ <b>고친 뒤</b>: {@code [1, 0, -1]} → {@code [0, 0, 0]}. 합계(0)는 그대로다.
+     */
+    @Test
+    @DisplayName("🔴 I-11 회귀 — 쿠폰+적립금이 전액을 덮어도 회차 환불액이 **음수가 안 된다**")
+    void lastRoundRefundGoesNegative_whenCouponAndPointCoverEverything() {
+        // 10,000 × 3 = 30,000 · 쿠폰 10,000 · 적립금 20,000 → 결제금액 0 (무료배송 기준을 넘겨 배송비 0)
+        Order o = order(10_000, 20_000, 0, 10_000, 10_000, 10_000);
+        assertThat(o.getPayAmount()).isZero();
+
+        long r0 = o.cancelItem(itemAt(o, 0), 1);
+        // 🔴 **잔돈이 어느 버킷으로 가는지를 여기서 못 박는다.** 쿠폰 몫은 내림값 그대로(3,333)이고
+        //    적립금 몫이 잔돈 1 을 흡수해 6,666 이 아니라 **6,667** 이다.
+        //    ⚠ 총액으로는 안 갈린다 — 쿠폰에 붙여도 세 회차를 더하면 10,000 / 20,000 으로 같다.
+        //    **회차 단위로 봐야만** «돌려주는 쪽이 흡수한다» 는 규칙이 지켜진다.
+        assertThat(o.getCancelledCouponDiscount()).isEqualTo(3_333);
+        assertThat(o.getCancelledPoint()).isEqualTo(6_667);
+
+        long r1 = o.cancelItem(itemAt(o, 1), 1);
+        long r2 = o.cancelItem(itemAt(o, 2), 1);
+
+        // ✅ 전액 수렴은 그대로다 — 보정이 합계를 안 건드린다.
+        assertThat(r0 + r1 + r2).isZero();
+
+        // 🔴 **환불액은 «돌려준 돈» 이라 음수일 수 없다.** 고치기 전엔 [1, 0, -1] 이었다.
+        assertThat(r0).isZero();
+        assertThat(r1).isZero();
+        assertThat(r2).isZero();
+
+        // ⚠ 적립금은 전액이 회차로 나뉘어 돌아간다 — 현금이 못 나가는 만큼 이쪽이 받는다.
+        assertThat(o.getCancelledPoint()).isEqualTo(20_000);
+        assertThat(o.getCancelledCouponDiscount()).isEqualTo(10_000);
+    }
+
+    /**
+     * 🔴 <b>원인을 직접 짚는다 — 부등식이 언제 깨지는지.</b>
+     *
+     * <p>주문 시점엔 {@code 쿠폰 + 적립금 ≤ 상품합계} 인데, 고치기 전에는 <b>부분 취소 한 회차만
+     * 지나도 남은 값들에서 그 부등식이 깨졌다</b>(20,001 &gt; 20,000). 위 테스트가 «증상» 이라면
+     * 이것은 «원인» 이다 — ⚠ <b>증상만 고쳤다면(환불액을 {@code Math.max(0, …)} 로 깎았다면)
+     * 이 부등식은 깨진 채로 남고 합계 수렴도 1 원 어긋났을 것이다.</b>
+     */
+    @Test
+    @DisplayName("🔴 회차가 지나도 «남은 쿠폰+적립금 ≤ 남은 상품합계» 가 유지된다 — 증상이 아니라 원인")
+    void remainingDiscountsOvertakeRemainingItemsAfterOneRound() {
+        Order o = order(10_000, 20_000, 0, 10_000, 10_000, 10_000);
+        assertThat(o.getCouponDiscount() + o.getUsedPoint()).isEqualTo(o.remainingItemsTotal());
+
+        // ⚠ 매 회차마다 본다 — 깨지는 자리가 첫 회차라고 단정하지 않는다.
+        for (int i = 0; i < 3; i++) {
+            o.cancelItem(itemAt(o, i), 1);
+            assertThat(o.remainingCouponDiscount() + o.remainingUsedPoint())
+                    .as("%d회차 뒤", i + 1)
+                    .isLessThanOrEqualTo(o.remainingItemsTotal());
+        }
+    }
+
+    /**
+     * ⚠ <b>보정이 «켜지지 않아야 하는» 자리를 지킨다</b> — 쿠폰만 전액을 덮으면 버킷이 하나뿐이라
+     * 내림 손실이 안 생기고, 따라서 부등식도 안 깨진다. 🔴 여기서 보정이 켜지면
+     * <b>적립금이 없는 주문에 적립금 몫이 생긴다.</b>
+     */
+    @Test
+    @DisplayName("쿠폰만으로 전액을 덮은 주문은 보정이 **안 켜진다** — 적립금 몫이 0으로 남는다")
+    void couponOnlyOrder_isUntouchedByTheAdjustment() {
+        Order o = order(30_000, 0, 0, 10_000, 10_000, 10_000);
+
+        long r0 = o.cancelItem(itemAt(o, 0), 1);
+        long r1 = o.cancelItem(itemAt(o, 1), 1);
+        long r2 = o.cancelItem(itemAt(o, 2), 1);
+
+        assertThat(r0 + r1 + r2).isZero();
+        assertThat(o.getCancelledPoint()).isZero();
+        assertThat(o.getCancelledCouponDiscount()).isEqualTo(30_000);
+    }
 }

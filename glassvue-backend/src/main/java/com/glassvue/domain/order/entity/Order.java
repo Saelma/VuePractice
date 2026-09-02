@@ -451,6 +451,43 @@ public class Order extends BaseTimeEntity {
      *
      * @return 이 회차에 돌려줄 <b>돈</b>. 되돌릴 적립금은 {@code before/after} 차이로 호출부가 읽는다.
      */
+
+    /**
+     * 🔴 <b>내림 배분이 남긴 잔돈이 «현금» 으로 새지 않게 막는다</b> (2026-09-02, BACKLOG §K-3 · I-11).
+     *
+     * <p><b>무엇이 문제였나</b>: 결제 시 상한이 {@code 상품합계 − 쿠폰할인} 이라 주문 시점엔
+     * {@code 쿠폰 + 적립금 ≤ 상품합계} 다. 그런데 쿠폰 몫과 적립금 몫을 <b>각각</b> 내림하면
+     * 둘 다 «덜» 빠져서, 남은 쿠폰+적립금이 남은 상품합계를 <b>앞지른다.</b>
+     * 앞지른 만큼은 그 회차에 <b>현금 환불로 나가 버린다</b> — 현금이 한 푼도 없는 주문인데도 그렇다.
+     * 그리고 그 빚은 마지막 회차가 떠안아 <b>환불액이 음수</b>가 된다.
+     *
+     * <p><b>실측 (10,000×3 · 쿠폰 10,000 · 적립금 20,000 → 결제금액 0)</b>:
+     * 회차별 환불액이 {@code [1, 0, -1]} 이었다. ⚠ <b>합계는 0 으로 맞았다</b> — 그래서
+     * 「전액 수렴」 테스트로는 안 잡혔다. 🔴 <b>«회차별로 말이 되는가» 는 «합계가 맞는가» 와
+     * 다른 질문이다.</b>
+     *
+     * <p><b>어디를 고쳤나</b>: 마지막 회차의 음수가 아니라 <b>첫 회차의 «+1»</b> 이다.
+     * 애초에 그 1 원을 현금으로 내보내지 않으면 빚이 안 생긴다.
+     *
+     * <p>⚠ <b>적립금 몫에 붙이는 이유</b>: 적립금 몫은 {@code refundCancelledOrder} 로
+     * <b>실제 고객에게 돌아가는 수량</b>이고, 쿠폰 몫은 «얼마짜리 쿠폰이었나» 의 회수 기록이다.
+     * 잔돈을 «돌려주는 쪽» 에 붙이면 현금 1 원이 적립금 1 원으로 바뀔 뿐이라
+     * <b>고객이 받는 총액이 회차 단위로도 말이 된다.</b>
+     *
+     * <p>🔴 <b>정상 주문에는 아무 일도 안 한다.</b> {@code over <= 0} 이면 그대로다 —
+     * G-4·G-10 의 확정 표본(12,001 · 12,858 …)이 <b>한 자리도 안 바뀐다.</b>
+     * 이 보정은 <b>부등식이 실제로 깨질 때만</b> 켜진다.
+     *
+     * @return {@code pointShare} 에 더해야 할 몫 (0 이상)
+     */
+    private static long residueIntoPoint(long remCoupon, long remPoint,
+                                         long couponShare, long pointShare,
+                                         long base, long amount) {
+        // «다음 회차로 넘길 쿠폰+적립금» 이 «다음 회차의 상품합계» 를 얼마나 앞지르는가.
+        long over = (remCoupon - couponShare) + (remPoint - pointShare) - (base - amount);
+        return Math.max(0L, over);
+    }
+
     public long cancelItem(OrderItem item, long qty) {
         long base = remainingItemsTotal();
         if (base <= 0) {
@@ -459,8 +496,12 @@ public class Order extends BaseTimeEntity {
         long cancelledAmount = item.cancel(qty);
         // ⚠ 내림이다(정수 나눗셈). 반올림하면 여러 품목에서 겹칠 때 합이 원래 할인액을 넘거나 모자라
         //    전액 취소 시 결제금액과 어긋난다 — G-4 가 반올림을 고르지 않은 이유가 그것이다.
-        long couponShare = remainingCouponDiscount() * cancelledAmount / base;
-        long pointShare = remainingUsedPoint() * cancelledAmount / base;
+        long remCoupon = remainingCouponDiscount();
+        long remPoint = remainingUsedPoint();
+        long couponShare = remCoupon * cancelledAmount / base;
+        long pointShare = remPoint * cancelledAmount / base;
+        // 🔴 잔돈이 현금으로 새지 않게 — 부등식이 깨질 때만 켜진다(§K-3).
+        pointShare += residueIntoPoint(remCoupon, remPoint, couponShare, pointShare, base, cancelledAmount);
 
         this.cancelledItemsTotal += cancelledAmount;
         this.cancelledCouponDiscount += couponShare;
@@ -743,6 +784,9 @@ public class Order extends BaseTimeEntity {
             long amount = item.getPrice() * qty;
             long couponShare = remCoupon * amount / base;
             long pointShare = remPoint * amount / base;
+            // 🔴 취소와 **같은 규칙**이다(§K-3) — 회차가 갈려도 부등식이 유지되어야
+            //    `share`(누적구매 차감)가 음수로 안 내려간다.
+            pointShare += residueIntoPoint(remCoupon, remPoint, couponShare, pointShare, base, amount);
             long share = amount - couponShare - pointShare;
             // ⚠ 적립 기준액이 0 인 주문이 있다(쿠폰·적립금으로 전액을 낸 경우). 그때는 적립도 0 이라
             //    회수할 것이 없다 — 0 나눗셈을 막는 동시에 «없는 것을 뺀다» 도 막는다.

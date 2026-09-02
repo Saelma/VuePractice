@@ -445,4 +445,53 @@ class OrderPartialReturnTest {
         assertThat(o.getStatus()).isEqualTo(OrderStatus.RETURNED);
         assertThat(o.getDeliveredAt()).isEqualTo(firstDelivered);
     }
+
+    // ── 🔴 I-11 「잔돈이 «현금» 버킷으로 샌다」 — 반품 쪽 (2026-09-02, BACKLOG §K-3) ──────
+
+    /**
+     * 🔴 <b>취소에서 고친 것과 «같은 원인» 이 반품 회차 사이에도 있었다.</b>
+     *
+     * <p>쿠폰+적립금이 전액을 덮은 주문을 <b>회차를 나눠</b> 반품하면, 1회차의 내림 배분이
+     * 남긴 잔돈 때문에 남은 쿠폰+적립금이 남은 상품합계를 앞지르고 —
+     * 2회차의 {@code share}(= 누적구매에서 뺄 몫)가 <b>음수</b>가 됐다.
+     *
+     * <p>⚠ <b>여기도 «우연히» 막혀 있었다</b>: {@code PointAccount.subtractPurchase} 가
+     * {@code Math.max(0L, amount)} 로 접어서 결과가 같았다. 🔴 <b>가드가 값을 고쳐 준 것이지
+     * 값이 맞았던 것이 아니다</b> — 그 가드가 없어지거나 다른 소비자가 생기면 그때 드러난다.
+     *
+     * <p>⚠ 환불액 쪽은 여기서 안 샜다 — 반품 환불은 {@code amount − couponShare} 라
+     * 버킷이 하나뿐이고, 한 버킷만 내림하면 부등식이 안 깨진다.
+     */
+    @Test
+    @DisplayName("🔴 I-11 회귀(반품) — 회차를 나눠 전액을 반품해도 누적구매 차감이 **음수가 안 된다**")
+    void purchaseToRemoveNeverGoesNegative_acrossReturnRounds() {
+        // 10,000 × 3 · 쿠폰 10,000 · 적립금 20,000 → 적립 대상 0 이라 적립도 0.
+        Order o = delivered(0, 10_000, 20_000, 10_000, 10_000, 10_000);
+        assertThat(o.getPayAmount()).isZero();
+
+        // ⚠ **한 회차 = 한 요청**이다 — `requestReturn` 은 고르지 않은 품목을 0 으로 «덮는다»
+        //    (누적이 아니다). 그래서 셋을 나눠 빼려면 회차도 셋이다.
+        long refund = 0L;
+        long purchase = 0L;
+        for (int i = 0; i < 3; i++) {
+            request(o, i, 1);
+            ReturnSettlement s = o.applyRequestedReturns();
+
+            // 🔴 **회차마다** 본다 — 음수는 마지막에만 나오는 것이 아니다.
+            assertThat(s.purchaseToRemove()).as("%d회차 누적구매 차감", i + 1).isGreaterThanOrEqualTo(0);
+            assertThat(s.refundAmount()).as("%d회차 환불액", i + 1).isGreaterThanOrEqualTo(0);
+            // ⚠ 원인 쪽도 회차마다 본다 — 부등식이 살아 있어야 다음 회차가 안 내려간다.
+            assertThat(o.remainingCouponDiscount() + o.remainingUsedPoint())
+                    .as("%d회차 뒤 부등식", i + 1)
+                    .isLessThanOrEqualTo(o.remainingItemsTotal());
+
+            refund += s.refundAmount();
+            purchase += s.purchaseToRemove();
+        }
+
+        // ✅ 수렴은 그대로다 — 적립금 20,000 이 전부 환불로 돌아간다(쿠폰 10,000 은 안 돌아간다).
+        assertThat(refund).isEqualTo(20_000);
+        // 적립 대상이 0 인 주문이라 «구매확정액» 도 통틀어 0 이다.
+        assertThat(purchase).isZero();
+    }
 }
