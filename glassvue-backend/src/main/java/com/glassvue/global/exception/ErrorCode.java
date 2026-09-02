@@ -101,6 +101,12 @@ public enum ErrorCode {
     //    그대로 저장됐고, 그러면 상세 화면이 뜻 없는 취소선을 그린다(할인이 아닌데 할인처럼 보인다).
     PRODUCT_LIST_PRICE_NOT_HIGHER("PRODUCT-400L", HttpStatus.BAD_REQUEST,
             "정가는 판매가보다 커야 합니다. 할인이 없으면 정가를 비워 두세요."),
+    // 🔴 위와 **같은 모양이 하나 더 있었다** (2026-09-02, BACKLOG §L-1). 옵션 가격차는 음수를
+    //    허용하는데(할인 옵션), 「기본가 + 가격차」가 0 이하가 되는 것을 아무도 안 봤다.
+    //    ⚠ 그러면 `effectivePrice` 의 `Math.max(0L, …)` 이 그것을 **0원 판매가로 접어** 장바구니·
+    //       주문까지 그대로 흘렀다 — 가드가 입력 오류를 «정상 가격» 으로 바꿔 준 자리다.
+    PRODUCT_VARIANT_PRICE_NOT_POSITIVE("PRODUCT-400P", HttpStatus.BAD_REQUEST,
+            "옵션 판매가(기본가 + 가격차)는 0원보다 커야 합니다."),
 
     // 기간 할인 (G-5, V52 — 2026-08-19)
     DISCOUNT_NOT_FOUND("PRODUCT-404D", HttpStatus.NOT_FOUND, "할인을 찾을 수 없습니다."),

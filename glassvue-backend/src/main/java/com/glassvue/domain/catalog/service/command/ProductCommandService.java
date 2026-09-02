@@ -80,9 +80,36 @@ public class ProductCommandService {
         }
     }
 
+    /**
+     * 🔴 <b>옵션 판매가가 0원 이하로 내려가는 것을 막는다</b> (2026-09-02, BACKLOG §L-1).
+     *
+     * <p>{@code priceDelta} 는 <b>음수를 허용한다</b>(할인 옵션) — 그건 의도된 결정이다.
+     * 문제는 <b>「기본가 + 가격차」의 하한을 아무도 안 봤다</b>는 것이다.
+     * {@link ProductVariant#effectivePrice(long)} 이 {@code Math.max(0L, …)} 로 접기 때문에
+     * 잘못 넣은 값이 <b>예외가 아니라 «0원 판매가»</b> 가 되어 장바구니·주문까지 그대로 흘렀다.
+     *
+     * <p>⚠ <b>{@code validateListPrice} 와 같은 계열이다</b> — 그쪽도
+     * *"API 로 부르면 그대로 저장됐다"* 였다. 🔴 <b>다만 이쪽이 더 나쁘다</b>: 저쪽은 화면이
+     * 이상해질 뿐이지만 이쪽은 <b>상품이 0원에 팔린다.</b>
+     *
+     * <p>⚠ <b>0 도 막는다</b>(«0보다 커야 한다»). 0원 상품을 팔 이유가 지금 없고, 허용하면
+     * 「무료 증정」과 「입력 실수」를 구분할 방법이 사라진다 — 필요해지면 그때 별도 개념으로 연다.
+     */
+    private static void validateVariantPrices(long price, List<VariantRequest> variants) {
+        if (variants == null) {
+            return;   // 개수 검증은 saveVariants 가 한다(PRODUCT_NO_VARIANT) — 여기서 겹치지 않는다.
+        }
+        for (VariantRequest v : variants) {
+            if (v.priceDelta() != null && price + v.priceDelta() <= 0) {
+                throw new BusinessException(ErrorCode.PRODUCT_VARIANT_PRICE_NOT_POSITIVE);
+            }
+        }
+    }
+
     @CacheEvict(cacheNames = "products:list", allEntries = true)
     public UUID create(ProductCreateRequest req, AuthUser actor) {
         validateListPrice(req.listPrice(), req.price());
+        validateVariantPrices(req.price(), req.variants());
         Category category = findCategory(req.categoryId());
         UUID imageGroupId = imageService.createGroup(req.imageIds());
         Product product = Product.builder()
@@ -114,6 +141,7 @@ public class ProductCommandService {
     public void update(UUID id, ProductUpdateRequest req, AuthUser actor) {
         // ⚠ 등록에만 걸면 «만들 때는 막히고 고칠 때는 통과» 가 된다 — 규칙이 반쪽이면 없느니만 못하다.
         validateListPrice(req.listPrice(), req.price());
+        validateVariantPrices(req.price(), req.variants());
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         Category category = findCategory(req.categoryId());
