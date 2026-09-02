@@ -190,4 +190,21 @@ class ConcurrentDeductionTest {
                 .isEqualTo(ledgerSum() - ledgerBefore);
         assertThat(balanceNow()).as("잔액이 음수가 아니다").isGreaterThanOrEqualTo(0);
     }
+
+    /*
+     * ⚠ **되돌려서 확인 (2026-09-02)** — 변형 셋 중 둘이 잡혔다:
+     *   U1 잠금 없는 finder 로 되돌림                    → ✅ 잡힘 (원래 버그)
+     *   U3 `@Lock` 을 통째로 제거                        → ✅ 잡힘
+     *   U2 `PESSIMISTIC_WRITE` → `PESSIMISTIC_READ`      → ❌ 안 잡힘
+     *
+     * ✅ **U2 가 안 잡힌 이유는 같은 날 실측했다** (`LockModeSqlProbeTest`):
+     * Oracle 방언이 **두 모드에 같은 절을 내보낸다** — 둘 다 ` for update` 다.
+     * 🔴 **즉 U2 는 «테스트가 약해서» 안 잡힌 것이 아니라 «바꿀 것이 없어서» 안 잡혔다.**
+     *
+     * ⚠ **처음엔 «확인 안 함» 으로 적어 뒀었다** — SQL 로깅을 켜려다 두 번 실패했기 때문이다
+     * (`--info` 로도, `LOGGING_LEVEL_ORG_HIBERNATE_SQL` 로도 안 켜졌다).
+     * 🔴 **물어볼 곳을 틀리게 잡고 있었다**: 실행 SQL 을 로그에서 «건져 올리려» 했는데
+     * **방언에 직접 물으면 됐다**(`Dialect#getReadLockString`). **경합을 만들 필요도 없었다.**
+     * → 「확인 못 했다」는 「확인할 수 없다」가 아니라 **「내가 고른 방법으로 못 했다」** 였다.
+     */
 }

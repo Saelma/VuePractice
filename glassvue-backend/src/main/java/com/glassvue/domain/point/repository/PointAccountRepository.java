@@ -33,6 +33,11 @@ public interface PointAccountRepository extends JpaRepository<PointAccount, UUID
      * 지금 필요한 것은 «충돌을 알리기» 가 아니라 «차감을 줄 세우기» 이고, 트래픽이 없어
      * 잠금 경합의 비용이 사실상 0 이다. 필요해지면 그때 바꾼다.
      *
+     * <p>⚠ <b>락 모드는 Oracle 에서 «읽기» 와 «쓰기» 가 같은 절로 나간다</b>(둘 다 {@code for update} —
+     * {@code LockModeSqlProbeTest} 가 방언에 직접 물어 확인했다). 🔴 <b>그래도
+     * {@code PESSIMISTIC_WRITE} 를 쓴다</b> — 여기서 하려는 일이 «쓰기 직전에 줄 세우기» 이고,
+     * <b>의도를 코드가 말해야</b> DB 가 바뀌어도 뜻이 안 흐려진다.
+     *
      * <p>⚠ <b>조회 경로와 반드시 갈라 둔다</b> — {@code myAccount}·{@code balanceOf}·{@code gradeOf}
      * 는 {@code @Transactional(readOnly = true)} 라 여기에 걸리면 안 된다.
      * 🔴 <b>그래서 기존 {@code findByMemberId} 에 애노테이션을 붙이지 않고 메서드를 하나 더 뒀다.</b>
