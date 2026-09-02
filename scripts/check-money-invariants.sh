@@ -67,11 +67,19 @@ select 'point 잔액 = 원장 합|'||count(*) from (
   select pa.member_id from point_account pa
    where pa.balance <> (select nvl(sum(ph.amount),0) from point_history ph where ph.member_id=pa.member_id));
 
--- ⑧ 🔴 판매량 = 실판매(주문 − 취소 − 반품). 2026-09-02 현재 **알려진 위반이 있다**(아래 주석).
+-- ⑧ 판매량 = 실판매. 🔴 **전량 취소·전량 반품은 `order_item` 의 수량 칸을 안 건드린다** —
+--    그 칸은 «부분» 만 기록하고 전량은 주문 `status` 가 들고 있다(OrderStatsRepository 의 TOP 쿼리와
+--    같은 판단: *"상태 필터는 전량 취소·반품만 걸러내므로 부분은 PAID·DELIVERED 로 남는다"*).
+--    ⚠ 그래서 status 를 안 보고 품목 칸만 빼면 **전량 취소된 주문이 «팔린 것» 으로 잡힌다** —
+--    2026-09-02 에 그 식으로 «위반 6건» 이라는 허깨비를 만들었다.
+--    ⚠ ORDERED(결제 전)는 **센다** — 핸들러가 «주문됨» 에 더하기 때문이다(정의가 그렇다).
 select 'product.sold_count = 실판매|'||count(*) from (
   select p.id from product p left join order_item i on i.product_id=p.id
+                             left join orders o on o.id=i.order_id
    group by p.id, p.sold_count
-   having nvl(p.sold_count,0) <> nvl(sum(i.quantity-nvl(i.cancelled_quantity,0)-nvl(i.returned_quantity,0)),0));
+   having nvl(p.sold_count,0) <> nvl(sum(
+     case when o.status in ('CANCELLED','RETURNED') then 0
+          else i.quantity-nvl(i.cancelled_quantity,0)-nvl(i.returned_quantity,0) end),0));
 exit
 SQL
 )
@@ -80,11 +88,10 @@ if [ $? -ne 0 ]; then
   echo "⚠ DB 에 못 붙었거나 쿼리가 실패했다 — 판정 불가:"; echo "$OUT" | sed 's/^/    /'; exit 2
 fi
 
-# 🔴 **알려진 위반**: sold_count 는 2026-09-02 현재 6건이 어긋나 있다(전부 낮은 쪽).
-# 08-25 이전에 «되돌릴 때 원본 수량을 썼던» 결함의 잔재이고, addSoldCount 가 0 에서 바닥을 쳐
-# 그 손실이 영구가 됐다. **현재 코드는 안 샌다**(SoldCountLifecycleIntegrationTest 6건이 지킨다).
-# 보정할지는 아직 안 정했다 — 정하면 이 숫자를 0 으로 내리고 이 주석을 지운다.
-KNOWN_SOLD_COUNT=6
+# ⚠ 알려진 위반은 **없다**. 2026-09-02 실측: 여덟 개 전부 0.
+# 🔴 «sold_count 에 08-25 이전의 잔재가 남아 있다» 는 오래 물려받힌 주장은 **실측하니 거짓**이었다
+#    (백로그 §K-1). 값을 다시 0 이 아닌 것으로 두려면 **왜 그런지를 여기 적고** 기준을 올린다.
+KNOWN_SOLD_COUNT=0
 
 FAIL=0
 SEEN=0
@@ -95,7 +102,7 @@ while IFS='|' read -r name n; do
   if [ "$n" = "0" ]; then
     printf '  ✅ %-34s 위반 0\n' "$name"
   elif [ "$name" = "product.sold_count = 실판매" ] && [ "$n" = "$KNOWN_SOLD_COUNT" ]; then
-    printf '  ⚠  %-34s 위반 %s — **알려진 잔재**(09-02, 안 늘었다)\n' "$name" "$n"
+    printf '  ⚠  %-34s 위반 %s — **알려진 잔재**(기준과 같다)\n' "$name" "$n"
   else
     printf '  🔴 %-34s 위반 %s\n' "$name" "$n"; FAIL=1
   fi
