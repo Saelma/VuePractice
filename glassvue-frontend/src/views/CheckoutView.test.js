@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 
 // 주문서(고객) — **배선**만 본다 (2026-09-02, BACKLOG §K/C 후속).
@@ -17,6 +17,9 @@ import { mount, flushPromises } from '@vue/test-utils';
 
 const push = vi.fn();
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: (...a) => push(...a) }) }));
+
+const setCartCount = vi.fn();
+vi.mock('../stores/cart', () => ({ setCartCount: (...a) => setCartCount(...a) }));
 
 const getCart = vi.fn();
 const checkout = vi.fn();
@@ -42,11 +45,23 @@ vi.mock('../api/point', async (importOriginal) => ({
 import CheckoutView from './CheckoutView.vue';
 import { authState } from '../stores/auth';
 
-/** 상품합계 50,000 · 배송비 0(무료 기준을 넘겼다). */
+/**
+ * 상품합계 50,000 · 배송비 0(무료 기준을 넘겼다).
+ * 🔴 **`CartItemResponse` 의 칸 이름이다** — `name`·`thumbUrl` 이고 주문 DTO 와 **다르다**.
+ * ⚠ `productId` 도 넣는다 — 템플릿이 `:key` 로 쓴다.
+ */
+function cartItem(overrides = {}) {
+  return {
+    productId: 'p1', variantId: 'v1', name: 'ZZ주문서상품', optionName: null,
+    price: 25_000, regularPrice: 25_000, quantity: 2, lineTotal: 50_000,
+    available: true, thumbUrl: null,
+    ...overrides,
+  };
+}
+
 function cart(overrides = {}) {
   return {
-    items: [{ variantId: 'v1', productName: 'ZZ상품', optionName: null, price: 25_000,
-              quantity: 2, lineTotal: 50_000, productImageUrl: null, available: true }],
+    items: [cartItem()],
     totalQuantity: 2, totalPrice: 50_000, shippingFee: 0, payAmount: 50_000, amountUntilFree: 0,
     ...overrides,
   };
@@ -61,9 +76,9 @@ async function open({ cartData = cart(), coupons = [], balance = 100_000 } = {})
   fetchMyCoupons.mockResolvedValue(coupons);
   fetchAddresses.mockResolvedValue([]);
   fetchPointAccount.mockResolvedValue(balance == null ? null : { balance, totalPurchase: 0, grade: 'BRONZE' });
-  const w = mount(CheckoutView);
+  mounted = mount(CheckoutView);
   await flushPromises();
-  return w;
+  return mounted;
 }
 
 /**
@@ -98,9 +113,24 @@ const btn = (w, text) => w.findAll('button').find((b) => b.text().includes(text)
 /** 제출 버튼. ⚠ 「주문」이 아니라 **「결제하기」** 다(제출 중엔 「주문 중…」). */
 const payBtn = (w) => btn(w, '결제하기') || btn(w, '주문 중');
 
+let mounted = null;
+
 beforeEach(() => {
   vi.clearAllMocks();
   authState.user = { id: 'm1', nickname: 'ZZ구매자', role: 'USER' };
+});
+
+/**
+ * ⚠ **마운트한 것은 반드시 언마운트한다**(`AuditLogAdminView.test.js` 의 규약).
+ * 이 화면은 `ShippingAddressFields` 로 DevExtreme 위젯을 여섯 개 띄운다 —
+ * 🔴 **남겨 두면 jsdom 정리 뒤 `window.getComputedStyle is not a function` 이
+ * «처리되지 않은 에러» 로 터지고, 그건 전수 실행에서만 보인다.**
+ * 지금은 재현되지 않지만 **문서화된 고장 모양**이라 미리 지킨다.
+ */
+afterEach(() => {
+  mounted?.unmount();
+  mounted = null;
+  vi.restoreAllMocks();
 });
 
 describe('CheckoutView — 적립금 상한 배선', () => {
@@ -137,12 +167,22 @@ describe('CheckoutView — 적립금 상한 배선', () => {
     getCart.mockResolvedValue(cart());
     fetchMyCoupons.mockResolvedValue([]);
     fetchAddresses.mockResolvedValue([]);
-    const w = mount(CheckoutView);
+    mounted = mount(CheckoutView);
+    const w = mounted;
     await flushPromises();
 
     // 🔴 「실패해도 주문은 되어야 한다」가 코드의 명시적 판단이다(`.catch(() => null)`).
     expect(w.text()).not.toContain('적립금 조회 실패');
     expect(payBtn(w)).toBeDefined();
+  });
+});
+
+describe('CheckoutView — 요약이 장바구니를 그대로 읽는다', () => {
+
+  it('품목 이름을 그린다 — 칸 이름이 어긋나면 빈 줄이 된다', async () => {
+    const w = await open();
+    // 🔴 장바구니 DTO 는 `name` 이다. 주문 DTO 의 `productName` 을 쓰면 여기가 빈다.
+    expect(w.text()).toContain('ZZ주문서상품');
   });
 });
 
@@ -211,6 +251,37 @@ describe('CheckoutView — 서버에 무엇을 보내는가', () => {
   });
 });
 
+describe('CheckoutView — 주문이 된 뒤', () => {
+
+  it('🔴 헤더 🛒 배지를 **0 으로 내리고** 주문 상세로 보낸다', async () => {
+    const w = await open();
+    await fillAddress(w);
+    checkout.mockResolvedValue('o-123');
+
+    await payBtn(w).trigger('click');
+    await flushPromises();
+
+    // ⚠ 이게 빠지면 **주문을 끝냈는데 헤더가 「2」라고 말한다** — 화면은 멀쩡히 넘어간다.
+    //    🔴 `CartView` 는 이 불변식을 자기 파일의 머리에 걸어 뒀는데 여기만 비어 있었다
+    //    (2026-09-02 리뷰가 «비대칭» 이라고 지적한 자리).
+    expect(setCartCount).toHaveBeenCalledWith(0);
+    expect(push).toHaveBeenCalledWith('/orders/o-123');
+  });
+
+  it('⚠ 주문이 실패하면 배지도 안 건드리고 이동도 안 한다', async () => {
+    const w = await open();
+    await fillAddress(w);
+    checkout.mockRejectedValue(new Error('ZZ-주문 실패'));
+
+    await payBtn(w).trigger('click');
+    await flushPromises();
+
+    expect(setCartCount).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    expect(w.text()).toContain('ZZ-주문 실패');
+  });
+});
+
 describe('CheckoutView — 제출 가드', () => {
 
   it('빈 장바구니로는 주문이 안 나간다', async () => {
@@ -226,8 +297,7 @@ describe('CheckoutView — 제출 가드', () => {
 
   it('🔴 품절 상품이 섞여 있으면 주문이 안 나간다 — 서버 400 을 화면이 먼저 막는다', async () => {
     const w = await open({
-      cartData: cart({ items: [{ variantId: 'v1', productName: 'ZZ품절', price: 25_000, quantity: 2,
-                                 lineTotal: 50_000, productImageUrl: null, available: false }] }),
+      cartData: cart({ items: [cartItem({ name: 'ZZ품절상품', available: false })] }),
     });
     await fillAddress(w);
 
