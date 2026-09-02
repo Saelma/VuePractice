@@ -57,7 +57,14 @@ class PointServiceTest {
     private final UUID memberId = UUID.randomUUID();
     private final UUID orderId = UUID.randomUUID();
 
-    /** 잔액·누적액을 원하는 상태로 만든 계정을 리포지토리가 돌려주게 한다. */
+    /**
+     * 잔액·누적액을 원하는 상태로 만든 계정을 리포지토리가 돌려주게 한다.
+     *
+     * <p>🔴 <b>«잠그고 읽는» 쪽을 먹인다</b>({@code findByMemberIdForUpdate}, 2026-09-02 §I-11-1).
+     * 잔액을 바꾸는 경로는 전부 {@code accountOrOpen()} 을 지나고, 그쪽만 잠금 finder 를 쓴다.
+     * ⚠ <b>조회 테스트(`myAccount`·`gradeOf`)는 잠금 없는 {@code findByMemberId} 를 그대로 먹인다</b> —
+     * 두 경로가 갈린 것이 설계이고, <b>이 파일이 그 갈림을 그대로 비춘다.</b>
+     */
     private PointAccount given(long balance, long totalPurchase) {
         PointAccount account = PointAccount.openFor(memberId);
         if (balance > 0) {
@@ -66,13 +73,13 @@ class PointServiceTest {
         if (totalPurchase > 0) {
             account.addPurchase(totalPurchase);
         }
-        when(accountRepository.findByMemberId(memberId)).thenReturn(Optional.of(account));
+        when(accountRepository.findByMemberIdForUpdate(memberId)).thenReturn(Optional.of(account));
         return account;
     }
 
     /** 계정이 아직 없는 회원 — accountOrOpen 이 그 자리에서 열어야 한다. */
     private void givenNoAccount() {
-        when(accountRepository.findByMemberId(memberId)).thenReturn(Optional.empty());
+        when(accountRepository.findByMemberIdForUpdate(memberId)).thenReturn(Optional.empty());
         when(accountRepository.save(any(PointAccount.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 

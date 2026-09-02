@@ -249,7 +249,10 @@ public class PointService {
      * 이미 쓰기 트랜잭션이기 때문이다. 읽기 경로({@link #myAccount}·{@link #balanceOf})는 저장하지 않는다.
      */
     private PointAccount accountOrOpen(UUID memberId) {
-        return accountRepository.findByMemberId(memberId)
+        // 🔴 **잠그고 읽는다** (2026-09-02, §I-11). 잔액을 바꾸는 경로는 **전부 여기를 지나므로**
+        //    이 한 줄이 다섯을 덮는다. ⚠ 조회 경로는 `findByMemberId`(락 없음)를 그대로 쓴다 —
+        //    거기는 `readOnly = true` 라 쓰기 락을 걸면 안 된다.
+        return accountRepository.findByMemberIdForUpdate(memberId)
                 .orElseGet(() -> accountRepository.save(PointAccount.openFor(memberId)));
     }
 
