@@ -15,11 +15,37 @@
 #   묶어 설명하는 자리는 그렇게 쓰는 것이 맞다. 블록 종류를 구분하지 않고 닫는 `*/`
 #   만 세면 그것들이 전부 오검출된다(첫 판이 그렇게 틀렸다).
 #
+# 쓰는 법:
+#   check-orphan-javadoc.sh                 # 지금 워킹트리
+#   check-orphan-javadoc.sh 6fc3dde^        # 과거 커밋(리비전을 그대로 준다)
+#   check-orphan-javadoc.sh /path/to/tree   # 임의의 디렉터리
+#
 # 종료코드: 0 = 없음, 1 = 발견
 set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${1:-$REPO_DIR/glassvue-backend}"
+ARG="${1:-}"
+TMPDIR_EXTRACT=""
+
+if [[ -z "$ARG" ]]; then
+  TARGET="$REPO_DIR/glassvue-backend"
+elif [[ -d "$ARG" ]]; then
+  TARGET="$ARG"
+elif git -C "$REPO_DIR" rev-parse --verify --quiet "$ARG^{commit}" >/dev/null; then
+  # 리비전이다 — 그 시점의 src 만 꺼내 검사한다 (워킹트리는 건드리지 않는다)
+  TMPDIR_EXTRACT="$(mktemp -d)"
+  trap '[[ -n "$TMPDIR_EXTRACT" ]] && rm -rf "$TMPDIR_EXTRACT"' EXIT
+  if ! git -C "$REPO_DIR/glassvue-backend" archive "$ARG" src \
+       | tar -x -C "$TMPDIR_EXTRACT"; then
+    echo "‼ $ARG 에서 glassvue-backend/src 를 꺼내지 못했다." >&2
+    exit 2
+  fi
+  TARGET="$TMPDIR_EXTRACT"
+  echo "# $ARG 시점을 검사한다"
+else
+  echo "‼ 디렉터리도 아니고 git 리비전도 아니다: $ARG" >&2
+  exit 2
+fi
 
 python3 - "$TARGET" <<'PY'
 import io, os, sys
