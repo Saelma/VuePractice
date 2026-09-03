@@ -533,8 +533,8 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
                 <!--
                   주문 시점 스냅샷에 줄을 긋는다. 🔴 **무엇을 그을지는 strikePrice 가 정한다**(G-9) —
                   세일로 샀으면 `regularPrice`(세일 전 판매가), 아니면 `listPrice`(정가).
-                  ⚠ 예전엔 여기서 `item.listPrice` 를 직접 읽었는데, 그러면 **정가 칸이 빈 상품을
-                  세일가로 산 주문**에 흔적이 아예 안 남는다(실측 2026-08-20, 20260820-4733).
+                  ⚠ **`item.listPrice` 를 직접 읽지 않는다** — 그러면 **정가 칸이 빈 상품을
+                  세일가로 산 주문**에 흔적이 아예 안 남는다.
                   ⚠ 둘 다 없으면 `hasDiscount` 가 거짓이라 이 줄 자체가 안 그려진다.
                 -->
                 <span v-if="hasDiscount(item)" class="line-through">{{ priceText(strikePrice(item)) }}</span>
