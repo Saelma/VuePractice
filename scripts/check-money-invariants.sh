@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 운영 DB 의 «돈과 수량» 불변식 **11개**를 센다 (2026-09-02, 「돈과 수량이 맞는가」 축).
+# 운영 DB 의 «원장이 서로 맞는가» 불변식 **19개**를 센다.
+# (2026-09-02 「돈과 수량」 11개 · 2026-09-03 「쿠폰·알림 원장」 8개를 더했다)
 #
 # 왜 스크립트인가: 2026-09-02 에 이 일곱 개를 sqlplus 로 **손으로** 돌려 sold_count 어긋남을
 # 찾았는데, 손으로 돌린 SQL 은 그 세션이 끝나면 사라진다. 아침 기준값 재계수(WA §3-5)가
@@ -106,6 +107,52 @@ select 'stock 이력 합 = 재고 변화|'||count(*) from (
 select 'stock 이력 없이 생긴 재고|'||count(*) from product_variant v
  where v.created_at >= (select min(created_at) from stock_history where reason='ADMIN_CREATE')
    and not exists (select 1 from stock_history h where h.variant_id=v.id);
+
+-- ⑫~⑲ 쿠폰·알림 원장 (2026-09-03). 09-02 이월이 «11개가 «다» 라는 근거는 없다 —
+--    쿠폰 발급·알림은 아직 이런 각도로 안 봤다» 로 남긴 자리다.
+--
+-- ⚠ **DB 가 이미 막는 것은 여기 안 넣는다.** 실측으로 확인한 유니크 인덱스가 둘 있다:
+--    `UX_MEMBER_COUPON_ONCE(member_id, coupon_id)` — 같은 쿠폰 중복 발급
+--    `UX_COUPON_WELCOME` — 가입 쿠폰은 최대 하나
+--    🔴 둘은 **절대 안 깨지므로 세면 «성립» 이 늘 뿐 아무것도 안 지킨다.** 여기 있는 여덟은
+--    전부 **앱 코드만 지키는** 것들이다(리스너·서비스 가드).
+
+-- ⑫⑬ 탈퇴 리스너가 남긴 것이 없다 — DB 에 FK/CASCADE 가 없어 **앱이 지우는 수밖에 없다**.
+select 'coupon 고아 member_coupon|'||count(*) from member_coupon mc
+ where not exists (select 1 from member m where m.id=mc.member_id);
+select 'coupon 고아 notification|'||count(*) from notification n
+ where not exists (select 1 from member m where m.id=n.member_id);
+
+-- ⑭⑮ 주문 ↔ 발급쿠폰의 «사용됨» 이 서로 맞는다. 취소·반품은 `MemberCoupon.restore()` 로 되돌리므로
+--    🔴 **살아 있는 주문이 건 쿠폰은 반드시 사용됨**이고, 거꾸로 **사용됨인데 그것을 쓰는 살아 있는
+--    주문이 없으면 쿠폰이 «증발» 한 것**이다(고객은 못 쓰는데 원장엔 쓴 것으로 남는다).
+select 'coupon 산 주문의 쿠폰이 미사용|'||count(*) from orders o
+   join member_coupon mc on mc.id=o.member_coupon_id
+ where o.status not in ('CANCELLED','RETURNED') and mc.used_at is null;
+select 'coupon 사용표시인데 쓸 주문 없음|'||count(*) from member_coupon mc
+ where mc.used_at is not null
+   and not exists (select 1 from orders o
+                    where o.member_coupon_id=mc.id and o.status not in ('CANCELLED','RETURNED'));
+
+-- ⑯ 할인이 붙었으면 어느 발급쿠폰인지도 있어야 한다.
+--    🔴 **V46 이후 주문만 본다** — 그 컬럼 자체가 V46(2026-08-11)에 생겼고, 컬럼 주석이
+--    *«NULL 이면 미사용이거나 V46 이전 주문»* 이라고 적어 뒀다. ⚠ 안 좁히면 `20260728-0478`
+--    한 건이 늘 걸린다(2026-09-03 에 그렇게 «위반 1» 이라는 허깨비를 만들었다).
+--    ⚠ 날짜를 박지 않고 flyway 에게 묻는다 — ⑪ 과 같은 자기보정이다.
+select 'coupon 할인>0 인데 쿠폰 NULL|'||count(*) from orders o
+ where o.coupon_discount>0 and o.member_coupon_id is null
+   and o.created_at > (select "installed_on" from "flyway_schema_history" where "version"='46');
+
+-- ⑰⑱ 할인 금액의 경계. 쿠폰 상한은 결제 때 `Coupon.meetsMinOrder`·`maxDiscountAmount` 가 잡고,
+--    회수분은 부분 취소·반품이 몫을 나눠 뗀다 — 둘 다 앱 계산이라 넘칠 수 있다.
+select 'coupon 할인 > 상품합계|'||count(*) from orders where coupon_discount > total_price;
+select 'coupon 회수몫 > 원래 할인|'||count(*) from orders
+ where nvl(cancelled_coupon_discount,0)+nvl(returned_coupon_discount,0) > nvl(coupon_discount,0);
+
+-- ⑲ 🔴 알림 링크에 «null» 이 박히지 않았다. TROUBLESHOOTING 「알림은 오는데 누르면 깨진 페이지」 —
+--    링크를 문자열로 조립하는데 재료가 null 이면 `/products/null#…` 이 저장된다.
+--    ⚠ **서버 로그에 아무것도 안 남는다**(예외도 에러도 아니다) — 그래서 이 각도 말고는 못 잡는다.
+select 'notif 링크에 null 박힘|'||count(*) from notification where link like '%null%';
 exit
 SQL
 )
@@ -134,9 +181,10 @@ while IFS='|' read -r name n; do
   fi
 done <<< "$OUT"
 
-# ⚠ 불변식 여덟 개를 다 읽었는가 — 덜 읽었으면 «성립» 이 아니라 «못 셌다» 다.
-if [ "$SEEN" -ne 11 ]; then
-  echo "  ⚠ 불변식 11개 중 ${SEEN}개만 읽혔다 — **판정 불가**."; exit 2
+# ⚠ 불변식을 다 읽었는가 — 덜 읽었으면 «성립» 이 아니라 «못 셌다» 다.
+# 🔴 개수를 늘릴 때 이 숫자도 함께 고친다 — 안 고치면 새 줄이 조용히 «판정 불가» 를 만든다.
+if [ "$SEEN" -ne 19 ]; then
+  echo "  ⚠ 불변식 19개 중 ${SEEN}개만 읽혔다 — **판정 불가**."; exit 2
 fi
 
 if [ "$FAIL" -eq 1 ]; then
