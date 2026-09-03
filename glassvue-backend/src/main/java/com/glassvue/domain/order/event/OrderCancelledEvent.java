@@ -12,9 +12,8 @@ import java.util.UUID;
  * 재고 복원은 catalog가 자체적으로 처리하므로 이 이벤트에 담지 않는다(취소 처리의 일부지 후처리가 아님).
  *
  * <p>{@code lines} 는 상품별 수량 — catalog 가 판매량 비정규화에서 <b>되돌리는</b> 데 쓴다(주문의 반대, B-8).
- */
-/**
- * ⚠ <b>{@code cancelledAmount} 는 «이번에 취소된 금액» 이지 주문 원금이 아니다</b> (2026-08-25, §I).
+ *
+ * <p>⚠ <b>{@code cancelledAmount} 는 «이번에 취소된 금액» 이지 주문 원금이 아니다</b> (2026-08-25, §I).
  *
  * <p>🔴 예전 이름은 {@code totalPrice} 였고 값도 {@code order.getTotalPrice()}(원본)였다. 부분 취소가
  * 생기기 전에는 «원본 = 이번에 취소된 것» 이라 구별할 이유가 없었는데, <b>부분 취소 뒤 전체 취소</b>

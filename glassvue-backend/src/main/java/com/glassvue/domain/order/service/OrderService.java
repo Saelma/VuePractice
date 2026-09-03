@@ -515,21 +515,11 @@ public class OrderService {
      *
      * <p>⚠ {@code what} 은 «이 조작이 무엇을 움직였는가» 다 — 택배사·송장 · 나간 적립금 · 환불액 · 사유.
      * 주문번호는 여기서 붙이므로 <b>호출자가 또 적지 않는다</b>(V43 때는 호출자가 직접 이어 붙였다).
-     */
-    /**
-     * 원장 {@code detail} 의 상한 — {@code AdminAuditLog.detail} 이 {@code VARCHAR2(1000)} 이다.
      *
-     * <p>🔴 <b>넘으면 조작 자체가 롤백된다.</b> 감사는 <b>같은 트랜잭션</b>에서 저장되므로
-     * (`AdminAuditCommandService` — «감사가 실패하면 조작 전체가 함께 롤백된다»),
-     * 길이 초과({@code ORA-12899})는 «원장만 못 남는 것» 이 아니라 <b>반품 승인·취소가 실패하는 것</b>이다.
-     * ⚠ <b>저장소 어디에도 자르는 곳이 없었다</b>(2026-08-26 확인) — 지금까지는 문자열이 짧아서
-     * 안 터진 것이지 막혀 있던 것이 아니다.
-     */
-
-    /**
-     * ⚠ <b>여기서 자르지 않는다</b> (2026-08-27, §I-13). 상한 처리는 {@code AdminAuditLog} 한 곳으로
-     * 옮겼다 — 전엔 주문과 상품이 <b>각자 잘랐고 방식이 달랐다</b>(주문은 «…(잘림)» 을 붙였고
-     * 상품은 조용히 잘랐다). 🔴 원장에 쓰는 길이 하나뿐이라 거기서 자르면 <b>모든 도메인이</b> 안전하다.
+     * <p>⚠ <b>{@code what} 의 길이를 여기서 자르지 않는다</b> (2026-08-27, §I-13). 상한 처리는
+     * {@code AdminAuditLog#DETAIL_MAX} 한 곳으로 옮겼다 — 전엔 주문과
+     * 상품이 <b>각자 잘랐고 방식이 달랐다</b>(주문은 «…(잘림)» 을 붙였고 상품은 조용히 잘랐다).
+     * 🔴 원장에 쓰는 길이 하나뿐이라 거기서 자르면 <b>모든 도메인이</b> 안전하다.
      */
     private void publishAudit(AuditAction action, AuthUser actor, Order order, String what) {
         eventPublisher.publishEvent(new AdminActionEvent(

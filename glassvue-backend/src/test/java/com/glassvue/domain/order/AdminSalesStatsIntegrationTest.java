@@ -119,12 +119,6 @@ class AdminSalesStatsIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    /**
-     * {@code paid_at} 을 특정 시각으로 박는다.
-     *
-     * <p>정상 경로로는 "지금" 밖에 만들 수 없어서 <b>KST 경계를 재현할 방법이 없다.</b>
-     * 그래서 테스트에서만 직접 쓴다. 운영 코드에는 이런 경로가 없다.
-     */
     /** 발송·배송완료(관리자). 반품은 배송완료 주문에서만 요청할 수 있어 여기까지 밀어 준다. */
     private void ship(String admin, String orderId) throws Exception {
         mockMvc.perform(post("/api/orders/" + orderId + "/ship").header("Authorization", admin)
@@ -137,6 +131,12 @@ class AdminSalesStatsIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    /**
+     * {@code paid_at} 을 특정 시각으로 박는다.
+     *
+     * <p>정상 경로로는 "지금" 밖에 만들 수 없어서 <b>KST 경계를 재현할 방법이 없다.</b>
+     * 그래서 테스트에서만 직접 쓴다. 운영 코드에는 이런 경로가 없다.
+     */
     private void forcePaidAt(String orderId, Instant paidAt) {
         entityManager.flush();
         entityManager.createNativeQuery("UPDATE orders SET paid_at = ?1 WHERE id = ?2")
