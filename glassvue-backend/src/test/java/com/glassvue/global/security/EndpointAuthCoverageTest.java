@@ -80,6 +80,10 @@ class EndpointAuthCoverageTest {
             // 정책 — 배송비·등급 기준은 장바구니 전에 보여야 한다.
             "GET /api/policy/shipping",
             "GET /api/policy/grades",
+            // 서버 기준 «오늘»(KST). 기간 프리셋의 기준점이다 — 날짜 하나이고 아무것도 드러내지 않는다.
+            // 🔴 이 줄은 «이 테스트가 실제로 잡아서» 생겼다(2026-09-07, B-26 잔여 작업 중).
+            //    변형 주입이 아니라 **진짜 새 엔드포인트**를 첫 실전에서 잡았다.
+            "GET /api/policy/today",
             // 쿠폰 «안내» 둘. ⚠ 받기(claim)는 공개가 아니다 — SecurityConfig 가 매처로 가른다.
             "GET /api/coupons/welcome",
             "GET /api/coupons/event");

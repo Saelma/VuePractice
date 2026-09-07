@@ -19,6 +19,7 @@ import {
   resolveOrderStatusFilter,
 } from '../api/order';
 import { priceText } from '../api/product';
+import AdminPeriodPicker from '../components/AdminPeriodPicker.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -27,7 +28,23 @@ const error = ref('');
 // 기본은 **결제완료(PAID)** = 발송 대기. `?status=` 로 들어오면 그쪽을 우선한다 —
 // 관리자 홈(B-16)의 「반품 요청」 카드처럼 **다른 할 일을 집어서 오는 진입점**이 생겼다.
 // 값 판정은 api/order.js 에 두고 테스트로 고정했다(모르는 값이 빈 목록으로 보이는 걸 막는다).
-const form = ref({ status: resolveOrderStatusFilter(route.query.status), buyer: '', orderNo: '' });
+const form = ref({
+  status: resolveOrderStatusFilter(route.query.status), buyer: '', orderNo: '', from: '', to: '',
+});
+
+/**
+ * 기간 선택 (B-26 잔여, 2026-09-07).
+ *
+ * 🔴 **고르면 바로 검색한다** — 프리셋은 «누르는 것이 곧 질문»이라 「검색」을 한 번 더 누르게 하면
+ * 두 번 눌러야 한다. ⚠ 직접 고르기는 **양쪽이 다 찼을 때만** 컴포넌트가 알려 준다.
+ *
+ * ⚠ **상태 탭과 독립이다** — 기간을 고르면서 탭이 «발송 대기» 에 있으면
+ * 「그 기간의 발송 대기」를 보는 것이 맞고, 그게 CS 에서 실제로 묻는 모양이다.
+ */
+function applyPeriod({ from, to }) {
+  form.value = { ...form.value, from, to };
+  search();
+}
 const applied = ref({ ...form.value });
 const gridRef = ref(null);
 
@@ -86,7 +103,7 @@ function search() {
   gridRef.value?.instance.refresh();
 }
 function reset() {
-  form.value = { status: null, buyer: '', orderNo: '' };
+  form.value = { status: null, buyer: '', orderNo: '', from: '', to: '' };
   search();
 }
 
@@ -249,7 +266,10 @@ function fmt(v) {
       </button>
     </div>
 
-    <div class="card mb-4 flex flex-wrap items-end gap-3 p-4">
+    <div class="card mb-4 space-y-3 p-4">
+      <!-- 기간 (B-26). ⚠ 상태 탭 바로 아래 — 「8월 3일 들어온 주문」이 탭과 함께 걸리는 질문이다. -->
+      <AdminPeriodPicker :from="form.from" :to="form.to" @change="applyPeriod" />
+      <div class="flex flex-wrap items-end gap-3 border-t border-line pt-3">
       <label class="field">
         <span class="field-label">구매자</span>
         <DxTextBox v-model:value="form.buyer" placeholder="닉네임" :width="180" @enter-key="search" />
@@ -262,6 +282,7 @@ function fmt(v) {
       <div class="flex gap-2">
         <button type="button" class="btn btn-primary" @click="search">검색</button>
         <button type="button" class="btn btn-secondary" @click="reset">초기화</button>
+      </div>
       </div>
     </div>
 

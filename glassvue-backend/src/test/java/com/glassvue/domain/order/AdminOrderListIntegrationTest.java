@@ -1,5 +1,6 @@
 package com.glassvue.domain.order;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -42,6 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 class AdminOrderListIntegrationTest {
 
     @Autowired MockMvc mockMvc;
+    @Autowired jakarta.persistence.EntityManager entityManager;
     @Autowired MemberRepository memberRepository;
     @Autowired OrderRepository orderRepository;
     @Autowired org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
@@ -292,4 +294,69 @@ class AdminOrderListIntegrationTest {
         return "20260101-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
+    // ---------- 기간 (B-26 잔여, 2026-09-07) ----------
+
+    /**
+     * 이 테스트가 넣은 주문 셋의 {@code created_at} 을 한 날로 박는다.
+     *
+     * <p>정상 경로로는 «지금» 밖에 못 만들어 <b>KST 경계를 재현할 방법이 없다</b> —
+     * {@code AdminSalesStatsIntegrationTest.forcePaidAt} 과 같은 이유·같은 방식이다.
+     * ⚠ 운영 코드에는 이런 경로가 없다.
+     */
+    private void forceCreatedAt(java.time.Instant at) {
+        entityManager.flush();
+        entityManager.createNativeQuery(
+                        "UPDATE orders SET created_at = ?1 WHERE buyer_nickname = ?2")
+                .setParameter(1, at)
+                .setParameter(2, MARK + "-구매자")
+                .executeUpdate();
+        entityManager.clear();
+    }
+
+    private int countIn(String admin, String query) throws Exception {
+        String body = mockMvc.perform(get("/api/admin/orders?buyer=" + MARK + query)
+                        .header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(body, "$.data.totalElements")).intValue();
+    }
+
+    @Test
+    @DisplayName("기간: 종료일은 포함된다 — 그 날 23:59:59.5 주문도 걸린다")
+    void period_endDateIsInclusive() throws Exception {
+        String admin = login(adminLoginId);
+        // KST 2026-05-20 23:59:59.5 = UTC 14:59:59.5
+        forceCreatedAt(java.time.Instant.parse("2026-05-20T14:59:59.500Z"));
+
+        assertThat(countIn(admin, "&from=2026-05-20&to=2026-05-20"))
+                .as("종료일 마지막 순간이 빠지면 안 된다 — 초 미만은 눈에 안 보인다")
+                .isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("기간: 밖은 안 걸리고, 넓히면 다시 걸린다(대조군)")
+    void period_outsideExcluded_widerIncludes() throws Exception {
+        String admin = login(adminLoginId);
+        forceCreatedAt(com.glassvue.global.common.KstDates.startOfDay(
+                java.time.LocalDate.of(2026, 5, 20)));   // KST 00:00 정각
+
+        assertThat(countIn(admin, "&from=2026-05-21")).as("시작일이 하루 뒤면 0").isZero();
+        assertThat(countIn(admin, "&to=2026-05-19")).as("종료일이 하루 앞이면 0").isZero();
+        // 🔴 대조군 — 필터가 «전부» 를 걸러내는 것이 아님을 같은 행으로 보인다(WA §3-3).
+        assertThat(countIn(admin, "&from=2026-05-20&to=2026-05-20"))
+                .as("시작일 00:00 정각은 포함이다").isEqualTo(3);
+        assertThat(countIn(admin, "")).as("기간을 안 주면 전체다").isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("기간은 상태 탭과 함께 걸린다 — 「그 기간의 결제완료」")
+    void period_combinesWithStatus() throws Exception {
+        String admin = login(adminLoginId);
+        forceCreatedAt(com.glassvue.global.common.KstDates.startOfDay(
+                java.time.LocalDate.of(2026, 5, 20)));
+
+        assertThat(countIn(admin, "&status=PAID&from=2026-05-20&to=2026-05-20"))
+                .as("셋 중 PAID 는 하나다").isEqualTo(1);
+        assertThat(countIn(admin, "&status=PAID&from=2026-05-21"))
+                .as("대조군: 기간이 어긋나면 상태가 맞아도 0").isZero();
+    }
 }

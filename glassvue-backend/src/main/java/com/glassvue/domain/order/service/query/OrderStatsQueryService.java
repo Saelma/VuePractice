@@ -10,9 +10,9 @@ import com.glassvue.global.exception.BusinessException;
 import com.glassvue.global.exception.ErrorCode;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
+import com.glassvue.global.common.KstDates;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -53,7 +53,6 @@ public class OrderStatsQueryService {
     private static final List<String> REVENUE_STATUSES = OrderStatus.revenueStatusNames();
 
     /** 매출 일자는 <b>한국 시간</b> 기준이다. UTC 로 자르면 00:00~09:00 결제가 전날로 간다. */
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     /** 기간을 안 주면 보는 구간. 그전까지 «최근 30일» 이 고정값이었고, 이제 **기본값**이다(B-26). */
@@ -85,7 +84,7 @@ public class OrderStatsQueryService {
      * @param to   null 이면 오늘(KST)
      */
     public SalesOverviewResponse overview(LocalDate from, LocalDate to) {
-        LocalDate todayKst = LocalDate.now(KST);
+        LocalDate todayKst = KstDates.today();
         LocalDate end = (to == null) ? todayKst : to;
         LocalDate start = (from == null) ? end.minusDays(DEFAULT_DAYS - 1L) : from;
 
@@ -98,14 +97,14 @@ public class OrderStatsQueryService {
                     "기간은 최대 %d일까지 볼 수 있어요 (고른 기간 %d일).".formatted(MAX_DAYS, days));
         }
 
-        Instant periodFrom = start.atStartOfDay(KST).toInstant();
+        Instant periodFrom = KstDates.startOfDay(start);
         // ⚠ 종료일을 **포함**하려면 다음 날 00:00 이 배타 경계다. end.atTime(23:59:59) 로 하면
         //    그 날 23:59:59.5 에 결제된 주문이 빠진다(초 미만은 눈에 안 보여서 더 나쁘다).
-        Instant periodTo = end.plusDays(1).atStartOfDay(KST).toInstant();
+        Instant periodTo = KstDates.startOfNextDay(end);
 
         Instant now = Instant.now();
-        Instant todayStart = todayKst.atStartOfDay(KST).toInstant();
-        Instant monthStart = todayKst.withDayOfMonth(1).atStartOfDay(KST).toInstant();
+        Instant todayStart = KstDates.startOfDay(todayKst);
+        Instant monthStart = KstDates.startOfDay(todayKst.withDayOfMonth(1));
         // 전체 기간의 시작은 "충분히 과거"면 된다. Instant.EPOCH 는 1970년이라 어떤 주문보다 앞선다.
         Instant epoch = Instant.EPOCH;
 

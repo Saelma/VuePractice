@@ -3,6 +3,7 @@ package com.glassvue.domain.audit.repository;
 import com.glassvue.domain.audit.entity.AdminAuditLog;
 import com.glassvue.domain.audit.entity.AuditAction;
 import com.glassvue.domain.audit.entity.AuditTargetType;
+import java.time.Instant;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,9 +26,27 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, UU
             where (:action is null or a.action = :action)
               and (:targetType is null or a.targetType = :targetType)
               and (:targetLogin is null or lower(a.targetLogin) like lower(concat('%', :targetLogin, '%')))
+              and (:from is null or a.createdAt >= :from)
+              and (:to is null or a.createdAt < :to)
             """)
     Page<AdminAuditLog> search(@Param("action") AuditAction action,
                                @Param("targetType") AuditTargetType targetType,
                                @Param("targetLogin") String targetLogin,
+                               @Param("from") Instant from,
+                               @Param("to") Instant to,
                                Pageable pageable);
+
+    /**
+     * 기간 없이 전체를 본다.
+     *
+     * <p>⚠ <b>{@code ShippingPolicy} 에서 «기본값 오버로드» 를 없앤 것과 왜 다른가</b>(2026-09-01):
+     * 거기서는 생략된 인자가 <b>«어떤 무료배송 기준을 적용할 것인가» 라는 결정</b>이라, 기본값을 두면
+     * 🔴 <b>결정을 안 하고도 통과</b>했고 그 어긋남이 돈에서 났다.
+     * 여기서 생략되는 것은 결정이 아니라 <b>«기간을 안 좁힌다» 는 중립값</b>이다 —
+     * {@code null} 이 곧 «전체» 이고, 다른 뜻으로 읽힐 여지가 없다.
+     */
+    default Page<AdminAuditLog> search(AuditAction action, AuditTargetType targetType,
+                                       String targetLogin, Pageable pageable) {
+        return search(action, targetType, targetLogin, null, null, pageable);
+    }
 }

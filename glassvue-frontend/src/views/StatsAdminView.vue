@@ -10,8 +10,9 @@
  */
 import { ref, computed, onMounted } from 'vue';
 import {
-  fetchSalesOverview, barHeight, shortDate, PRESETS, presetRange, matchedPreset,
+  fetchSalesOverview, barHeight, shortDate,
 } from '../api/stats';
+import { PRESETS, presetRange, matchedPreset } from '../api/period';
 import { priceText } from '../api/product';
 import EmptyState from '../components/EmptyState.vue';
 

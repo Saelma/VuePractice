@@ -16,8 +16,21 @@ import {
   fetchAuditLogs, auditActionText, auditActionBadge, auditTargetTypeText,
   AUDIT_ACTION_LABEL, AUDIT_TARGET_TYPE_LABEL,
 } from '../api/audit';
+import AdminPeriodPicker from '../components/AdminPeriodPicker.vue';
 
-const form = ref({ action: null, targetType: null, targetLogin: '' });
+const form = ref({ action: null, targetType: null, targetLogin: '', from: '', to: '' });
+
+/**
+ * 기간 선택 (B-26 잔여, 2026-09-07).
+ *
+ * 🔴 **고르면 바로 검색한다** — 다른 필터는 「검색」 버튼을 눌러야 적용되는데 기간만 다르다.
+ * 프리셋은 «누르는 것이 곧 질문»이라(「지난 달」) 한 번 더 누르게 하면 두 번 눌러야 한다.
+ * ⚠ 직접 고르기도 **양쪽이 다 찼을 때만** 컴포넌트가 알려 준다(반쪽 기간은 질문이 안 된다).
+ */
+function applyPeriod({ from, to }) {
+  form.value = { ...form.value, from, to };
+  search();
+}
 const applied = ref({ ...form.value });
 const gridRef = ref(null);
 
@@ -51,7 +64,7 @@ function search() {
   gridRef.value?.instance.refresh();
 }
 function reset() {
-  form.value = { action: null, targetType: null, targetLogin: '' };
+  form.value = { action: null, targetType: null, targetLogin: '', from: '', to: '' };
   search();
 }
 
@@ -73,7 +86,13 @@ const actionBadge = auditActionBadge;
       <p class="muted mt-1">관리자 조작(회원·주문·상품·쿠폰·세일) 이력입니다. 최상위 관리자만 조회합니다.</p>
     </div>
 
-    <div class="card mb-4 flex flex-wrap items-end gap-3 p-4">
+    <!--
+      ⚠ 기간을 **한 줄 위**에 둔다 — 「그날 누가 무엇을 했나」가 이 화면에서 제일 잦은 질문이라
+      조작 종류·대상보다 먼저 눈에 와야 한다(B-26 이 그 질문을 「감사 로그의 존재 이유에 가깝다」고 적었다).
+    -->
+    <div class="card mb-4 space-y-3 p-4">
+      <AdminPeriodPicker :from="form.from" :to="form.to" @change="applyPeriod" />
+      <div class="flex flex-wrap items-end gap-3 border-t border-line pt-3">
       <label class="field">
         <span class="field-label">조작 종류</span>
         <DxSelectBox
@@ -99,6 +118,7 @@ const actionBadge = auditActionBadge;
       <div class="flex gap-2">
         <button type="button" class="btn btn-primary" @click="search">검색</button>
         <button type="button" class="btn btn-secondary" @click="reset">초기화</button>
+      </div>
       </div>
     </div>
 

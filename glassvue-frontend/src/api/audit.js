@@ -13,8 +13,10 @@ import { apiGet } from './client';
  * 골라 보는 수밖에 없었다.
  */
 export function fetchAuditLogs({ action = null, targetType = null, targetLogin = null,
+  from = null, to = null,
   page = 0, size = 20 } = {}) {
-  return apiGet('/api/admin/audit', { action, targetType, targetLogin, page, size });
+  // ⚠ from·to 는 **날짜 문자열**('yyyy-MM-dd') — 경계는 서버가 만든다(B-26).
+  return apiGet('/api/admin/audit', { action, targetType, targetLogin, from, to, page, size });
 }
 
 /**

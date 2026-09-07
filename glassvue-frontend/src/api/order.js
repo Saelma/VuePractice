@@ -17,8 +17,11 @@ export function fetchAdminOrderCounts() {
   return apiGet('/api/admin/orders/counts');
 }
 
-export function fetchAdminOrders({ status = null, buyer = null, orderNo = null, page = 0, size = 10 } = {}) {
-  return apiGet('/api/admin/orders', { status, buyer, orderNo, page, size });
+export function fetchAdminOrders({ status = null, buyer = null, orderNo = null,
+  from = null, to = null, page = 0, size = 10 } = {}) {
+  // ⚠ from·to 는 **날짜 문자열**('yyyy-MM-dd') 그대로 보낸다 — Instant 로 바꾸지 않는다(B-26).
+  //    경계는 서버가 만든다. 여기서 만들면 KST 경계가 두 곳에서 계산된다.
+  return apiGet('/api/admin/orders', { status, buyer, orderNo, from, to, page, size });
 }
 
 // 특정 회원의 주문 목록(관리자, B-11 회원 상세). status=RETURN_REQUESTED/RETURNED 로 반품만 추린다.
