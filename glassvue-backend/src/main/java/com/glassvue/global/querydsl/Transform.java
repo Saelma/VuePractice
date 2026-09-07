@@ -4,10 +4,8 @@ import com.glassvue.global.common.KstDates;
 import java.time.LocalDate;
 
 /**
- * 조건 값 변환. 대표적으로 LocalDate 범위 검색을 엔티티의 Instant 컬럼에 맞춰 변환한다.
- */
-/**
- * {@code @Cond} 가 붙은 검색 값을 비교 직전에 바꾼다.
+ * 조건 값 변환 — {@code @Cond} 가 붙은 검색 값을 비교 직전에 바꾼다.
+ * 대표적으로 {@code LocalDate} 범위 검색을 엔티티의 {@code Instant} 컬럼에 맞춘다.
  *
  * <p>🔴 <b>{@code DATE_*} 는 2026-09-07 까지 {@code ZoneId.systemDefault()} 를 썼다.</b>
  * 서버 시간대가 {@code Asia/Seoul} 이라 결과는 맞았지만 <b>«맞기로 정한» 것이 아니라 «우연히 맞은»</b>
