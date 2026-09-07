@@ -23,7 +23,14 @@
 set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TODAY="$(date +%F)"
+
+# 날짜를 인자로 받는다 — 없으면 오늘. 과거 문서를 되짚어 볼 수 있어야 한다(2026-09-07:
+# 09-02 의 「마감값」 어긋남을 찾고 나서, **다른 날에도 있나** 를 세려니 방법이 없었다).
+TODAY="${1:-$(date +%F)}"
+if ! [[ "$TODAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+  echo "쓰는 법: $(basename "$0") [YYYY-MM-DD]   (날짜를 안 주면 오늘)" >&2
+  exit 2
+fi
 HANDOFF="$REPO_DIR/docs/handoffs/${TODAY}-handoff.md"
 
 # root로 실행되면 ecstel 소유 저장소에서 git이 "dubious ownership"으로 거부한다 → 소유자로 실행.
@@ -36,7 +43,9 @@ git_q() {
 }
 
 # 오늘 커밋이 없으면 볼 것도 없다(문서 작업만 한 날·다른 날 배포).
-COMMITS=$(git_q log --since="${TODAY} 00:00" --oneline | wc -l | tr -d ' ')
+# ⚠ 상한(--until)을 함께 건다 — 날짜를 인자로 받게 되면서 필요해졌다.
+# 없으면 과거 날짜를 검사할 때 「그날 이후 전부」를 세어 커밋 표가 늘 모자라 보인다.
+COMMITS=$(git_q log --since="${TODAY} 00:00" --until="${TODAY} 23:59:59" --oneline | wc -l | tr -d ' ')
 [[ "$COMMITS" =~ ^[0-9]+$ ]] || exit 0
 [ "$COMMITS" -eq 0 ] && exit 0
 
@@ -58,7 +67,7 @@ GAP=$(( COMMITS - TABLE ))
 if [ "$GAP" -ge 3 ]; then
   say "커밋 표: 실제 ${COMMITS}건 / 표 ${TABLE}건 — ${GAP}건 빠짐"
   say "  → 이어 붙이지 말고 통째로 다시 만들 것:"
-  say "     git log --reverse --since=\"${TODAY} 00:00\" --pretty='| \`%h\` | %s |'"
+  say "     git log --reverse --since=\"${TODAY} 00:00\" --until=\"${TODAY} 23:59:59\" --pretty='| \`%h\` | %s |'"
 fi
 
 # --- ② 세어야 아는 숫자를 문장에 적었나 (WA §4-0-2) ---
@@ -91,6 +100,57 @@ PENDING=$(grep -cE '배포 — \*\*대기\*\*' "$HANDOFF" | tr -d ' ')
 [[ "$PENDING" =~ ^[0-9]+$ ]] || PENDING=0
 if [ "$PENDING" -gt 0 ]; then
   say "아직 「배포 — **대기**」인 절이 ${PENDING}개 있다 — 배포가 끝나면 종결로 바꿀 것"
+fi
+
+# --- ⑥ 「마감값」 블록이 둘 이상이면 서로 맞는지 본다 (2026-09-07) ---
+# 2026-09-02 문서에 마감값 블록이 **둘** 있었고 서로 달랐다. 위쪽 블록은 하루 중 세 번 정정됐는데
+# 아래쪽 블록이 **전날(09-01) 값을 그대로** 들고 있어, 같은 문서가 자기 정정을 되돌려 놓았다.
+# 다음 날 아침 재계수가 **무엇과 대조해야 하는지를 잃는다** — 마감값은 하나여야 한다.
+# ⚠ 위 ①~⑤ 는 「개수」를 세는데 이건 「값」을 본다. 그래서 규약(§4-0)만으로 안 걸렸다.
+MARKS=$(grep -cE '\*\*마감값 \(' "$HANDOFF" | tr -d ' ')
+[[ "$MARKS" =~ ^[0-9]+$ ]] || MARKS=0
+if [ "$MARKS" -eq 0 ]; then
+  # 2026-09-07: 이 검사를 만든 그날의 문서에 마감값 블록이 없었다 — «오늘 마감값 = 아침값이다»
+  # 라고 **문장으로** 적어 형식을 벗어났다. 다음 날 아침 재계수가 대조할 값을 못 찾는다.
+  say "「마감값 (날짜)」 블록이 없다 — 다음 날 아침 재계수가 대조할 값이 없다(WA §3-5)"
+  say "  → 값이 안 움직인 날에도 적는다. «안 움직였다» 는 문장이 아니라 **값**으로 남겨야 대조된다"
+fi
+if [ "$MARKS" -ge 2 ]; then
+  say "「마감값」 블록이 ${MARKS}개다 — 마감값은 **하나**여야 한다:"
+  grep -nE '\*\*마감값 \(' "$HANDOFF" | cut -c1-100 | sed 's/^/      /'
+  # 같은 지표가 블록마다 다른 값을 들고 있나. 「85 → 86」 정정 줄은 경위라 뺀다.
+  CONFLICT=$(awk '
+    /\*\*마감값 \(/ { blk++; active=1 }
+    /^[0-9]+\. / && !/\*\*마감값 \(/ { active=0 }
+    {
+      if (!active) next
+      if (index($0, "→")) next
+      s = $0
+      while (match(s, /`[A-Za-z_][A-Za-z0-9_]*` \*\*[0-9,]+\*\*/)) {
+        tok = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+        name = tok; sub(/^`/, "", name); sub(/`.*$/, "", name)
+        val  = tok; sub(/^[^*]*\*\*/, "", val); sub(/\*\*$/, "", val)
+        key = name SUBSEP blk
+        if (!(key in seen)) { seen[key] = val; names[name] = 1 }
+      }
+    }
+    END {
+      for (n in names) {
+        first = ""; conflict = 0; shown = ""
+        for (b = 1; b <= blk; b++) {
+          k = n SUBSEP b
+          if (!(k in seen)) continue
+          shown = shown sprintf("블록%d=%s ", b, seen[k])
+          if (first == "") first = seen[k]; else if (seen[k] != first) conflict = 1
+        }
+        if (conflict) printf "%-18s %s\n", n, shown
+      }
+    }' "$HANDOFF")
+  if [ -n "$CONFLICT" ]; then
+    say "  → 같은 지표가 블록마다 다르다 (정정 줄「→」은 뺀 값이다):"
+    echo "$CONFLICT" | sed 's/^/      /'
+    say "  → 🔴 다음 날 아침 재계수가 **무엇과 대조할지를 잃는다.** 블록을 하나로 합칠 것"
+  fi
 fi
 
 if [ "$DRIFT" -eq 1 ]; then
