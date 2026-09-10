@@ -19,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -145,5 +146,66 @@ class CouponFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].discountType").value("PERCENT"))
                 .andExpect(jsonPath("$.data.content[0].discountValue").value(10))
                 .andExpect(jsonPath("$.data.content[0].maxDiscountAmount").value(3000));
+    }
+
+    // ---------- 값끼리의 관계 (Q 축, 2026-09-10) ----------
+
+    /** 쿠폰 생성 본문을 만든다. 기본은 «정상» 이고, 시험마다 한 칸만 비튼다. */
+    private String couponBody(String type, long value, String from, String until) {
+        return ("{\"name\":\"ZZ Q축\",\"discountType\":\"%s\",\"discountValue\":%d,"
+                + "\"minOrderAmount\":30000,"
+                + "\"validFrom\":\"%s\",\"validUntil\":\"%s\"}").formatted(type, value, from, until);
+    }
+
+    private ResultActions createCoupon(String admin, String body) throws Exception {
+        return mockMvc.perform(post("/api/admin/coupons").header("Authorization", admin)
+                .contentType(JSON).content(body));
+    }
+
+    @Test
+    @DisplayName("🔴 상시 쿠폰도 사용 기간이 뒤집히면 거절된다 — 그전엔 이벤트 쿠폰만 검사했다")
+    void plainCouponWithReversedPeriodIsRejected() throws Exception {
+        String admin = login(adminLoginId);
+
+        // 사용 마감이 시작보다 앞이다 → 만들어지면 «영원히 못 쓰는 쿠폰» 이 조용히 남는다.
+        createCoupon(admin, couponBody("FIXED", 5000, "2027-01-01T00:00:00Z", "2026-01-01T00:00:00Z"))
+                .andExpect(status().isBadRequest());
+
+        // ⚠ 같은 날은? «이후» 를 요구하므로 거절이다 — 0초짜리 쿠폰은 못 쓰는 쿠폰과 같다.
+        createCoupon(admin, couponBody("FIXED", 5000, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"))
+                .andExpect(status().isBadRequest());
+
+        // 🔴 대조군 — 정상 기간은 만들어진다. 없으면 «전부 거절» 과 구별이 안 된다.
+        createCoupon(admin, couponBody("FIXED", 5000, "2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("정률 할인은 100을 넘을 수 없다 — 100 자체는 통과한다(경계)")
+    void percentOver100IsRejected() throws Exception {
+        String admin = login(adminLoginId);
+
+        createCoupon(admin, couponBody("PERCENT", 101, "2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"))
+                .andExpect(status().isBadRequest());
+
+        // ⚠ 100% 는 «전액 할인» 이라 뜻이 있다 — 막지 않는다.
+        createCoupon(admin, couponBody("PERCENT", 100, "2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("⚠ 정액 할인이 최소주문금액보다 커도 **막지 않는다** — 「퍼주는 쿠폰」이지 틀린 값이 아니다")
+    void fixedDiscountAboveMinOrderIsAllowedOnPurpose() throws Exception {
+        String admin = login(adminLoginId);
+
+        // 2026-09-10 실측: 운영에 이런 쿠폰이 1건 있다(가입 쿠폰 5,000원 / 최소주문 1,000원).
+        // 🔴 막으면 정당한 프로모션이 막힌다. ⚠ 다만 1,000원 주문에 쓰면 4,000원이 소멸하므로
+        //    «최대 얼마까지 쓰인다» 를 화면이 알려 주는 것이 맞는 자리다 — 막을 자리가 아니다.
+        //    이 시험은 그 **결정을 못박는다**(다음 사람이 «구멍» 으로 보고 막지 않도록).
+        mockMvc.perform(post("/api/admin/coupons").header("Authorization", admin).contentType(JSON)
+                        .content("{\"name\":\"ZZ 퍼주는\",\"discountType\":\"FIXED\",\"discountValue\":5000,"
+                               + "\"minOrderAmount\":1000,"
+                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2027-01-01T00:00:00Z\"}"))
+                .andExpect(status().isOk());
     }
 }

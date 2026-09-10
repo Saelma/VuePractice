@@ -71,6 +71,7 @@ public class CouponService {
      */
     @Transactional
     public UUID create(CouponCreateRequest req, AuthUser actor) {
+        validateValues(req);
         if (req.issueUntil() != null) {
             validateEventWindow(req.validFrom(), req.issueUntil(), req.validUntil());
         }
@@ -90,6 +91,32 @@ public class CouponService {
         log.info("Coupon created: {} ({}){}", coupon.getId(), coupon.getName(),
                 coupon.isEventCoupon() ? " [event, 발급마감 " + coupon.getIssueUntil() + "]" : "");
         return coupon.getId();
+    }
+
+    /**
+     * <b>쿠폰 종류를 안 가리는 검증</b> (2026-09-10, BACKLOG §Q).
+     *
+     * <p>🔴 <b>{@link #validateEventWindow} 는 이벤트 쿠폰에만 돌았다.</b> 그 메서드가
+     * *«발급 창이 뒤집히면 아무도 못 받는 이벤트가 조용히 등록된다»* 고 적어 뒀는데,
+     * ⚠ <b>같은 논리가 «사용 기간» 에도 그대로 적용되는데 상시 쿠폰에는 아무것도 없었다</b> —
+     * 기간이 뒤집힌 상시 쿠폰은 <b>영원히 못 쓰는 쿠폰</b>이 되어 조용히 남는다.
+     *
+     * <p>⚠ <b>정률 100 초과는 «계산이 틀리는» 문제가 아니다</b> — 쓸 때
+     * {@code Math.min(raw, itemsTotal)} 이 덮는다(L 축이 다룬 그 모양). 🔴 <b>문제는 표시와 의도다</b>:
+     * 관리자가 «200% 할인» 쿠폰을 만들 수 있고 화면에 그대로 보인다.
+     *
+     * <p>⚠ <b>«정액 할인 > 최소주문금액» 은 일부러 안 막는다.</b> 2026-09-10 실측에 1건 있다
+     * (가입 쿠폰 5,000원 / 최소주문 1,000원). 🔴 <b>그건 «퍼주는 쿠폰» 이지 틀린 값이 아니다</b> —
+     * 막으면 정당한 프로모션이 막힌다. ⚠ 다만 1,000원 주문에 쓰면 4,000원이 소멸하므로
+     * <b>화면이 «최대 얼마까지 쓰인다» 를 알려 주는 것이 맞는 자리</b>다(막을 자리가 아니다).
+     */
+    private void validateValues(CouponCreateRequest req) {
+        if (!req.validUntil().isAfter(req.validFrom())) {
+            throw new BusinessException(ErrorCode.COUPON_VALID_PERIOD_INVALID);
+        }
+        if (req.discountType() == DiscountType.PERCENT && req.discountValue() > 100) {
+            throw new BusinessException(ErrorCode.COUPON_PERCENT_OVER_100);
+        }
     }
 
     /**

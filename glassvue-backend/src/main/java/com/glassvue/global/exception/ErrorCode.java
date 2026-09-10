@@ -184,6 +184,12 @@ public enum ErrorCode {
             "발급 기간이 겹치는 이벤트 쿠폰이 이미 있습니다."),
     COUPON_ISSUE_WINDOW_INVALID("COUPON-400W", HttpStatus.BAD_REQUEST,
             "발급 마감은 시작일 이후, 사용 마감 이전이어야 합니다."),
+    // 🔴 2026-09-10(Q 축): 위 검증은 **이벤트 쿠폰에만** 돌았다 — 상시 쿠폰은 사용 기간이
+    //    뒤집혀도 통과해 «영원히 못 쓰는 쿠폰» 이 조용히 등록됐다. 아래 둘이 그 자리를 막는다.
+    COUPON_VALID_PERIOD_INVALID("COUPON-400V", HttpStatus.BAD_REQUEST,
+            "사용 마감은 시작일 이후여야 합니다."),
+    COUPON_PERCENT_OVER_100("COUPON-400P", HttpStatus.BAD_REQUEST,
+            "정률 할인은 100%를 넘을 수 없습니다."),
 
     // 적립금 · 회원 등급 (2026-07-24)
     POINT_NOT_ENOUGH("POINT-400N", HttpStatus.BAD_REQUEST, "적립금이 부족합니다."),
