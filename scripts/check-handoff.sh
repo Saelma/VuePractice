@@ -166,6 +166,79 @@ if [ "$MARKS" -ge 2 ]; then
   fi
 fi
 
+# --- ⑦ 「마감값」이 **지금 DB 와 맞는가** (2026-09-10) ---
+# ①~⑥ 은 전부 **문서 안**만 본다. 그래서 «문서끼리는 일관된데 현실과 다른» 경우를 못 잡는다 —
+# 2026-09-07 이 `notification` 을 **263** 이라 적었는데 그날 오후 전수가 3건을 더해 실제는 266 이었다.
+# 🔴 아침 재계수가 다음 날 그것을 잡았지만, **하루가 거짓인 채로 지나갔다.**
+#
+# ⚠ **«값이 움직인 날» 과 «안 고친 날» 을 가르지 않는다.** 09-10 에 만들며 고민한 자리인데,
+#   🔴 **가를 필요가 없다** — 둘 다 결론이 «문서가 낡았다» 이고 처방도 «다시 세서 고쳐라» 로 같다.
+#   가르려 들면 «전수를 돌렸나» 를 추적해야 하고, 그건 이 스크립트가 알 수 있는 것이 아니다.
+#
+# ⚠ 표에 없는 지표(매출·잔액·등급)는 **안 본다** — 계산이 필요하고 그건 불변식 스크립트의 일이다.
+# 🔴 DB 에 못 붙으면 **조용히 건너뛴다**(경고도 안 낸다) — 이 스크립트는 배포 관문에서 돌고,
+#   DB 접속은 그 관문의 관심사가 아니다. 불변식 스크립트가 그쪽을 이미 «판정 불가» 로 말한다.
+#
+# 🔴 **오늘 문서일 때만 본다.** 마감값은 «그날의 기록» 이라, 지난 날짜 문서를 지금 DB 와 견주면
+#   맞는 값이 틀린 것으로 나온다 — 만들면서 실제로 그랬다(09-07 의 `notification` 266 은
+#   그날 맞았고 오늘은 211 이라 «낡았다» 로 잡혔다). ⚠ **이 검사는 «오늘 문서를 닫는» 일이지
+#   «과거를 감사하는» 일이 아니다.**
+CLOSEVAL_TABLES="member point_account member_coupon admin_audit_log product_variant orders point_history stock_history notification"
+if [ "$MARKS" -eq 1 ] && [ "$TODAY" = "$(date +%F)" ] && [ -f "$REPO_DIR/.env" ]; then
+  # 마감값 줄에서 `지표` **값** 쌍을 뽑는다. ⚠ 인라인 코드는 여기선 지표 이름 그 자체라 안 지운다.
+  DOC_PAIRS=$(awk '
+    { t=$0; gsub(/`[^`]*`/, "", t); if (t ~ /\*\*마감값 \(/) { inblk=1 } else if ($0 ~ /^[0-9]+\. /) { inblk=0 }
+      if (!inblk) next
+      if (index($0, "→")) next
+      s=$0
+      while (match(s, /`[A-Za-z_][A-Za-z0-9_]*` \*\*[0-9,]+\*\*/)) {
+        tok=substr(s,RSTART,RLENGTH); s=substr(s,RSTART+RLENGTH)
+        name=tok; sub(/^`/,"",name); sub(/`.*$/,"",name)
+        val=tok;  sub(/^[^*]*\*\*/,"",val); sub(/\*\*$/,"",val); gsub(/,/,"",val)
+        if (!(name in seen)) { seen[name]=val; print name" "val }
+      } }' "$HANDOFF")
+
+  if [ -z "$DOC_PAIRS" ]; then
+    # 🔴 블록은 있는데 «지표 하나도» 못 뽑았다 — 형식이 바뀌었거나 파서가 낡은 것이다.
+    #   ⚠ 조용히 넘어가면 이 검사가 **영원히 아무것도 안 하게** 된다(WA §3-6).
+    say "「마감값」 블록에서 지표를 하나도 못 뽑았다 — 형식이 바뀌었나? (이 검사가 헛돈다)"
+  else
+    ( set -a; . "$REPO_DIR/.env"; set +a
+      export ORACLE_HOME="${ORACLE_HOME:-/opt/oracle/product/19c/dbhome_1}"
+      export PATH="$ORACLE_HOME/bin:$PATH"
+      SQL_LINES=""
+      while read -r name val; do
+        case " $CLOSEVAL_TABLES " in *" $name "*) ;; *) continue ;; esac   # 🔴 허용 목록 밖은 SQL 에 안 넣는다
+        SQL_LINES="${SQL_LINES}select '$name|'||count(*) from $name;"$'\n'
+      done <<< "$DOC_PAIRS"
+      [ -z "$SQL_LINES" ] && exit 0
+      # ⚠ **20초 상한**. 배포 관문에서 도는 자리라 DB 가 응답이 없으면 매달린다 —
+      #   못 붙는 것은 «못 붙었다» 로 빨리 말하는 것이 낫다(-L 은 재시도만 막지 무응답은 못 막는다).
+      ACTUAL=$(printf 'set heading off feedback off pagesize 0 linesize 200\nwhenever sqlerror exit 2\n%sexit\n' "$SQL_LINES" \
+               | timeout 20 sqlplus -s -L "$DB_USER/$DB_PASSWORD@//$DB_HOST:$DB_PORT/$DB_SERVICE" 2>/dev/null)
+      # 🔴 «못 붙었다» 를 **명시 신호**로 남긴다. 빈 파일로 두면 «맞았다» 와 구별이 안 된다(WA §3-6).
+      echo "$ACTUAL" | grep -q '|' || { echo "__NOCONN__"; exit 0; }
+      while read -r name val; do
+        now=$(echo "$ACTUAL" | grep "^$name|" | head -1 | cut -d'|' -f2 | tr -d ' ')
+        [ -n "$now" ] || continue
+        [ "$now" = "$val" ] || echo "$name 문서 $val / 지금 $now"
+      done <<< "$DOC_PAIRS"
+    ) > /tmp/.closeval.$$ 2>/dev/null
+    # 🔴 **몇 개를 봤는지 말한다**(WA §3-6). 이 검사는 DB 에 못 붙거나 지표를 하나도 못 뽑으면
+    #   조용히 넘어가는데, 그러면 «맞았다» 와 «안 봤다» 가 화면에서 똑같아 보인다.
+    #   ⚠ 규약을 쓰자마자 이 도구가 그 모양이었다 — 그래서 여기 줄을 하나 더 뒀다.
+    CHECKED=$(grep -c . <<< "$DOC_PAIRS")
+    if grep -q '__NOCONN__' /tmp/.closeval.$$ 2>/dev/null; then
+      say "「마감값」을 DB 와 **대조하지 못했다**(접속 실패) — 🔴 «맞았다» 가 아니라 «안 봤다» 다"
+    elif [ -s /tmp/.closeval.$$ ]; then
+      say "「마감값」이 지금 DB 와 다르다 — 문서가 낡았다 (지표 ${CHECKED}개 중):"
+      sed 's/^/      /' /tmp/.closeval.$$
+      say "  → 🔴 다시 세서 고칠 것. 다음 날 아침 재계수가 **틀린 값과 대조**하게 된다"
+    fi
+    rm -f /tmp/.closeval.$$
+  fi
+fi
+
 if [ "$DRIFT" -eq 1 ]; then
   echo "  → 배포는 계속된다. 배포 직후에 닫는 게 가장 싸다(실측값이 손에 있을 때, WA §4-0-1)."
   exit 1
