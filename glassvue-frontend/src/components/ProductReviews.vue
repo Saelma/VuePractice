@@ -1,12 +1,12 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import {
   fetchProductReviews, createReview, updateReview, deleteReview,
   REVIEW_IMAGE_MAX, REVIEW_SORT_OPTIONS,
 } from '../api/review';
 import { RouterLink } from 'vue-router';
-import { authState, isLoggedIn, isAdmin } from '../stores/auth';
+import { isLoggedIn, isAdmin } from '../stores/auth';
 import { useLoginRedirect } from '../composables/useLoginRedirect';
 import StarRating from './StarRating.vue';
 import ImageUploader from './ImageUploader.vue';
@@ -21,9 +21,9 @@ const page = ref({ content: [], page: 0, totalPages: 0, last: true });
 const loading = ref(true);
 const error = ref('');
 
-const myId = computed(() => authState.user?.id);
+// 「내 글인가」는 서버 판정(r.mine)을 쓴다 — ProductInquiries 와 같은 이유(R 축).
 function canManage(r) {
-  return isAdmin.value || r.authorId === myId.value;
+  return isAdmin.value || r.mine;
 }
 
 // 작성 폼 — images는 [{id,url}] (전송 시 id만 뽑는다)

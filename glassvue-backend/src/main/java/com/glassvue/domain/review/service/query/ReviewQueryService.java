@@ -12,6 +12,7 @@ import com.glassvue.domain.review.dto.ReviewStats;
 import com.glassvue.domain.review.entity.Review;
 import com.glassvue.domain.review.repository.ReviewRepository;
 import com.glassvue.global.response.PageResponse;
+import com.glassvue.global.security.AuthUser;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -43,8 +44,13 @@ public class ReviewQueryService {
      * 별점 분포·평균은 <b>그 상품 전체</b>의 것이라, 사진 필터를 걸었다고 평균이 달라지면
      * 상품 카드의 별점과 어긋난다 — 같은 상품인데 화면마다 다른 평점이 뜨는 셈이다.
      * 필터는 <b>목록에만</b> 건다.
+     *
+     * <p>🔴 <b>{@code viewer} 는 비로그인 시 null 이다</b> — 이 경로는 공개다. viewer 를 받는 이유는
+     * 하나뿐이다: 응답의 {@code mine} 을 채우려고. 예전엔 {@code authorId} 를 그대로 실어서
+     * <b>화면이 직접 비교</b>했는데, 그러려고 <b>남의 회원 UUID 를 전부</b> 내보내고 있었다(R 축).
      */
-    public ProductReviewsResponse getProductReviews(UUID productId, boolean photoOnly, Pageable pageable) {
+    public ProductReviewsResponse getProductReviews(
+            UUID productId, AuthUser viewer, boolean photoOnly, Pageable pageable) {
         Page<Review> page = reviewRepository.findByProduct(productId, photoOnly, pageable);
         ReviewStats stats = reviewRepository.statsByProduct(productId);
 
@@ -55,6 +61,7 @@ public class ReviewQueryService {
 
         PageResponse<ReviewResponse> mapped = PageResponse.from(page.map(r -> ReviewResponse.from(
                 r,
+                viewer,
                 r.getImageGroupId() == null
                         ? List.of()
                         : imagesByGroup.getOrDefault(r.getImageGroupId(), List.of()))));

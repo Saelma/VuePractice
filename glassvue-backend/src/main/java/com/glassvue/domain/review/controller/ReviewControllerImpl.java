@@ -45,11 +45,12 @@ public class ReviewControllerImpl implements ReviewController {
     @Override
     @GetMapping("/products/{productId}/reviews")
     public ResponseEntity<ApiResponse<ProductReviewsResponse>> list(
+            @LoginUser(required = false) AuthUser viewer,   // 공개 경로다 — required 를 빼면 비로그인이 401 이다
             @PathVariable UUID productId,
             @RequestParam(defaultValue = "false") boolean photoOnly,
             Pageable pageable) {
         return ResponseEntity.ok(
-                ApiResponse.ok(queryService.getProductReviews(productId, photoOnly, pageable)));
+                ApiResponse.ok(queryService.getProductReviews(productId, viewer, photoOnly, pageable)));
     }
 
     @Override

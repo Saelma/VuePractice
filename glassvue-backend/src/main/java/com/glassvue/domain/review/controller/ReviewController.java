@@ -31,7 +31,8 @@ public interface ReviewController {
                     **전체**의 통계다. 필터에 따라 평균이 달라지면 상품 카드의 별점과 어긋나
                     같은 상품인데 화면마다 다른 평점이 뜬다.
                     """)
-    ResponseEntity<ApiResponse<ProductReviewsResponse>> list(UUID productId, boolean photoOnly, Pageable pageable);
+    ResponseEntity<ApiResponse<ProductReviewsResponse>> list(
+            @Parameter(hidden = true) AuthUser viewer, UUID productId, boolean photoOnly, Pageable pageable);
 
     @Operation(summary = "리뷰 수정 (본인 또는 관리자)")
     ResponseEntity<ApiResponse<Void>> update(

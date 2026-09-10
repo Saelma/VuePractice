@@ -5,7 +5,6 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxCheckBox } from 'devextreme-vue/check-box';
 import { getNotice, createNotice, updateNotice } from '../api/notice';
-import { authState, isAdminRole } from '../stores/auth';
 
 // id가 있으면 수정, 없으면 작성. 작성자는 서버가 로그인 유저로 지정한다.
 const props = defineProps({ id: { type: String, default: null } });
@@ -15,17 +14,14 @@ const isEdit = computed(() => !!props.id);
 const form = reactive({ title: '', content: '', pinned: false });
 const error = ref('');
 const saving = ref(false);
-const blocked = ref(false);
 
 onMounted(async () => {
   if (isEdit.value) {
     try {
       const n = await getNotice(props.id);
-      if (n.authorId !== authState.user?.id && !isAdminRole(authState.user?.role)) {
-        error.value = '본인 글만 수정할 수 있습니다.';
-        blocked.value = true;
-        return;
-      }
+      // 소유자 가드는 **죽은 코드였다** — 이 라우트가 이미 requiresAdmin 이라 `!isAdminRole(...)` 이
+      // 참이 될 수 없었다. 서버도 같은 이유로 2026-08-20 에 지웠는데(NoticeCommandService.find)
+      // 화면 사본만 남아 있었고, 그걸 먹이려고 공개 응답이 authorId 를 싣고 있었다(2026-09-10, R 축).
       form.title = n.title;
       form.content = n.content;
       form.pinned = n.pinned;
@@ -82,7 +78,7 @@ async function onSave() {
       <DxCheckBox v-model:value="form.pinned" text="상단 고정" />
 
       <div class="mt-2 flex gap-2 border-t border-line pt-4">
-        <button type="button" class="btn btn-primary" :disabled="saving || blocked" @click="onSave">
+        <button type="button" class="btn btn-primary" :disabled="saving" @click="onSave">
           {{ saving ? '저장 중…' : '저장' }}
         </button>
         <button type="button" class="btn btn-secondary" @click="router.back()">취소</button>

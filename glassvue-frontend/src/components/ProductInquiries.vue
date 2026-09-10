@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxCheckBox } from 'devextreme-vue/check-box';
@@ -8,7 +8,7 @@ import {
   INQUIRY_IMAGE_MAX,
 } from '../api/inquiry';
 import { RouterLink } from 'vue-router';
-import { authState, isLoggedIn, isAdmin } from '../stores/auth';
+import { isLoggedIn, isAdmin } from '../stores/auth';
 import { useLoginRedirect } from '../composables/useLoginRedirect';
 import ImageUploader from './ImageUploader.vue';
 import EmptyState from './EmptyState.vue';
@@ -21,12 +21,13 @@ const page = ref({ content: [], page: 0, totalPages: 0, last: true });
 const loading = ref(true);
 const error = ref('');
 
-const myId = computed(() => authState.user?.id);
+// 「내 글인가」는 **서버가 판정해 내려준다**(q.mine). 예전엔 응답의 authorId 를 여기서 비교했는데,
+// 그러려고 서버가 **남의 회원 UUID 를 전부** 공개 목록에 실어야 했다(2026-09-10, R 축).
 function canEdit(q) {
-  return q.authorId === myId.value && q.status === 'WAITING';
+  return q.mine && q.status === 'WAITING';
 }
 function canDelete(q) {
-  return isAdmin.value || q.authorId === myId.value;
+  return isAdmin.value || q.mine;
 }
 
 // 작성 폼 — images는 [{id,url}] (전송 시 id만 뽑는다)
@@ -230,7 +231,7 @@ onMounted(() => load(0));
             <button v-if="canEdit(q)" type="button" class="btn btn-ghost" @click="startEdit(q)">수정</button>
             <button v-if="canDelete(q)" type="button" class="btn btn-danger" @click="remove(q)">삭제</button>
             <button
-              v-if="isAdmin && q.authorId !== myId"
+              v-if="isAdmin && !q.mine"
               type="button"
               class="btn btn-ghost"
               @click="startAnswer(q)"

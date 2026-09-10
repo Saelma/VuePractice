@@ -12,7 +12,16 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** 비밀글 마스킹 규칙(작성자·ADMIN만 열람)의 순수 단위 테스트. 마스킹 시 첨부 이미지도 가려야 한다. */
+/**
+ * 비밀글 마스킹 규칙(작성자·ADMIN만 열람)의 순수 단위 테스트. 마스킹 시 첨부 이미지도 가려야 한다.
+ *
+ * <p>🔴 <b>제목도 가린다</b>(2026-09-10, R 축). 화면 체크박스가 «비밀글 (작성자·판매자만 열람)» 이라고
+ * <b>약속</b>하는데 본문만 가리면 제목이 그 약속을 깬다 — 실측한 비밀글의 제목은 «이거 자바아닌데?» 로,
+ * <b>제목이 곧 질문 전체</b>였다.
+ *
+ * <p>🔴 <b>{@code authorId} 대신 {@code mine} 을 싣는다.</b> 화면이 그 값으로 하던 일은
+ * «내 글인가» 하나뿐인데, 그걸 하려고 <b>남의 회원 UUID 를 공개 목록 전체에</b> 실어야 했다.
+ */
 class InquiryResponseTest {
 
     private static final String BODY = "주소 변경돼요?";
@@ -66,6 +75,34 @@ class InquiryResponseTest {
         assertThat(r.masked()).isTrue();
         assertThat(r.content()).isNotEqualTo(BODY);
         assertThat(r.images()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("비밀글 + 비로그인 → 제목도 가린다")
+    void secret_anonymous_titleMasked() {
+        InquiryResponse masked = InquiryResponse.from(secretInquiry(), null, IMAGES);
+        assertThat(masked.title()).isNotEqualTo("비밀 배송문의");
+        // 대조군 — 공개글은 같은 호출에서 제목이 그대로다(가리는 쪽이 secret 이지 «비로그인» 이 아니다).
+        assertThat(InquiryResponse.from(publicInquiry(), null, IMAGES).title()).isEqualTo("공개문의");
+    }
+
+    @Test
+    @DisplayName("비밀글 + 관리자(타인) → 열람은 되지만 «내 글» 은 아니다")
+    void admin_canView_butNotMine() {
+        InquiryResponse r = InquiryResponse.from(
+                secretInquiry(), new AuthUser(UUID.randomUUID(), Role.ADMIN, "admin"), IMAGES);
+        assertThat(r.masked()).isFalse();   // 볼 수 있고
+        assertThat(r.mine()).isFalse();     // 내 글은 아니다 — 두 질문은 다르다
+    }
+
+    @Test
+    @DisplayName("mine 은 작성자에게만 참이다 (비로그인·타인은 거짓)")
+    void mine_onlyForOwner() {
+        assertThat(InquiryResponse.from(publicInquiry(),
+                new AuthUser(ownerId, Role.USER, "me"), IMAGES).mine()).isTrue();
+        assertThat(InquiryResponse.from(publicInquiry(), null, IMAGES).mine()).isFalse();
+        assertThat(InquiryResponse.from(publicInquiry(),
+                new AuthUser(UUID.randomUUID(), Role.USER, "other"), IMAGES).mine()).isFalse();
     }
 
     @Test
