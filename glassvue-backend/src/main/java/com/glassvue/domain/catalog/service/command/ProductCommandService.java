@@ -13,6 +13,7 @@ import com.glassvue.domain.catalog.entity.ProductVariant;
 import com.glassvue.domain.catalog.entity.StockChangeReason;
 import com.glassvue.domain.catalog.entity.StockHistory;
 import com.glassvue.domain.catalog.event.StockReplenishedEvent;
+import com.glassvue.domain.catalog.event.ProductPurgedEvent;
 import com.glassvue.domain.catalog.event.StockRunningLowEvent;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
 import com.glassvue.domain.catalog.repository.ProductRepository;
@@ -386,9 +387,18 @@ public class ProductCommandService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         UUID imageGroupId = product.getImageGroupId();
+        String name = product.getName();   // 🔴 지운 뒤에는 못 읽는다 — 이벤트에 실을 값을 미리 뜬다
         productRepository.delete(product); // FK ON DELETE CASCADE 로 옵션도 함께 지워진다(V22)
         imageService.deleteGroup(imageGroupId);
-        log.info("[상품] 영구 삭제 — id={} name={} (유예 경과)", id, product.getName());
+
+        // 🔴 FK 가 안 닿는 흔적을 치우라고 알린다(2026-09-10, BACKLOG M-4).
+        // ⚠ CASCADE 는 «상품에 종속된 기록»(옵션·재고이력·할인)만 지운다. 알림은 **사람에게 간 것**이라
+        //    FK 가 없고, 그래서 상품이 사라져도 남아 **없는 상품을 가리키는 줄**이 됐다(55건).
+        // ⚠ 리뷰·문의는 이 이벤트로 안 지운다 — 그건 «사람이 쓴 것» 이고 상품이 없어도 읽을 값이 있다
+        //    (화면이 상품 이름 없음을 이미 견딘다). 갈리는 기준은 «누가 썼나» 다.
+        eventPublisher.publishEvent(new ProductPurgedEvent(id, name));
+
+        log.info("[상품] 영구 삭제 — id={} name={} (유예 경과)", id, name);
     }
 
     /**

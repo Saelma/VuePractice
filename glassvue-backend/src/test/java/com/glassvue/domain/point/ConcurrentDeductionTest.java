@@ -73,6 +73,7 @@ class ConcurrentDeductionTest {
     @Autowired MemberRepository memberRepository;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired TransactionTemplate transactionTemplate;
+    @Autowired com.glassvue.domain.notification.repository.NotificationRepository notificationRepository;
 
     private UUID memberId;
     private UUID productId;
@@ -98,9 +99,26 @@ class ConcurrentDeductionTest {
         variantId = variantRepository.save(ProductVariant.of(productId, "기본", 0, 1, 0)).getId();
     }
 
-    /** ⚠ 순서가 있다 — 참조가 남으면 FK 가 막는다(선례가 여기서 한 번 터졌다). */
+    /**
+     * ⚠ 순서가 있다 — 참조가 남으면 FK 가 막는다(선례가 여기서 한 번 터졌다).
+     *
+     * <p>🔴 <b>알림도 치운다</b>(2026-09-10 · BACKLOG M-4). 이 테스트는 <b>롤백을 안 쓰고</b>
+     * 실제로 커밋하므로 재고가 0이 되면 {@code StockRunningLowEvent} 가
+     * {@code AFTER_COMMIT} 으로 <b>진짜 발행된다</b> — 관리자 셋에게 알림 3건이 남는다.
+     * 그런데 아래에서 상품만 지우니 <b>없는 상품을 가리키는 알림</b>이 매 실행마다 3건씩 쌓였다
+     * (2026-09-02 에만 39건 — 그날 이 테스트를 많이 돌렸다).
+     *
+     * <p>⚠ <b>운영 경로의 수정({@code ProductPurgedEvent})은 여기까지 안 닿는다</b> —
+     * 그건 {@code ProductCommandService.purge()} 가 발행하는데 이 테스트는
+     * {@code productRepository.deleteById} 로 <b>서비스를 건너뛰기</b> 때문이다.
+     * 🔴 <b>테스트가 만든 것은 테스트가 치운다.</b>
+     *
+     * <p>⚠ 알림 수신자는 <b>이 테스트의 회원이 아니라 관리자들</b>이라
+     * {@code deleteByMemberId} 로는 안 잡힌다 — 상품 링크로 지워야 한다.
+     */
     @AfterEach
     void tearDown() {
+        awaitAndDeleteStockAlerts();
         transactionTemplate.executeWithoutResult(status -> {
             historyRepository.deleteAll(
                     historyRepository.findByMemberIdOrderByCreatedAtDesc(memberId, Pageable.unpaged()).getContent());
@@ -110,6 +128,34 @@ class ConcurrentDeductionTest {
             categoryRepository.deleteById(categoryId);
             memberRepository.deleteById(memberId);
         });
+    }
+
+    /**
+     * 재고 알림이 올 때까지 <b>기다렸다가</b> 지운다.
+     *
+     * <p>🔴 <b>그냥 지우면 샌다.</b> {@code StockRunningLowEvent} 리스너는 {@code @Async} 라
+     * <b>다른 스레드</b>에서 {@code AFTER_COMMIT} 뒤에 쓴다 — {@code @AfterEach} 가 먼저 돌면
+     * 지울 것이 아직 없고, 알림은 <b>그 뒤에</b> 태어나 고아로 남는다.
+     * ⚠ 2026-09-10 에 실제로 그랬다: 정리를 넣고 전수를 돌렸는데 <b>한 건이 새어</b> 남았다
+     * (55건을 치운 바로 그 실행에서 1건이 새로 생겼다).
+     *
+     * <p>⚠ <b>알림이 안 오는 시험도 있다</b>(재고를 안 건드리는 적립금 경합). 그래서 «올 때까지»
+     * 가 아니라 <b>예산을 두고</b> 기다린다 — 하나라도 지웠으면 바로 끝내고, 없으면 예산만 쓰고 나간다.
+     */
+    private void awaitAndDeleteStockAlerts() {
+        for (int i = 0; i < 20; i++) {          // 100ms × 20 = 최대 2초
+            Integer deleted = transactionTemplate.execute(
+                    st -> notificationRepository.deleteByProductLink(productId.toString()));
+            if (deleted != null && deleted > 0) {
+                return;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
     }
 
     /** 두 스레드를 같은 순간에 푼다. 반환: [성공 수, 거부(BusinessException) 수]. */
