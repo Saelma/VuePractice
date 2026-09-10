@@ -53,4 +53,18 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from Notification n where n.link like concat('/products/', :productId, '%')")
     int deleteByProductLink(@Param("productId") String productId);
+
+    /**
+     * 보관 기간이 지난 알림을 지운다 (2026-09-10, BACKLOG F-2).
+     *
+     * <p>🔴 <b>«읽음» 을 인자로 받아 한 메서드로 둔다.</b> 둘로 나누면 쿼리가 둘이 되고,
+     * 한쪽만 고쳐지는 자리가 생긴다 — 기준(며칠)만 다르고 <b>지우는 규칙은 같다.</b>
+     *
+     * <p>⚠ <b>한 건씩이 아니라 벌크로 지운다.</b> {@code ProductPurgeScheduler} 는 한 건씩 도는데
+     * 거기는 FK CASCADE 로 옵션·이미지가 함께 사라져 <b>어디서 터졌는지</b> 가 중요하기 때문이다.
+     * 알림은 딸린 것이 없는 단순 행이라 그 이유가 없고, 벌크가 지운 건수를 그대로 돌려준다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from Notification n where n.read = :read and n.createdAt < :threshold")
+    int deleteOlderThan(@Param("read") boolean read, @Param("threshold") java.time.Instant threshold);
 }

@@ -5,6 +5,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -22,8 +23,17 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @EnableAsync
 public class AsyncConfig implements AsyncConfigurer {
 
-    @Override
-    public Executor getAsyncExecutor() {
+    /**
+     * 이벤트 처리용 스레드 풀.
+     *
+     * <p>🔴 <b>빈으로 꺼내 둔다</b>(2026-09-10). 전에는 {@link #getAsyncExecutor()} 안에서 만들어
+     * <b>아무도 손댈 수 없었다</b> — 그래서 «비동기가 끝났나» 를 물을 방법이 없었고,
+     * 테스트가 <b>시계로 기다리다</b>(2초 예산) 전수 부하에서 놓쳤다.
+     * ⚠ 놓친 결과는 조용하다: 알림 한 건이 고아로 남고 <b>불변식 ⑳ 이 무작위로 빨개진다.</b>
+     * → 빈이 되면 «큐가 비었고 도는 것이 없다» 를 <b>실제 상태로</b> 물을 수 있다.
+     */
+    @Bean("eventExecutor")
+    public ThreadPoolTaskExecutor eventExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(2);
         executor.setMaxPoolSize(4);
@@ -32,6 +42,11 @@ public class AsyncConfig implements AsyncConfigurer {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.initialize();
         return executor;
+    }
+
+    @Override
+    public Executor getAsyncExecutor() {
+        return eventExecutor();
     }
 
     @Override

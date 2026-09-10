@@ -95,6 +95,15 @@ tasks.named('test') {
 	// ⚠ fixedDelay 는 컨텍스트 기동 직후 1회 실행된다 — 그건 테스트가 키를 만들기 전이라 무해하다.
 	systemProperty 'notice.view-count.flush-interval-ms', '86400000'
 
+	// 🔴 **알림 정리 배치를 끈다** (2026-09-10, F-2). 위 Redis 격리와 **같은 이유**다 —
+	// 통합 테스트는 앱 컨텍스트를 띄우고 **운영과 같은 DB**(`DB_HOST`)에 붙으므로,
+	// `@Scheduled` 가 뜨는 순간부터 살아 있다.
+	// ⚠ **2026-09-10 에는 «우연히» 안 돌았다**: 전수 8분 25초 < 알림 정리 지연 10분.
+	//   🔴 우연은 설계가 아니다 — 전수가 조금만 길어지면 그날부터 **운영 알림 45건이 조용히 사라진다.**
+	// ⚠ 끈다고 검증이 줄지 않는다 — 배치의 «판단» 은 NotificationCleanupTest 가 리포지토리 단위로
+	//   시험한다. 여기서 끄는 것은 «시계에 맞춰 저절로 도는 것» 뿐이다.
+	systemProperty 'notification.cleanup-enabled', 'false'
+
 	// 테스트를 돌리면 커버리지 리포트도 함께 갱신한다(H-5). 수동 생성으로 두면 **어제 숫자를
 	// 오늘 것으로 읽는** 사고가 난다 — 리포트는 조용히 낡는다.
 	finalizedBy tasks.named('jacocoTestReport')

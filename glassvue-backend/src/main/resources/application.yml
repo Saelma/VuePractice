@@ -110,6 +110,17 @@ catalog:
 #   무엇이 가입 쿠폰인지 화면에서 보이지 않았다. `.env` 의 WELCOME_COUPON_ID 도 함께 없앴다.
 
 # 고아 이미지(업로드만 하고 어디에도 안 붙은 것) 정리
+# 알림 보관 (2026-09-10, F-2) — 알림은 자동 생성되는 유일한 데이터라 안 지우면 반드시 는다.
+# 🔴 읽음/안읽음으로 기준이 갈린다: 「읽은 것만 지운다」로는 **안 읽는 사람의 알림이 안 줄어든다**
+#   (실측: 가장 많이 쌓인 관리자 계정이 33건 전부 미읽음).
+# ⚠ 안 읽은 것을 지우는 건 「못 보게 만드는」 일이라 훨씬 길게 잡는다.
+notification:
+  read-retention-days: 30
+  unread-retention-days: 180
+  cleanup-enabled: true
+  cleanup-interval-ms: 86400000      # 하루마다
+  cleanup-initial-delay-ms: 600000   # 기동 10분 뒤부터
+
 image:
   cleanup-enabled: true
   cleanup-grace-hours: 24      # 업로드 후 이 시간이 지난 것만 — 작성 중인 폼의 이미지를 뺏지 않기 위한 유예

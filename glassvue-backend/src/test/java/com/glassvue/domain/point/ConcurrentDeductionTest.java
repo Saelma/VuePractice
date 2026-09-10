@@ -74,6 +74,7 @@ class ConcurrentDeductionTest {
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired TransactionTemplate transactionTemplate;
     @Autowired com.glassvue.domain.notification.repository.NotificationRepository notificationRepository;
+    @Autowired org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor eventExecutor;
 
     private UUID memberId;
     private UUID productId;
@@ -143,19 +144,25 @@ class ConcurrentDeductionTest {
      * 가 아니라 <b>예산을 두고</b> 기다린다 — 하나라도 지웠으면 바로 끝내고, 없으면 예산만 쓰고 나간다.
      */
     private void awaitAndDeleteStockAlerts() {
-        for (int i = 0; i < 20; i++) {          // 100ms × 20 = 최대 2초
-            Integer deleted = transactionTemplate.execute(
-                    st -> notificationRepository.deleteByProductLink(productId.toString()));
-            if (deleted != null && deleted > 0) {
-                return;
-            }
+        // 🔴 **시계가 아니라 «실행기가 비었나» 를 본다.** AFTER_COMMIT 은 이 메서드가 돌기 전에
+        //    이미 지났으므로, 알림 작업은 **큐에 들어갔거나 돌고 있다.** 둘 다 끝나면 더 올 것이 없다.
+        //    ⚠ 예산은 «영원히 매달리지 않기» 위한 것이지 판정 기준이 아니다.
+        for (int i = 0; i < 100 && !eventQueueDrained(); i++) {   // 50ms × 100 = 최대 5초
             try {
-                Thread.sleep(100);
+                Thread.sleep(50);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return;
+                break;
             }
         }
+        transactionTemplate.execute(
+                st -> notificationRepository.deleteByProductLink(productId.toString()));
+    }
+
+    /** 큐가 비었고 도는 작업도 없다 = 비동기 알림이 더 올 일이 없다. */
+    private boolean eventQueueDrained() {
+        var pool = eventExecutor.getThreadPoolExecutor();
+        return pool.getQueue().isEmpty() && pool.getActiveCount() == 0;
     }
 
     /** 두 스레드를 같은 순간에 푼다. 반환: [성공 수, 거부(BusinessException) 수]. */
