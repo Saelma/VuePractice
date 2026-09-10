@@ -1,6 +1,8 @@
 package com.glassvue.domain.notification.config;
 
+import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * notification.* 설정 (2026-09-10, BACKLOG F-2).
@@ -20,7 +22,28 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *                            «안 지워지는 것» 이 «잘못 지워지는 것» 보다 나으므로 그쪽이 안전한 기본값이다.
  *                            {@code catalog.purge-enabled}·{@code image.cleanup-enabled} 와 같은 자리.
  */
+@Validated
 @ConfigurationProperties(prefix = "notification")
-public record NotificationProperties(int readRetentionDays, int unreadRetentionDays,
-                                     boolean cleanupEnabled) {
+public record NotificationProperties(
+        /** 🔴 <b>0 이면 읽는 즉시 사라진다</b> — 알림함이 «읽으면 없어지는 곳» 이 된다. */
+        @Positive int readRetentionDays,
+        /** 🔴 <b>0 이면 안 읽은 것도 즉시 사라진다</b> — 알림 기능이 통째로 무의미해진다. */
+        @Positive int unreadRetentionDays,
+        boolean cleanupEnabled) {
+
+    /**
+     * 🔴 <b>안 읽은 것을 읽은 것보다 짧게 둘 수 없다.</b>
+     *
+     * <p>이 레코드의 설명이 *«안 본 것을 지우는 것은 «못 보게 만드는» 일이라 더 보수적이어야 한다»*
+     * 라고 적어 뒀다. ⚠ <b>그 판단을 주석에만 두면 설정 한 줄로 뒤집힌다</b> —
+     * 값이 뒤집히면 «읽었다고 표시한 것이 안 읽은 것보다 오래 남는» 이상한 상태가 되고,
+     * 그건 <b>기동할 때 알아야</b> 할 어긋남이지 나중에 알림이 사라진 뒤 알 일이 아니다.
+     */
+    public NotificationProperties {
+        if (readRetentionDays > 0 && unreadRetentionDays > 0 && unreadRetentionDays < readRetentionDays) {
+            throw new IllegalArgumentException(
+                    "notification.unread-retention-days(%d)는 read-retention-days(%d)보다 짧을 수 없다 — 안 본 것을 더 짧게 두면 «못 보게 만드는» 쪽이 된다"
+                            .formatted(unreadRetentionDays, readRetentionDays));
+        }
+    }
 }

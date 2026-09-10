@@ -1,5 +1,7 @@
 package com.glassvue.domain.order.config;
 
+import jakarta.validation.constraints.Positive;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -15,6 +17,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *                        <p>⚠ <b>0 이하로 두지 말 것</b> — 배송완료 즉시 반품이 막힌다.
  *                        기한을 없애려면 이 값을 크게 두지, 0 으로 두지 않는다.
  */
+@Validated
 @ConfigurationProperties(prefix = "order")
-public record OrderProperties(int returnGraceDays) {
+public record OrderProperties(
+        /** 🔴 <b>0 이면 배송완료 즉시 반품이 막힌다</b> — 기한을 없애려면 크게 두지 0 으로 두지 않는다. */
+        @Positive int returnGraceDays) {
 }
