@@ -154,7 +154,7 @@ const actionBadge = auditActionBadge;
           :max-displayed-tags="1"
           :show-multi-tag-only="true"
           :on-multi-tag-preparing="onMultiTag"
-          select-all-text="전체 선택"
+          :drop-down-options="{ wrapperAttr: { class: 'audit-action-popup' } }"
           placeholder="전체"
           :width="220"
         >

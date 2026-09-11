@@ -238,6 +238,17 @@ describe('AuditLogAdminView', () => {
     expect(closed).toBe(0);
   });
 
+  it('🔴 «전체 선택» 줄을 감춘다 — 분류 머리글 곁에 붙어 «회원의 항목» 처럼 보였다 (2026-09-11)', async () => {
+    // ⚠ 팝업은 jsdom 에서 그려지지 않는다(TROUBLESHOOTING) — 그래서 «이 드롭다운에만 붙인 클래스» 와
+    //    «그 클래스로 좁힌 숨김 규칙» 이 **짝으로 있는지**를 본다. 한쪽만 있으면 안 숨는다.
+    const w = await mountWith([log()]);
+    expect(actionBox(w).props('dropDownOptions')).toEqual({ wrapperAttr: { class: 'audit-action-popup' } });
+    const { readFileSync } = await import('node:fs');
+    // ⚠ 이 파일은 jsdom 환경이라 `import.meta.url` 이 file: 이 아니다 — 작업 폴더 기준으로 연다.
+    const css = readFileSync(`${process.cwd()}/src/index.css`, 'utf8');
+    expect(css).toMatch(/\.audit-action-popup \.dx-list-select-all\s*\{\s*display:\s*none;/);
+  });
+
   it('🔴 조작 종류를 **여러 개** 고르면 그대로 검색에 실린다', async () => {
     const w = await mountWith([log()]);
     fetchAuditLogs.mockClear();

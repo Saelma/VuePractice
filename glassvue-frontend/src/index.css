@@ -306,3 +306,10 @@ body {
 .dx-pager .dx-page:hover {
   background-color: var(--color-canvas);
 }
+/* 감사 이력 「조작 종류」 드롭다운 (2026-09-11): «전체 선택» 을 감춘다.
+   분류로 묶으면 그 줄이 첫 분류(회원) 머리글 곁에 붙어 «회원의 항목» 처럼 보였고(사용자), 이 필터는
+   «아무것도 안 고르면 전체» 라 뜻도 겹친다. DevExtreme 에 끄는 옵션이 없어(`showSelectionControls` 가 함께 켠다)
+   이 드롭다운에만 붙인 클래스(`wrapperAttr`)로 좁혀 숨긴다 — 다른 TagBox 는 안 건드린다. */
+.audit-action-popup .dx-list-select-all {
+  display: none;
+}
