@@ -10,7 +10,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
-import { authState } from '../stores/auth';
+import { authState, isAdminRole, isSuperAdminRole } from '../stores/auth';
 import {
   fetchAdminMember, roleText, suspendMember, unsuspendMember, changeMemberRole, deleteMember,
 } from '../api/member';
@@ -30,10 +30,11 @@ const busy = ref(false);
 const isSelf = computed(() => member.value?.id === authState.user?.id);
 // 엄격 분리(2026-07-28): 일반 ADMIN 은 USER 만 정지, 역할변경·관리자 정지는 SUPER_ADMIN 전용,
 // SUPER_ADMIN 계정은 아무도 못 건드림. 서버가 최종 방어선이고 화면은 그에 맞춰 버튼을 감춘다.
-const viewerIsSuper = computed(() => authState.user?.role === 'SUPER_ADMIN');
-const targetIsSuper = computed(() => member.value?.role === 'SUPER_ADMIN');
+const viewerIsSuper = computed(() => isSuperAdminRole(authState.user?.role));
+const targetIsSuper = computed(() => isSuperAdminRole(member.value?.role));
+// 관리자 대상은 SUPER 만 — 서버(MemberAdminCommandService)의 «대상이 ADMIN 이면 SUPER 만» 과 같은 경계.
 const canSuspend = computed(() =>
-  !isSelf.value && !targetIsSuper.value && (viewerIsSuper.value || member.value?.role === 'USER'));
+  !isSelf.value && !targetIsSuper.value && (viewerIsSuper.value || !isAdminRole(member.value?.role)));
 const canChangeRole = computed(() => !isSelf.value && !targetIsSuper.value && viewerIsSuper.value);
 const orderStatus = ref(null); // 주문 상태 필터(반품만 보기 = RETURN_REQUESTED/RETURNED)
 const orderGridRef = ref(null);
@@ -86,7 +87,8 @@ async function toggleSuspend() {
 
 async function toggleRole() {
   const t = member.value;
-  const next = t.role === 'ADMIN' ? 'USER' : 'ADMIN';
+  // SUPER 대상은 canChangeRole 이 이미 뺐다 — 여기 오는 관리자는 ADMIN 뿐이다.
+  const next = isAdminRole(t.role) ? 'USER' : 'ADMIN';
   if (!window.confirm(`${t.nickname}님의 역할을 ${roleText(next)}(으)로 바꿀까요?`)) return;
   error.value = ''; busy.value = true;
   try {
@@ -142,7 +144,7 @@ function signedPoint(n) {
           <dt class="text-ink-500">닉네임</dt><dd class="text-ink-900">{{ member.nickname }}</dd>
           <dt class="text-ink-500">이메일</dt><dd class="text-ink-900">{{ member.email || '—' }}</dd>
           <dt class="text-ink-500">역할</dt>
-          <dd><span class="badge" :class="member.role === 'ADMIN' ? 'badge-neutral' : 'bg-canvas text-ink-400'">{{ roleText(member.role) }}</span></dd>
+          <dd><span class="badge" :class="isAdminRole(member.role) ? 'badge-neutral' : 'bg-canvas text-ink-400'">{{ roleText(member.role) }}</span></dd>
           <dt class="text-ink-500">상태</dt>
           <dd>
             <span class="badge" :class="member.suspended ? 'badge-danger' : 'badge-success'">
@@ -189,7 +191,7 @@ function signedPoint(n) {
                 class="btn btn-secondary btn-sm"
                 :disabled="busy"
                 @click="toggleRole"
-              >{{ member.role === 'ADMIN' ? '일반으로 강등' : '관리자로 승격' }}</button>
+              >{{ isAdminRole(member.role) ? '일반으로 강등' : '관리자로 승격' }}</button>
               <!-- 삭제는 되돌릴 수 없어 최상위 관리자만(B-24). 강등·정지와 같은 줄에 두되 맨 끝에 둔다. -->
               <button
                 v-if="viewerIsSuper"

@@ -248,6 +248,16 @@ describe('MemberDetailAdminView — 되돌릴 수 없는 조작이 있는 화면
     expect(fetchAdminMember).toHaveBeenCalledTimes(1); // 목록을 다시 안 읽는다
   });
 
+  it('🔴 최상위 관리자 대상의 역할 뱃지도 **관리자 모양**이다 — 일반 회원처럼 흐리게 안 그린다 (O-5)', async () => {
+    const w = await open(member({ id: 'other', role: 'SUPER_ADMIN' }));
+    const badge = w.findAll('.badge').find((b) => b.text() === '최상위 관리자');
+    expect(badge.classes()).toContain('badge-neutral');
+    // 대조군 — 일반 회원은 흐린 뱃지다(둘이 같은 모양이면 이 테스트는 아무것도 안 가른다).
+    wrapper.unmount();
+    const u = await open(member());
+    expect(u.findAll('.badge').find((b) => b.text() === '일반').classes()).not.toContain('badge-neutral');
+  });
+
   it('역할을 바꾸면 **뱃지 문구도 따라간다** (날문자 `ADMIN` 을 그대로 띄우지 않는다)', async () => {
     changeMemberRole.mockResolvedValue(member({ role: 'ADMIN' }));
     const w = await open(member());

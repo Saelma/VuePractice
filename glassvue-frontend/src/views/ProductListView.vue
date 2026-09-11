@@ -11,7 +11,7 @@ import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxNumberBox } from 'devextreme-vue/number-box';
 import { fetchProducts, SORT_OPTIONS, STATUS_OPTIONS, statusText, priceText } from '../api/product';
 import { fetchCategories } from '../api/category';
-import { authState, isLoggedIn } from '../stores/auth';
+import { isAdmin, isLoggedIn } from '../stores/auth';
 import { loadWishlistIds } from '../stores/wishlist';
 import EmptyState from '../components/EmptyState.vue';
 import ProductCard from '../components/ProductCard.vue';
@@ -21,7 +21,6 @@ import { pushRecentSearch } from '../stores/recentSearches';
 const router = useRouter();
 const route = useRoute();
 const categories = ref([]);
-const isAdmin = computed(() => authState.user?.role === 'ADMIN');
 
 const SIZE = 12;
 const items = ref([]);

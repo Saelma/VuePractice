@@ -40,7 +40,7 @@ vi.mock('vue-router', () => ({
 
 import ProductListView from './ProductListView.vue';
 import { recentSearches, pushRecentSearch } from '../stores/recentSearches';
-import { clearSession } from '../stores/auth';
+import { authState, clearSession } from '../stores/auth';
 
 const emptyPage = { content: [], page: 0, totalPages: 0, totalElements: 0 };
 
@@ -140,5 +140,26 @@ describe('ProductListView — 최근 검색어 표시 (G-7)', () => {
 
     expect(fetchProducts).toHaveBeenLastCalledWith(expect.objectContaining({ name: '반팔티' }));
     expect(w.find('input[placeholder="검색어"]').element.value).toBe('반팔티');
+  });
+});
+
+// O-5 (2026-09-11) — 🔴 이 화면이 `role === 'ADMIN'` 으로 판별해 **최상위 관리자에게 관리 버튼을 안 보여 줬다.**
+// 판별은 `stores/auth.js` 의 `isAdmin` 하나로 한다(덮개: stores/roleCompareCoverage.test.js).
+describe('ProductListView — 관리 버튼은 관리자 전부에게 (O-5)', () => {
+  const adminButton = (w) => w.findAll('button').find((b) => b.text() === '카테고리 관리');
+
+  it('🔴 최상위 관리자(SUPER_ADMIN)도 관리 버튼을 본다', async () => {
+    authState.user = { id: 's1', role: 'SUPER_ADMIN' };
+    expect(adminButton(await mountView())).toBeDefined();
+  });
+
+  it('일반 관리자(ADMIN)도 본다', async () => {
+    authState.user = { id: 'a1', role: 'ADMIN' };
+    expect(adminButton(await mountView())).toBeDefined();
+  });
+
+  it('대조군 — 일반 회원은 안 본다', async () => {
+    authState.user = { id: 'u1', role: 'USER' };
+    expect(adminButton(await mountView())).toBeUndefined();
   });
 });

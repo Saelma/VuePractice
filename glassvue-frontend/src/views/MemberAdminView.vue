@@ -12,6 +12,7 @@ import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { fetchAdminMembers, roleText } from '../api/member';
+import { isAdminRole } from '../stores/auth';
 
 const router = useRouter();
 const form = ref({ keyword: '' });
@@ -84,7 +85,7 @@ function fmt(v) {
       <DxPager :show-page-size-selector="true" :allowed-page-sizes="[10, 20, 50]" :show-info="true" info-text="{2}명 중 {0}-{1}" />
 
       <template #roleCell="{ data }">
-        <span class="badge" :class="data.data.role === 'ADMIN' ? 'badge-neutral' : 'bg-canvas text-ink-400'">
+        <span class="badge" :class="isAdminRole(data.data.role) ? 'badge-neutral' : 'bg-canvas text-ink-400'">
           {{ roleText(data.data.role) }}
         </span>
       </template>
