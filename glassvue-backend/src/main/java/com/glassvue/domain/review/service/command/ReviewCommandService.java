@@ -63,8 +63,16 @@ public class ReviewCommandService {
         return saved.getId();
     }
 
+    /**
+     * 🔴 <b>작성자만 고친다 — 관리자도 남의 리뷰 본문은 못 고친다</b> (2026-09-11, BACKLOG O-6 · 사용자 결정).
+     * 운영자가 고객 후기를 고치면 후기의 신뢰가 깨지고, 조치 수단은 이미 «숨김»({@link #setHidden})이 있다.
+     * 전에는 {@code findManageable} 을 같이 써서 관리자도 고칠 수 있었고 <b>원장에도 안 남았다.</b>
+     */
     public void update(UUID id, ReviewUpdateRequest req, AuthUser user) {
-        Review review = findManageable(id, user);
+        Review review = findReview(id);
+        if (!review.isOwnedBy(user.id())) {
+            throw new BusinessException(ErrorCode.REVIEW_NOT_OWNER);
+        }
         UUID oldGroupId = review.getImageGroupId();
         // 이미지는 새 그룹으로 교체(Product.update와 동일한 간단화) — 빈 목록이면 null이 되어 이미지 제거
         review.update(req.rating(), req.content(), imageService.createGroup(req.imageIds()));
@@ -73,10 +81,21 @@ public class ReviewCommandService {
         publishRatingChanged(review.getProductId());
     }
 
+    /**
+     * 삭제는 작성자 또는 관리자. 🔴 <b>관리자가 남의 것을 지우면 원장에 남긴다</b>(REVIEW_DELETE, V64) —
+     * 되돌릴 수 없고, 지우고 나면 detail 이 유일한 흔적이라 <b>지우기 전에 읽는다.</b>
+     */
     public void delete(UUID id, AuthUser user) {
         Review review = findManageable(id, user);
         UUID productId = review.getProductId();
         UUID imageGroupId = review.getImageGroupId();
+        if (!review.isOwnedBy(user.id())) {
+            eventPublisher.publishEvent(new AdminActionEvent(
+                    AuditAction.REVIEW_DELETE,
+                    user.id(), user.nickname(),
+                    review.getAuthorId(), memberService.loginIdOf(review.getAuthorId()),
+                    review.getAuthor() + " 의 리뷰 · ★" + review.getRating() + " · " + review.getContent()));
+        }
         reviewRepository.delete(review);
         imageService.deleteGroup(imageGroupId); // 리뷰가 사라지면 첨부 사진도 주인이 없다
         publishRatingChanged(productId);
@@ -125,10 +144,14 @@ public class ReviewCommandService {
                 new ReviewRatingChangedEvent(productId, stats.roundedAverage(), stats.count()));
     }
 
-    /** 존재 확인 + (본인 리뷰이거나 관리자면) 반환. 아니면 403. */
-    private Review findManageable(UUID id, AuthUser user) {
-        Review review = reviewRepository.findById(id)
+    private Review findReview(UUID id) {
+        return reviewRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REVIEW_NOT_FOUND));
+    }
+
+    /** 존재 확인 + (본인 리뷰이거나 관리자면) 반환. 아니면 403. ⚠ 삭제에만 쓴다 — 수정은 작성자만(O-6). */
+    private Review findManageable(UUID id, AuthUser user) {
+        Review review = findReview(id);
         boolean allowed = user.isAdmin() || review.isOwnedBy(user.id());
         if (!allowed) {
             throw new BusinessException(ErrorCode.REVIEW_NOT_OWNER);

@@ -98,3 +98,26 @@ describe('ProductInquiries — 「내 글인가」는 서버의 mine 으로만 �
     expect(w.text()).not.toContain('문의합니다');
   });
 });
+
+// O-6 (2026-09-11) — 관리자가 남의 문의를 지우면 **되돌릴 수 없고 감사에 남는다**(INQUIRY_DELETE) — 누르기 전에 말한다.
+describe('ProductInquiries — 관리자 삭제 확인 문구 (O-6)', () => {
+  beforeEach(() => { clearSession(); fetchProductInquiries.mockReset(); });
+  afterEach(() => { clearSession(); vi.unstubAllGlobals(); });
+
+  it('🔴 관리자가 남의 문의를 지울 때 «감사 기록에 남습니다» 를 묻는다 · 본인 삭제에는 없다', async () => {
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+
+    setUser({ id: 'admin', role: 'ADMIN', nickname: '관리자' });
+    const other = await mountWith([inquiry({ mine: false })]);
+    await other.findAll('button').find((b) => b.text() === '삭제').trigger('click');
+    expect(confirm.mock.calls[0][0]).toContain('감사 기록에 남습니다');
+    other.unmount();
+
+    clearSession();
+    setUser({ id: 'me', role: 'USER', nickname: '나' });
+    const own = await mountWith([inquiry({ mine: true })]);
+    await own.findAll('button').find((b) => b.text() === '삭제').trigger('click');
+    expect(confirm.mock.calls[1][0]).not.toContain('감사');
+  });
+});

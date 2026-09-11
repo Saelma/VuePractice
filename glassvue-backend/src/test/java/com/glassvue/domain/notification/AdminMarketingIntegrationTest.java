@@ -6,6 +6,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.glassvue.domain.audit.entity.AdminAuditLog;
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.entity.AuditTargetType;
+import com.glassvue.domain.audit.repository.AdminAuditLogRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
@@ -54,6 +58,7 @@ class AdminMarketingIntegrationTest {
     @Autowired NotificationRepository notificationRepository;
     @Autowired NotificationCommandService notificationCommandService;
     @Autowired PasswordEncoder passwordEncoder;
+    @Autowired AdminAuditLogRepository auditLogRepository;
 
     private static final String JSON = "application/json";
     private static final String PW = "password123";
@@ -102,6 +107,28 @@ class AdminMarketingIntegrationTest {
                         .contentType(JSON).content(BODY))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         return ((Number) JsonPath.read(body, "$.data.sent")).intValue();
+    }
+
+    @Test
+    @DisplayName("🔴 발송은 원장(MARKETING_SEND)에 남는다 — 대상 id 는 비고, detail 은 응답과 같은 숫자를 말한다 (O-6)")
+    void sendIsAudited() throws Exception {
+        member("mkyes_" + suffix, "ZZ동의함" + suffix, Role.USER, Instant.now());
+        String admin = login(adminLoginId);
+
+        String body = mockMvc.perform(post(URL).header("Authorization", admin).contentType(JSON).content(BODY))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        int agreed = ((Number) JsonPath.read(body, "$.data.agreed")).intValue();
+        int sent = ((Number) JsonPath.read(body, "$.data.sent")).intValue();
+
+        // ⚠ 행위자 닉네임에 이 테스트의 suffix 가 있다 — 공유 espdb 의 다른 행과 섞이지 않게 그걸로 고른다.
+        AdminAuditLog log = auditLogRepository.findAll().stream()
+                .filter(l -> l.getAction() == AuditAction.MARKETING_SEND)
+                .filter(l -> l.getActorName().equals("ZZ마케팅관리자" + suffix))
+                .findFirst().orElseThrow(() -> new AssertionError("MARKETING_SEND 원장 행이 없다"));
+        assertThat(log.getTargetType()).isEqualTo(AuditTargetType.MARKETING);
+        assertThat(log.getTargetId()).as("방송이라 가리킬 한 명이 없다 — 지어낸 id 를 넣지 않는다").isNull();
+        assertThat(log.getDetail()).isEqualTo("«ZZ마케팅제목» · 동의 " + agreed + " · 발송 " + sent);
+        assertThat(sent).as("표본 조건 — 적어도 한 명에게는 가야 «발송 수» 를 가른다").isPositive();
     }
 
     @Test

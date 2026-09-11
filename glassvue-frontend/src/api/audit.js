@@ -33,6 +33,9 @@ export const AUDIT_TARGET_TYPE_LABEL = {
   //    상품으로 접으면 「대상 종류=상품」에 상품 아닌 행이 섞여, 이 필터의 쓸모를 스스로 무너뜨린다.
   CATEGORY: '카테고리',
   NOTICE: '공지',
+  // 🔴 **대상 id 가 비는 유일한 종류다** (2026-09-11, V64 · O-6). 방송이라 가리킬 한 명이 없다 —
+  //    그래서 이 줄의 「대상 아이디」는 늘 `—` 이고, 무엇을 보냈는지는 「내용」(제목·동의·발송 수)이 말한다.
+  MARKETING: '마케팅',
 };
 export function auditTargetTypeText(targetType) {
   return AUDIT_TARGET_TYPE_LABEL[targetType] || targetType || '';
@@ -89,6 +92,9 @@ export const AUDIT_ACTION_LABEL = {
   NOTICE_UPDATE: '공지 수정',
   NOTICE_DELETE: '공지 삭제',
   INQUIRY_ANSWER: '문의 답변',
+  REVIEW_DELETE: '리뷰 삭제(관리자)',
+  INQUIRY_DELETE: '문의 삭제(관리자)',
+  MARKETING_SEND: '마케팅 발송',
 };
 export function auditActionText(action) {
   return AUDIT_ACTION_LABEL[action] || action || '';
@@ -170,6 +176,11 @@ export const AUDIT_ACTION_BADGE = {
   //    빨갛게 칠하면 원장이 그 색으로 덮여 **진짜 위험한 줄이 묻힌다**(발송·배송완료와 같은 판단).
   //    ⚠ 대신 알림이 나갔는지는 「내용」에 «첫 답변» 으로 적힌다 — 색이 아니라 값으로 읽는다.
   INQUIRY_ANSWER: 'badge-neutral',
+  // 🔴 **되돌릴 수 없다**(O-6, V64) — 숨김(warning)과 갈리는 자리다. 지우고 나면 「내용」이 유일한 흔적이다.
+  REVIEW_DELETE: 'badge-danger',
+  INQUIRY_DELETE: 'badge-danger',
+  // 🔴 **보낸 알림은 회수할 수 없다** — 게다가 한 명이 아니라 동의자 전원에게 간다.
+  MARKETING_SEND: 'badge-danger',
 };
 export function auditActionBadge(action) {
   return AUDIT_ACTION_BADGE[action] || 'badge-neutral';

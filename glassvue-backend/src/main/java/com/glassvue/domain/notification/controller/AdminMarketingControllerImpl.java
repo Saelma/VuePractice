@@ -4,6 +4,8 @@ import com.glassvue.domain.notification.dto.MarketingSendRequest;
 import com.glassvue.domain.notification.dto.MarketingSendResponse;
 import com.glassvue.domain.notification.service.MarketingCommandService;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.global.security.AuthUser;
+import com.glassvue.global.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -29,7 +31,7 @@ public class AdminMarketingControllerImpl implements AdminMarketingController {
     @Override
     @PostMapping
     public ResponseEntity<ApiResponse<MarketingSendResponse>> send(
-            @Valid @RequestBody MarketingSendRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok(marketingService.send(request)));
+            @LoginUser AuthUser admin, @Valid @RequestBody MarketingSendRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(marketingService.send(request, admin)));
     }
 }

@@ -3,7 +3,9 @@ package com.glassvue.domain.notification.controller;
 import com.glassvue.domain.notification.dto.MarketingSendRequest;
 import com.glassvue.domain.notification.dto.MarketingSendResponse;
 import com.glassvue.global.response.ApiResponse;
+import com.glassvue.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -41,7 +43,9 @@ public interface AdminMarketingController {
                     응답은 `agreed`(동의자) · `sent`(실제 발송) · `optedOut`(수신 거부로 제외)로 **나눠서** 준다.
                     합쳐서 주면 *"동의자가 적어서 적게 간 것"* 과 *"다들 꺼서 적게 간 것"* 을 구분할 수 없다.
 
-                    ⚠ **되돌릴 수 없다** — 만들어진 알림은 회수할 수 없다.
+                    ⚠ **되돌릴 수 없다** — 만들어진 알림은 회수할 수 없다. 그래서 **감사 원장에 남는다**
+                    (`MARKETING_SEND` — 제목 · 동의자 수 · 발송 수).
                     """)
-    ResponseEntity<ApiResponse<MarketingSendResponse>> send(@Valid MarketingSendRequest request);
+    ResponseEntity<ApiResponse<MarketingSendResponse>> send(
+            @Parameter(hidden = true) AuthUser admin, @Valid MarketingSendRequest request);
 }

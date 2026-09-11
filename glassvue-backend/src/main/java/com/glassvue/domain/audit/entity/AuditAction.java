@@ -23,7 +23,11 @@ package com.glassvue.domain.audit.entity;
  *   <li><b>사람이 안 누른 것</b> — 상품 영구삭제 배치(purge), 세일의 자동 시작·종료.
  *       {@code actor_id} 가 NOT NULL 인데 <b>지어낼 값이 아니다.</b></li>
  *   <li><b>조회</b> — 공지 조회수는 고객이 읽은 것이고 Redis 누적이라 트랜잭션도 없다.</li>
+ *   <li><b>멱등 유지보수 도구</b> — 이미지 파생본 백필. 빈 파생본 URL 을 채울 뿐 업무 데이터의 뜻을 안 바꾸고,
+ *       몇 번을 돌려도 결과가 같다(2026-09-11 판정).</li>
  * </ul>
+ * 🔴 <b>쓰기 엔드포인트마다 «남긴다 / 안 남긴다(이유)» 가 정해져 있어야 한다</b> —
+ * {@code WriteEndpointAuditCoverageTest} 가 전부 꺼내 대조한다(WA §2-12). 새 쓰기 API 를 만들면 거기서 빨개진다.
  * ⚠ <b>안 일어나는 일에는 값을 만들지 않는다</b> — 쿠폰·카테고리에 「수정/삭제」 API 가 없어
  * 값도 없다. 만들어 두면 «왜 한 번도 안 쌓이지» 를 나중에 되짚게 된다.
  *
@@ -58,7 +62,7 @@ package com.glassvue.domain.audit.entity;
  * <p>경위(왜 이 순서로 늘었나 · 그날의 실측)는 핸드오프에 있다 —
  * {@code handoffs/2026-08-10}(주문·콘텐츠) · {@code 2026-08-14}(상품·주문 진행) ·
  * {@code 2026-08-20}(상품 등록수정·쿠폰·할인) · {@code 2026-08-21}(카테고리·공지·문의답변) ·
- * {@code 2026-08-27}(§I-15 대행 반품요청).
+ * {@code 2026-08-27}(§I-15 대행 반품요청) · {@code 2026-09-11}(O-6 관리자 삭제·마케팅 발송).
  */
 public enum AuditAction {
     /** 회원 정지. */
@@ -228,7 +232,27 @@ public enum AuditAction {
      * <p>⚠ <b>값이 하나다</b>(등록·수정을 안 가른다) — 갈라도 얻는 것이 없다. 궁금한 것은
      * «알림이 나갔나» 인데 그건 detail 이 이미 답한다.
      */
-    INQUIRY_ANSWER(AuditTargetType.MEMBER);
+    INQUIRY_ANSWER(AuditTargetType.MEMBER),
+    /**
+     * 관리자가 <b>남의</b> 리뷰·문의를 <b>삭제</b>. V64 (2026-09-11, BACKLOG O-6).
+     *
+     * <p>🔴 <b>되돌릴 수 없다</b>({@code repository.delete}) — 숨김(되돌릴 수 있다)과 갈리는 지점이고,
+     * 삭제 API 는 작성자와 <b>같은 경로</b>를 써서 {@code /api/admin/**} 감사 목록에서 빠져 있었다.
+     * ⚠ <b>본인이 지우면 안 남긴다</b> — «고객 본인의 조작» 이다(위 «안 남기는 것»).
+     *
+     * <p>⚠ 대상은 작성자({@link #REVIEW_HIDE} 와 같은 판단). <b>detail</b>: 리뷰는 별점·본문(넘치면 원장이 자른다), 문의는 제목 —
+     * 지우고 나면 <b>그것이 유일한 흔적</b>이다({@link #NOTICE_DELETE} 와 같다).
+     */
+    REVIEW_DELETE(AuditTargetType.MEMBER),
+    INQUIRY_DELETE(AuditTargetType.MEMBER),
+    /**
+     * <b>마케팅 알림 발송</b>. V64 (2026-09-11, BACKLOG O-6).
+     *
+     * <p>🔴 <b>되돌릴 수 없는 첫 방송 조작인데 원장에 없었다</b> — «안 남기는 것» 목록에도 없어
+     * <b>안 남기기로 한 것이 아니라 빠진 것</b>이었다. 대상이 한 명이 아니라 {@link AuditTargetType#MARKETING}
+     * 이고 {@code target_id} 가 빈다. <b>detail</b>: 제목 · 동의자 수 · 실제 발송 수(수신 거부 제외).
+     */
+    MARKETING_SEND(AuditTargetType.MARKETING);
 
     private final AuditTargetType targetType;
 

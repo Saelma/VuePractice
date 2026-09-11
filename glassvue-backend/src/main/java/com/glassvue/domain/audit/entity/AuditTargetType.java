@@ -43,5 +43,14 @@ public enum AuditTargetType {
      * 조치</b>해서 «대상=작성자» 가 뜻을 가졌는데, 공지는 <b>관리자가 쓰고 관리자가 고친다.</b>
      * 그러면 actor 와 target 이 <b>거의 늘 같은 사람</b>이라 원장 한 줄이 아무것도 안 가른다.
      */
-    NOTICE
+    NOTICE,
+    /**
+     * 대상이 <b>마케팅 발송</b> — 방송이라 <b>한 명의 대상이 없다</b> (2026-09-11, V64 · BACKLOG O-6).
+     *
+     * <p>🔴 <b>{@code target_id} 가 비는 유일한 종류다.</b> 발송 행(캠페인)이 따로 없어 가리킬 id 가 없고,
+     * 행위자 id 나 새 UUID 를 넣으면 <b>지어낸 값</b>이 된다(V37 이후의 판단 — 모르는 값은 NULL).
+     * DB 도 이 종류일 때만 NULL 을 받는다({@code ck_admin_audit_target_id}).
+     * 무엇을 보냈는지는 {@code detail} 에 제목·동의자 수·발송 수로 남긴다.
+     */
+    MARKETING
 }

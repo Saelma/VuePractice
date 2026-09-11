@@ -104,12 +104,22 @@ public class InquiryCommandService {
         imageService.deleteGroup(oldGroupId);
     }
 
-    /** 삭제는 본인 또는 관리자. */
+    /**
+     * 삭제는 본인 또는 관리자. 🔴 <b>관리자가 남의 것을 지우면 원장에 남긴다</b>(INQUIRY_DELETE, V64 · O-6) —
+     * 되돌릴 수 없고, 작성자와 같은 경로라 {@code /api/admin/**} 감사 목록에서 빠져 있었다. 지우기 전에 읽는다.
+     */
     public void delete(UUID id, AuthUser user) {
         Inquiry inquiry = findById(id);
-        boolean allowed = user.isAdmin() || inquiry.isOwnedBy(user.id());
-        if (!allowed) {
+        boolean owner = inquiry.isOwnedBy(user.id());
+        if (!owner && !user.isAdmin()) {
             throw new BusinessException(ErrorCode.INQUIRY_NOT_OWNER);
+        }
+        if (!owner) {
+            eventPublisher.publishEvent(new AdminActionEvent(
+                    AuditAction.INQUIRY_DELETE,
+                    user.id(), user.nickname(),
+                    inquiry.getAuthorId(), memberService.loginIdOf(inquiry.getAuthorId()),
+                    inquiry.getTitle()));
         }
         UUID imageGroupId = inquiry.getImageGroupId();
         inquiryRepository.delete(inquiry);

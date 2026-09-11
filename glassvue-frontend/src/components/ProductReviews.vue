@@ -22,8 +22,17 @@ const loading = ref(true);
 const error = ref('');
 
 // 「내 글인가」는 서버 판정(r.mine)을 쓴다 — ProductInquiries 와 같은 이유(R 축).
-function canManage(r) {
+// 🔴 수정은 **작성자만** — 관리자도 남의 후기는 못 고친다(서버도 403, 2026-09-11 O-6). 조치는 「숨김」이다.
+function canEdit(r) {
+  return r.mine;
+}
+function canDelete(r) {
   return isAdmin.value || r.mine;
+}
+// 관리자가 남의 것을 지우면 **되돌릴 수 없고 감사에 남는다** — 누르기 전에 말한다(서버: REVIEW_DELETE).
+function deleteConfirmText(r) {
+  return r.mine ? '이 리뷰를 삭제할까요?'
+    : '다른 회원의 리뷰를 삭제합니다. 되돌릴 수 없고 관리자 감사 기록에 남습니다. 삭제할까요?';
 }
 
 // 작성 폼 — images는 [{id,url}] (전송 시 id만 뽑는다)
@@ -105,7 +114,7 @@ async function saveEdit(r) {
 }
 
 async function remove(r) {
-  if (!window.confirm('이 리뷰를 삭제할까요?')) return;
+  if (!window.confirm(deleteConfirmText(r))) return;
   try {
     await deleteReview(r.id);
     await load(0);
@@ -222,9 +231,9 @@ onMounted(() => load(0));
               />
             </a>
           </div>
-          <div v-if="canManage(r)" class="mt-3 flex gap-1">
-            <button type="button" class="btn btn-ghost" @click="startEdit(r)">수정</button>
-            <button type="button" class="btn btn-danger" @click="remove(r)">삭제</button>
+          <div v-if="canEdit(r) || canDelete(r)" class="mt-3 flex gap-1">
+            <button v-if="canEdit(r)" type="button" class="btn btn-ghost" @click="startEdit(r)">수정</button>
+            <button v-if="canDelete(r)" type="button" class="btn btn-danger" @click="remove(r)">삭제</button>
           </div>
         </template>
       </li>

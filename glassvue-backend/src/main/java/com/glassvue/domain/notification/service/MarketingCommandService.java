@@ -1,13 +1,17 @@
 package com.glassvue.domain.notification.service;
 
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.domain.notification.dto.MarketingSendRequest;
 import com.glassvue.domain.notification.dto.MarketingSendResponse;
 import com.glassvue.domain.notification.entity.NotificationType;
+import com.glassvue.global.security.AuthUser;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +42,7 @@ public class MarketingCommandService {
 
     private final MemberService memberService;
     private final NotificationCommandService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 동의자 전원에게 마케팅 알림을 만든다. 수신을 끈 사람은 {@code create} 가 걸러 낸다.
@@ -47,9 +52,13 @@ public class MarketingCommandService {
      *
      * <p>⚠ 지금 규모(회원 수십 명)에선 단순 루프로 충분하다. 회원이 늘면 <b>알림 행이 회원 수만큼</b>
      * 생기므로 배치·페이징이 필요해진다 — 그때 손대면 되고, 지금 미리 만들지 않는다(§1).
+     *
+     * <p>🔴 <b>원장에 남긴다</b>(MARKETING_SEND, V64 · 2026-09-11 BACKLOG O-6) — 되돌릴 수 없는 방송인데
+     * 빠져 있었다. 대상이 한 명이 아니라 {@code target_id} 는 비운다. 숫자는 <b>세고 난 뒤</b> 적는다 —
+     * 응답과 원장이 같은 값을 말해야 한다.
      */
     @Transactional
-    public MarketingSendResponse send(MarketingSendRequest req) {
+    public MarketingSendResponse send(MarketingSendRequest req, AuthUser admin) {
         List<UUID> agreed = memberService.marketingAgreedIds();
         String link = (req.link() == null || req.link().isBlank()) ? null : req.link().trim();
 
@@ -60,6 +69,9 @@ public class MarketingCommandService {
                 sent++;
             }
         }
+        eventPublisher.publishEvent(new AdminActionEvent(
+                AuditAction.MARKETING_SEND, admin.id(), admin.nickname(), null, null,
+                "«" + req.title() + "» · 동의 " + agreed.size() + " · 발송 " + sent));
         log.info("[마케팅] 발송 title='{}' 동의={} 발송={} 수신거부={}",
                 req.title(), agreed.size(), sent, agreed.size() - sent);
         return MarketingSendResponse.of(agreed.size(), sent);

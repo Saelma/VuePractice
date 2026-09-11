@@ -33,6 +33,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import com.glassvue.domain.audit.entity.AuditAction;
+import com.glassvue.domain.audit.event.AdminActionEvent;
+import com.glassvue.domain.member.service.MemberService;
 
 @ExtendWith(MockitoExtension.class)
 class ReviewCommandServiceTest {
@@ -42,6 +45,7 @@ class ReviewCommandServiceTest {
     @Mock OrderService orderService;
     @Mock ImageService imageService;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock MemberService memberService;
     @InjectMocks ReviewCommandService service;
 
     private final UUID productId = UUID.randomUUID();
@@ -178,6 +182,52 @@ class ReviewCommandServiceTest {
         when(reviewRepository.findById(any())).thenReturn(Optional.of(other));
         service.delete(UUID.randomUUID(), admin);
         verify(reviewRepository).delete(other);
+    }
+
+    // ── O-6 (2026-09-11) — 관리자는 남의 리뷰를 못 고치고, 지우면 원장에 남는다 ──────────
+
+    @Test
+    @DisplayName("🔴 수정: 관리자도 남의 리뷰는 못 고친다 → REVIEW_NOT_OWNER (O-6 · 조치는 숨김으로)")
+    void update_adminOnOthers_forbidden() {
+        Review other = reviewBy(UUID.randomUUID());
+        when(reviewRepository.findById(any())).thenReturn(Optional.of(other));
+        assertErrorCode(() -> service.update(UUID.randomUUID(), new ReviewUpdateRequest(1, "관리자가 고침", List.of()), admin),
+                ErrorCode.REVIEW_NOT_OWNER);
+        assertThat(other.getContent()).isEqualTo("c");   // 안 바뀌었다
+    }
+
+    @Test
+    @DisplayName("🔴 삭제: 관리자가 남의 리뷰를 지우면 원장(REVIEW_DELETE)에 남는다 — 대상은 작성자, detail 에 별점·본문")
+    void delete_adminOnOthers_audited() {
+        UUID authorId = UUID.randomUUID();
+        Review other = reviewBy(authorId);
+        when(reviewRepository.findById(any())).thenReturn(Optional.of(other));
+        when(memberService.loginIdOf(authorId)).thenReturn("zzauthor");
+
+        service.delete(UUID.randomUUID(), admin);
+
+        AdminActionEvent audit = auditEvents().getFirst();
+        assertThat(audit.action()).isEqualTo(AuditAction.REVIEW_DELETE);
+        assertThat(audit.actorId()).isEqualTo(admin.id());
+        assertThat(audit.targetId()).isEqualTo(authorId);
+        assertThat(audit.targetLogin()).isEqualTo("zzauthor");
+        assertThat(audit.detail()).contains("★5").contains("nick");
+    }
+
+    @Test
+    @DisplayName("대조군 — 본인이 지우면 원장에 안 남긴다(«고객 본인의 조작»)")
+    void delete_owner_notAudited() {
+        when(reviewRepository.findById(any())).thenReturn(Optional.of(reviewBy(user.id())));
+        service.delete(UUID.randomUUID(), user);
+        assertThat(auditEvents()).isEmpty();
+    }
+
+    /** 발행된 것 중 감사 이벤트만. ⚠ 집계 이벤트도 함께 나가므로 종류로 거른다. */
+    private List<AdminActionEvent> auditEvents() {
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, org.mockito.Mockito.atLeastOnce()).publishEvent(captor.capture());
+        return captor.getAllValues().stream()
+                .filter(AdminActionEvent.class::isInstance).map(AdminActionEvent.class::cast).toList();
     }
 
     /** 발행된 ReviewRatingChangedEvent를 잡아 반환. */

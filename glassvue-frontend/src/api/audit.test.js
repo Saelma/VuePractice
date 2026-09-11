@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import {
   fetchAuditLogs, auditActionText, auditActionBadge,
-  AUDIT_ACTION_LABEL, AUDIT_ACTION_BADGE,
+  AUDIT_ACTION_LABEL, AUDIT_ACTION_BADGE, AUDIT_TARGET_TYPE_LABEL,
 } from './audit';
 import { clearSession } from '../stores/auth';
 
@@ -30,6 +30,10 @@ const AUDIT_ACTION_JAVA = resolve(
   HERE,
   '../../../glassvue-backend/src/main/java/com/glassvue/domain/audit/entity/AuditAction.java',
 );
+const AUDIT_TARGET_TYPE_JAVA = resolve(
+  HERE,
+  '../../../glassvue-backend/src/main/java/com/glassvue/domain/audit/entity/AuditTargetType.java',
+);
 
 /**
  * `AuditAction.java` 에서 enum 값을 뽑는다.
@@ -42,10 +46,12 @@ const AUDIT_ACTION_JAVA = resolve(
  * 아래 두 테스트는 `[] == []` 로 **초록**이 된다. 그걸 막으라고 있던 것이 첫 번째 가드이고,
  * **실제로 그 가드가 잡았다.** 이 주석은 그 가드가 값을 한 일의 기록이다.
  */
-function enumValuesFromJava() {
-  const src = readFileSync(AUDIT_ACTION_JAVA, 'utf8');
-  // 값 뒤의 `(...)` 는 있어도 없어도 된다. 마지막 값은 `;` 로 끝난다.
-  return [...src.matchAll(/^ {4}([A-Z][A-Z0-9_]*)\s*(?:\([^)]*\))?\s*[,;]\s*$/gm)].map((m) => m[1]);
+function enumValuesFromJava(file = AUDIT_ACTION_JAVA) {
+  const src = readFileSync(file, 'utf8');
+  // 값 뒤의 `(...)` 는 있어도 없어도 된다. 마지막 값은 `;` 로 끝나거나 — 🔴 **아무것도 없이 끝난다**
+  // (`AuditTargetType` 은 필드가 없어 `MARKETING` 다음 줄이 바로 `}` 다). 2026-09-11 에 대상 종류를
+  // 대조에 넣자 **마지막 값 하나를 못 읽어** 빨개졌다 — 조작 쪽은 `;` 가 있어 몰랐던 빈틈이다.
+  return [...src.matchAll(/^ {4}([A-Z][A-Z0-9_]*)\s*(?:\([^)]*\))?\s*[,;]?\s*$/gm)].map((m) => m[1]);
 }
 
 describe('감사 라벨 ↔ 백엔드 enum 드리프트 (2026-08-10)', () => {
@@ -65,6 +71,14 @@ describe('감사 라벨 ↔ 백엔드 enum 드리프트 (2026-08-10)', () => {
 
   it('🔴 뱃지 키 집합도 enum 과 같다 (빠지면 조용히 회색 — 위험한 조작이 안 띈다)', () => {
     expect(Object.keys(AUDIT_ACTION_BADGE).sort()).toEqual(enumValuesFromJava().sort());
+  });
+
+  // 2026-09-11 (O-6 · O-8) — 대상 종류 라벨은 **대조가 없었다.** 필터 선택지가 이 객체로 만들어져
+  // 빠지면 «마케팅 발송만 보기» 를 고를 수 없다. 조작 라벨과 같은 방식으로 원문을 읽어 대조한다.
+  it('🔴 대상 종류 라벨 키 집합도 `AuditTargetType` enum 과 같다 (빠지면 필터에서 못 고른다)', () => {
+    const values = enumValuesFromJava(AUDIT_TARGET_TYPE_JAVA);
+    expect(values).toContain('MEMBER'); // 파서가 헛돌면 [] == [] 로 초록이 된다(위 첫 가드와 같은 이유)
+    expect(Object.keys(AUDIT_TARGET_TYPE_LABEL).sort()).toEqual(values.sort());
   });
 
   it('⚠ 되돌릴 수 없는 조작은 danger 다 — 삭제·주문취소는 해제가 없다', () => {

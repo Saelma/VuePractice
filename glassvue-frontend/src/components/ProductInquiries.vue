@@ -29,6 +29,11 @@ function canEdit(q) {
 function canDelete(q) {
   return isAdmin.value || q.mine;
 }
+// 관리자가 남의 것을 지우면 **되돌릴 수 없고 감사에 남는다** — 누르기 전에 말한다(서버: INQUIRY_DELETE, O-6).
+function deleteConfirmText(q) {
+  return q.mine ? '이 문의를 삭제할까요?'
+    : '다른 회원의 문의를 삭제합니다. 되돌릴 수 없고 관리자 감사 기록에 남습니다. 삭제할까요?';
+}
 
 // 작성 폼 — images는 [{id,url}] (전송 시 id만 뽑는다)
 const form = ref({ title: '', content: '', secret: false, images: [] });
@@ -93,7 +98,7 @@ async function saveEdit(q) {
 }
 
 async function remove(q) {
-  if (!window.confirm('이 문의를 삭제할까요?')) return;
+  if (!window.confirm(deleteConfirmText(q))) return;
   try {
     await deleteInquiry(q.id);
     await load(0);

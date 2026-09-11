@@ -53,8 +53,12 @@ public class AdminAuditLog extends BaseTimeEntity {
     @Column(name = "actor_name", nullable = false, updatable = false, length = 50)
     private String actorName;
 
+    /**
+     * 대상 id. 🔴 <b>{@link AuditTargetType#MARKETING} 일 때만 비어 있다</b>(V64) — 방송이라 가리킬 한 명이 없다.
+     * DB 가 그 짝을 강제한다({@code ck_admin_audit_target_id}).
+     */
     @JdbcTypeCode(SqlTypes.BINARY)
-    @Column(name = "target_id", columnDefinition = "RAW(16)", nullable = false, updatable = false)
+    @Column(name = "target_id", columnDefinition = "RAW(16)", updatable = false)
     private UUID targetId;
 
     /**

@@ -166,6 +166,36 @@ class InquiryCommandServiceTest {
         verify(imageService).deleteGroup(group);
     }
 
+    @Test
+    @DisplayName("🔴 삭제: 관리자가 남의 문의를 지우면 원장(INQUIRY_DELETE)에 — 대상은 질문자, detail 은 제목 (O-6)")
+    void delete_adminOnOthers_audited() {
+        UUID authorId = UUID.randomUUID();
+        Inquiry other = Inquiry.builder().productId(UUID.randomUUID()).type(InquiryType.PRODUCT).authorId(authorId)
+                .author("nick").title("ZZ지워질제목").content("c").secret(false).build();
+        when(inquiryRepository.findById(any())).thenReturn(Optional.of(other));
+        when(memberService.loginIdOf(authorId)).thenReturn("zzasker");
+
+        service.delete(UUID.randomUUID(), admin);
+
+        List<AdminActionEvent> audits = publishedEventsOf(AdminActionEvent.class);
+        assertThat(audits).hasSize(1);
+        assertThat(audits.getFirst().action()).isEqualTo(AuditAction.INQUIRY_DELETE);
+        assertThat(audits.getFirst().targetId()).isEqualTo(authorId);
+        assertThat(audits.getFirst().targetLogin()).isEqualTo("zzasker");
+        assertThat(audits.getFirst().detail()).isEqualTo("ZZ지워질제목");
+    }
+
+    @Test
+    @DisplayName("대조군 — 본인이 지우면 원장에 안 남긴다 · 남의 것을 일반 회원이 지우면 거부")
+    void delete_owner_notAudited() {
+        when(inquiryRepository.findById(any())).thenReturn(Optional.of(inquiryBy(user.id())));
+        service.delete(UUID.randomUUID(), user);
+        assertThat(publishedEventsOf(AdminActionEvent.class)).isEmpty();
+
+        when(inquiryRepository.findById(any())).thenReturn(Optional.of(inquiryBy(UUID.randomUUID())));
+        assertErrorCode(() -> service.delete(UUID.randomUUID(), user), ErrorCode.INQUIRY_NOT_OWNER);
+    }
+
     // --- 답변 알림 이벤트 (B-15, 2026-07-31) ---
 
     @Test
