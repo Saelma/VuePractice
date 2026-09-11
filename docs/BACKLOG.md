@@ -4192,7 +4192,7 @@ if (n.authorId !== authState.user?.id && !isAdminRole(authState.user?.role)) { �
 | `MemberResponse.email` | `/api/auth/me` · `/api/members/**` — 전부 `authenticated`. 자기 것이다. |
 | `AdminOrderResponse.memberId` · `AdminInquiryResponse.authorId` | 관리자가 **회원 상세로 이동**하는 링크가 그 값으로 간다. |
 
-### R-7. 작성자 **표시 이름**을 안 가린다 — 크기 **소** · **미착수** · ⚠ **제품 결정**
+### R-7. 작성자 **표시 이름**을 안 가린다 — ✅ **가린다 (2026-09-11)** · `handoffs/2026-09-11-handoff.md` §2
 
 공개 목록에 `author` 가 **«김기현팀3» 그대로** 나간다. 국내 쇼핑몰 관행은 `김기**` 다.
 
@@ -4200,6 +4200,12 @@ if (n.authorId !== authState.user?.id && !isAdminRole(authState.user?.role)) { �
 ⚠ **다만 공개글에서는 관행이 갈린다**(전체 노출도 흔하다). **값을 바꾸는 게 아니라 보이는 방식을
 바꾸는 일**이라 축의 결론이 아니라 **후보**로 남긴다. 마스킹 자리는 한 곳이어야 한다
 (`InquiryResponse.from` · `ReviewResponse.from` — 화면에서 자르면 두 곳이 갈린다).
+
+**결정 (2026-09-11, 사용자)**: ①**공개·비밀 모두** 가린다 ②형식은 **앞 1글자 + 고정 `**`**
+(`김기현팀3 → 김**`) — 별 개수를 고정해 **길이도 안 샌다** ③**본인·관리자에게는 원문**.
+→ 규칙은 `global/common/AuthorNames` **한 곳**, 두 `from` 이 거친다. 화면 변경 0(그대로 그린다).
+⚠ **두 목록 모두 캐시가 없어** 열람자별 값을 실어도 섞이지 않는다(R-5 를 먼저 확인했다).
+⚠ **공지 작성자는 대상이 아니다** — 관리자가 쓰고, 공지 목록에 **작성자 검색**이 걸려 있다.
 
 ### 🔴 이 감사에서 배운 것 — 항목보다 이게 크다
 
