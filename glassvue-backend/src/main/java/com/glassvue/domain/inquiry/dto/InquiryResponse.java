@@ -3,6 +3,7 @@ package com.glassvue.domain.inquiry.dto;
 import com.glassvue.domain.image.dto.ImageResponse;
 import com.glassvue.domain.inquiry.entity.Inquiry;
 import com.glassvue.domain.inquiry.entity.InquiryStatus;
+import com.glassvue.global.common.AuthorNames;
 import com.glassvue.global.security.AuthUser;
 import java.time.Instant;
 import java.util.List;
@@ -20,6 +21,8 @@ import java.util.UUID;
  *
  * <p>⚠ <b>제목도 가린다.</b> 화면이 «비밀글 (작성자·판매자만 열람)» 이라고 약속하는데
  * 본문만 가리면 제목이 그 약속을 깬다 — 제목은 대개 질문 그 자체다.
+ *
+ * <p>{@code author} 는 본인·관리자가 아니면 가린다 — 공개·비밀 가리지 않고({@link AuthorNames}, R-7).
  */
 public record InquiryResponse(
         UUID id,
@@ -55,7 +58,7 @@ public record InquiryResponse(
                 i.getId(),
                 i.getProductId(),
                 mine,
-                i.getAuthor(),
+                AuthorNames.forViewer(i.getAuthor(), mine, viewer),
                 canView ? i.getTitle() : MASKED_TITLE,
                 canView ? i.getContent() : MASKED_BODY,
                 i.isSecret(),

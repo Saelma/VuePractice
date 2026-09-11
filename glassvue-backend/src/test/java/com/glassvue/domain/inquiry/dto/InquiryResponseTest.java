@@ -106,6 +106,24 @@ class InquiryResponseTest {
     }
 
     @Test
+    @DisplayName("작성자 이름은 공개·비밀 모두 비로그인·타인에게 가린다 (R-7)")
+    void author_maskedForAnonymousAndOthers() {
+        AuthUser other = new AuthUser(UUID.randomUUID(), Role.USER, "other");
+        assertThat(InquiryResponse.from(publicInquiry(), null, IMAGES).author()).isEqualTo("n**");
+        assertThat(InquiryResponse.from(publicInquiry(), other, IMAGES).author()).isEqualTo("n**");
+        assertThat(InquiryResponse.from(secretInquiry(), null, IMAGES).author()).isEqualTo("n**");
+    }
+
+    @Test
+    @DisplayName("작성자 이름은 본인·관리자에게 원문 (R-7)")
+    void author_fullForOwnerAndAdmin() {
+        assertThat(InquiryResponse.from(secretInquiry(),
+                new AuthUser(ownerId, Role.USER, "me"), IMAGES).author()).isEqualTo("nick");
+        assertThat(InquiryResponse.from(secretInquiry(),
+                new AuthUser(UUID.randomUUID(), Role.ADMIN, "admin"), IMAGES).author()).isEqualTo("nick");
+    }
+
+    @Test
     @DisplayName("공개글 + 비로그인 → 그대로 열람 + 이미지 노출")
     void public_anonymous_visible() {
         InquiryResponse r = InquiryResponse.from(publicInquiry(), null, IMAGES);
