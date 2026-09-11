@@ -221,9 +221,11 @@ describe('AuditLogAdminView', () => {
     const inst = actionBox(w).vm.instance;
     const input = actionBox(w).find('input.dx-texteditor-input').element;
     // 🔴 **최종 상태만 보면 못 잡는다** — 닫혔다가 곧바로 다시 열려도 끝은 «열림» 이다. 그 사이 한 번 닫힌 것이
-    //    바로 눈에 보이는 깜빡임이라, **닫힘이 몇 번 일어났는지**를 센다.
+    //    바로 눈에 보이는 깜빡임이라, **`opened` 가 false 로 바뀐 횟수**를 센다.
+    //    ⚠ `closed` 이벤트로 세면 안 잡힌다 — 닫힘이 **끝나기 전에** 다시 열려서 그 이벤트까지 안 간다
+    //    (변형 주입으로 확인: `open-on-field-click=false` 를 빼도 `closed` 는 0 이었다).
     let closed = 0;
-    inst.on('closed', () => { closed += 1; });
+    inst.on('optionChanged', (e) => { if (e.name === 'opened' && e.value === false) closed += 1; });
     const seq = [];
     for (let i = 0; i < 3; i++) {
       eventsEngine.trigger(input, 'dxclick');
