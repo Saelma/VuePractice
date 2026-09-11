@@ -53,9 +53,9 @@ public class MarketingCommandService {
      * <p>⚠ 지금 규모(회원 수십 명)에선 단순 루프로 충분하다. 회원이 늘면 <b>알림 행이 회원 수만큼</b>
      * 생기므로 배치·페이징이 필요해진다 — 그때 손대면 되고, 지금 미리 만들지 않는다(§1).
      *
-     * <p>🔴 <b>원장에 남긴다</b>(MARKETING_SEND, V64 · 2026-09-11 BACKLOG O-6) — 되돌릴 수 없는 방송인데
-     * 빠져 있었다. 대상이 한 명이 아니라 {@code target_id} 는 비운다. 숫자는 <b>세고 난 뒤</b> 적는다 —
-     * 응답과 원장이 같은 값을 말해야 한다.
+     * <p>🔴 <b>원장에 남긴다</b>(MARKETING_SEND, V64 · 2026-09-11 BACKLOG O-6) — 08-03 에 «알림 행이 기록이다» 로
+     * 안 남겼는데, F-2 가 그 알림을 보관 기간 뒤 지워 <b>기록이 사라지게 됐다</b>({@code AuditAction.MARKETING_SEND}).
+     * 대상이 한 명이 아니라 {@code target_id} 는 비운다. 숫자는 <b>세고 난 뒤</b> 적는다 — 응답과 원장이 같은 값을 말해야 한다.
      */
     @Transactional
     public MarketingSendResponse send(MarketingSendRequest req, AuthUser admin) {

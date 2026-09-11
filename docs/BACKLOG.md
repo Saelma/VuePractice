@@ -3925,7 +3925,16 @@ const needsAuth = to.meta.requiresAuth || to.meta.requiresAdmin || to.meta.requi
 같은 모양: `MemberAdminView.vue:87`(ADMIN 만 뱃지) · `MemberDetailAdminView.vue:89`(ADMIN 이 아니면 ADMIN 으로 토글 — SUPER 대상일 때 서버가 어떻게 답하는지는 **미확인**).
 → 고치고 **`role === '` 를 세는 덮개**를 둔다(`isAdminRole` 밖에서 역할 문자열을 비교하면 빨개진다).
 
-#### O-6. 🔴 관리자 쓰기 중 **감사에 안 남는 것**이 있고, 그걸 잡는 덮개가 없다 (크기 중 · 미착수)
+#### O-6. 🔴 관리자 쓰기 중 **감사에 안 남는 것**이 있고, 그걸 잡는 덮개가 없다 — ✅ **고쳤다 (2026-09-11)** · `handoffs/2026-09-11-handoff.md` §6
+
+**결정 (사용자)**: ①관리자도 **남의 리뷰는 못 고친다**(서버 403 + 버튼 숨김 — 조치는 숨김) ②관리자가 남의 리뷰·문의를
+**지우는 것은 허용 + 감사**(`REVIEW_DELETE`·`INQUIRY_DELETE`) ③마케팅 발송은 **`target_type=MARKETING` + `target_id` 비움**
+(`MARKETING_SEND`, V64 가 짝을 CHECK 로 쥔다) ④덮개는 **쓰기 엔드포인트 전체**(78개) — `WriteEndpointAuditCoverageTest`.
+이미지 백필은 «안 남긴다(멱등 유지보수)» 로 판정.
+🔴 **정정**: 아래 표가 마케팅 발송을 ««안 남기는 것» 목록에도 **없다**» 고 적었는데, **08-03 에 일부러 안 남긴 결정이
+ARCHITECTURE 에 있었다.** 그 근거(«알림 행이 기록이다»)를 **F-2(09-10)의 보관 기간 삭제가 무너뜨려** 뒤집은 것이다 — §6 참조.
+아래는 착수 전에 적은 것이다.
+
 
 | 엔드포인트 | 확인 |
 |---|---|

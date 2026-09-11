@@ -248,9 +248,12 @@ public enum AuditAction {
     /**
      * <b>마케팅 알림 발송</b>. V64 (2026-09-11, BACKLOG O-6).
      *
-     * <p>🔴 <b>되돌릴 수 없는 첫 방송 조작인데 원장에 없었다</b> — «안 남기는 것» 목록에도 없어
-     * <b>안 남기기로 한 것이 아니라 빠진 것</b>이었다. 대상이 한 명이 아니라 {@link AuditTargetType#MARKETING}
-     * 이고 {@code target_id} 가 빈다. <b>detail</b>: 제목 · 동의자 수 · 실제 발송 수(수신 거부 제외).
+     * <p>🔴 <b>2026-08-03 에는 일부러 안 남겼다</b>(ARCHITECTURE «마케팅 발송») — 근거가 둘이었고
+     * <b>09-11 에 둘 다 무너져 뒤집었다</b>: ①«대상 한 명 모델이라 더미를 채워야 한다» → 더미 대신
+     * {@link AuditTargetType#MARKETING} 일 때만 {@code target_id} 를 비운다(V64) ②«발송 사실은 알림 행 N개로 남는다»
+     * → 🔴 <b>F-2(09-10)가 보관 기간이 지난 알림을 지운다</b> — 그 기록이 30~180일 뒤 사라진다.
+     * ⚠ 이 줄은 «안 남기는 것» 목록이 아니라 ARCHITECTURE 에 적혀 있어 09-11 에 «빠진 것» 으로 잘못 읽혔다.
+     * <b>detail</b>: 제목 · 동의자 수 · 실제 발송 수(수신 거부 제외).
      */
     MARKETING_SEND(AuditTargetType.MARKETING);
 
