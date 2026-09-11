@@ -3905,6 +3905,59 @@ const needsAuth = to.meta.requiresAuth || to.meta.requiresAdmin || to.meta.requi
 **검증**: 프론트 전수 **469**(46파일) · 새 테스트 **6**.
 ⚠ **운영 코드 변경 0 · 배포 불필요** — 테스트만 늘었다.
 
+### O 축 2차 — 🔴 **남은 손목록을 다시 셌다** (2026-09-11 · WA §2-12 를 올린 근거)
+
+> **어떻게 뽑았나**: 09-10 이월 23 이 *««열거를 결정 강제 목록으로 감싼다» 를 규약으로 올리려면 남은 코드에서
+> 그 처방이 필요한 자리를 먼저 센다»* 고 걸어 뒀다. 백엔드·프론트를 8갈래(enum 분기 · 탈퇴 정리 · 영구삭제 정리 ·
+> 캐시 무효화 · 관리자 감사 · 알림 유형 · 프론트 라벨 · 기타)로 훑었다. 경위는 `handoffs/2026-09-11-handoff.md` §4.
+> ⚠ **enum `switch` 에 `default` 가 있는 곳은 0** — 대신 `==`/`!=`/삼항이 **암묵적 default** 를 만든다.
+
+#### O-5. 🔴 프론트 역할 비교가 `isAdminRole` 을 비켜 간다 — **지금 틀려 있다** (크기 소 · 미착수)
+
+`ProductListView.vue:24` 가 `role === 'ADMIN'` 이라 🔴 **SUPER_ADMIN(김기현팀)은 상품 목록의 관리 버튼·「상품 등록」을 못 본다.**
+`stores/auth.js` 의 `isAdminRole` 이 **바로 이걸 막으려고** 만든 것인데(주석: *«흩어진 role==='ADMIN' 비교가 super 를 놓치지 않게»*) 안 쓰였다.
+같은 모양: `MemberAdminView.vue:87`(ADMIN 만 뱃지) · `MemberDetailAdminView.vue:89`(ADMIN 이 아니면 ADMIN 으로 토글 — SUPER 대상일 때 서버가 어떻게 답하는지는 **미확인**).
+→ 고치고 **`role === '` 를 세는 덮개**를 둔다(`isAdminRole` 밖에서 역할 문자열을 비교하면 빨개진다).
+
+#### O-6. 🔴 관리자 쓰기 중 **감사에 안 남는 것**이 있고, 그걸 잡는 덮개가 없다 (크기 중 · 미착수)
+
+| 엔드포인트 | 확인 |
+|---|---|
+| `POST /api/admin/notifications/marketing` | 🔴 **되돌릴 수 없는 발송**인데 감사 0 — `AuditAction` 의 «안 남기는 것» 목록에도 **없다**(실측) |
+| `PUT·DELETE /api/reviews/{id}` — **관리자가 남의 것** | `findManageable` 이 `isAdmin()` 으로 통과시키고 감사 발행이 없다(실측) |
+| `DELETE /api/inquiries/{id}` — 관리자가 남의 것 | 같은 모양(탐색 결과 · 미확인) |
+| `POST /api/admin/images/derivatives` | 백필 도구 — «남기지 않는다» 로 적어도 되는 쪽(탐색 결과 · 미확인) |
+
+→ ⚠ **각각 «남긴다 / 안 남기기로 한다(이유와 함께 목록에)»** 로 판정한다. 🔴 덮개는 `EndpointAuthCoverageTest` 와 같은 모양 —
+관리자 쓰기 핸들러 전체를 꺼내 «감사를 남긴다 / `NOT_AUDITED`(이유)» 중 하나에 있어야 통과.
+⚠ 감사 enum 을 늘리면 **CHECK 제약·프론트 라벨**이 따라온다(WA §1-2-1).
+
+#### O-7. ⚠ 상품 영구 삭제가 **찜·재입고 구독을 안 치운다** — M-4 와 같은 모양 (크기 소 · 미착수)
+
+`ProductPurgedEvent` 를 받는 곳은 **알림 하나뿐**이다. `wishlist.product_id`·`restock_subscription.product_id` 는
+FK 도 핸들러도 없다(V19·V28 실측). 🔴 **지금 고아는 0건**(09-11 실측: 찜 3 · 구독 0 전부 살아 있는 상품)이라
+«청소» 가 아니라 **«재발 방지」** 다 — M-4 는 알림 링크 **55건**이 쌓인 뒤에 찾았다.
+⚠ **짝 테스트도 손목록이다**: `MemberPurgeIntegrationTest.assertMemberDataGone` 이 DB 쪽을 **손으로 적은 테이블 목록**으로
+확인한다 — 새 테이블에 `member_id` 를 넣고 리스너를 빼먹으면 **통과한다**(Redis 쪽은 키 스캔이라 안전).
+→ 둘 다 «`member_id`/`product_id` 칸을 가진 테이블 전체» 를 **`user_tab_columns` 에서 꺼내** 대조하는 모양이 맞다(§3-6 «실물에서 센다»).
+
+#### O-8. 프론트 enum 라벨 — **드리프트 테스트가 둘뿐이다** (크기 소~중 · 미착수 · ⚠ 가볍다)
+
+서버 enum 을 라벨·뱃지·선택지로 옮기는 목록(09-11 탐색 표 **17줄**) 중 백엔드 enum 원문을 읽어 대조하는 것은 `order.test.js`(상태 문구) · `audit.test.js` 둘이다.
+나머지는 빠진 값이 **원문 그대로** 뜬다(`RETURN_REQUESTED` 같은 날문자). 🔴 **틀리게 뜨지는 않고 못나게 뜬다** — 그래서 O-5·O-6 보다 뒤.
+⚠ 하나는 결과가 이상하다: `PromotionCalendarAdminView.vue` 의 `KIND_ORDER` 에 없는 종류는 정렬 비교가 **`NaN`** 이 된다.
+
+#### 같은 각도로 봤지만 **가볍거나 안전한 것**
+
+| 자리 | 빠뜨리면 | 처분 |
+|---|---|---|
+| `Coupon.ruleAmount` 의 `FIXED` 가 아니면 정률 | 새 할인 방식이 상한 없는 정률 | ⚠ DB CHECK 가 저장을 막는다 — **값을 늘릴 때** 같이 본다 |
+| `DeliveryCarrier.isTrackable` = `!= ETC` | 새 택배사가 «조회 가능» + 예시 URL | 가볍다 — 택배사를 늘릴 때 본다 |
+| `ImageService.backfillDerivatives`·공지 조회수 플러셔에 `@CacheEvict` 없음 | 최대 **60초**(TTL) 옛 값 | 가볍다 |
+| 관리자 전용 알림 유형(`STOCK`·`RETURN_REQUEST`)이 **일반 회원 설정 화면**에도 뜬다 | — | ⚠ 이 축이 아니라 **표시 대상** 문제 — 따로 본다 |
+| `ConditionBuilder` — `@Cond` 없는 필드는 조용히 건너뛴다 | 필터가 조용히 사라진다 | 주석이 이미 경고(`ProductSearchCondition`) · 지금 셋은 Impl 이 처리 |
+| `ConditionBuilder.switch(op)` · `SortSupport` · `NotificationType` 라벨 · `Role.isAdmin` | 컴파일·400·`AdminRoleBoundaryTest` | ✅ **안전** |
+
 ---
 
 ## P. 「기한」 축 감사 (2026-09-10)
