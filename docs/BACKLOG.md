@@ -3912,7 +3912,13 @@ const needsAuth = to.meta.requiresAuth || to.meta.requiresAdmin || to.meta.requi
 > 캐시 무효화 · 관리자 감사 · 알림 유형 · 프론트 라벨 · 기타)로 훑었다. 경위는 `handoffs/2026-09-11-handoff.md` §4.
 > ⚠ **enum `switch` 에 `default` 가 있는 곳은 0** — 대신 `==`/`!=`/삼항이 **암묵적 default** 를 만든다.
 
-#### O-5. 🔴 프론트 역할 비교가 `isAdminRole` 을 비켜 간다 — **지금 틀려 있다** (크기 소 · 미착수)
+#### O-5. 🔴 프론트 역할 비교가 `isAdminRole` 을 비켜 간다 — ✅ **고쳤다 (2026-09-11)** · `handoffs/2026-09-11-handoff.md` §5
+
+✅ `stores/auth.js` 밖의 역할 문자열 비교 **여덟 줄**을 전부 `isAdminRole`·`isSuperAdminRole` 로 바꿨고,
+**덮개** `stores/roleCompareCoverage.test.js` 가 auth.js 밖의 비교를 잡는다(허용 목록 `ALLOWED` 는 비어 있다).
+⚠ 회원 목록·상세의 역할 뱃지도 **SUPER_ADMIN 을 일반 회원 모양으로** 그리고 있었다 — 같이 고쳤다.
+아래는 착수 전에 적은 것이다.
+
 
 `ProductListView.vue:24` 가 `role === 'ADMIN'` 이라 🔴 **SUPER_ADMIN(김기현팀)은 상품 목록의 관리 버튼·「상품 등록」을 못 본다.**
 `stores/auth.js` 의 `isAdminRole` 이 **바로 이걸 막으려고** 만든 것인데(주석: *«흩어진 role==='ADMIN' 비교가 super 를 놓치지 않게»*) 안 쓰였다.
