@@ -307,9 +307,11 @@ body {
   background-color: var(--color-canvas);
 }
 /* 감사 이력 「조작 종류」 드롭다운 (2026-09-11): «전체 선택» 을 감춘다.
-   분류로 묶으면 그 줄이 첫 분류(회원) 머리글 곁에 붙어 «회원의 항목» 처럼 보였고(사용자), 이 필터는
-   «아무것도 안 고르면 전체» 라 뜻도 겹친다. DevExtreme 에 끄는 옵션이 없어(`showSelectionControls` 가 함께 켠다)
-   이 드롭다운에만 붙인 클래스(`wrapperAttr`)로 좁혀 숨긴다 — 다른 TagBox 는 안 건드린다. */
+   🔴 그 줄의 체크박스는 DevExtreme 이 `float: left` 로 띄운다(`.dx-list-select-all-checkbox`). 사용자 화면(Chrome)에서
+   그 체크박스가 자기 줄을 벗어나 아래로 떨어졌고, **옆을 지나는 회원·주문 분류 항목이 체크박스 한 칸만큼 밀렸다**
+   («회원·주문만 줄바꿈이 다르다» · «전체 선택이 회원 쪽에 있다» — 증상 둘이 원인 하나였다). Firefox 에선 재현 안 됐다.
+   게다가 이 필터는 «아무것도 안 고르면 전체» 라 뜻도 겹친다. DevExtreme 에 끄는 옵션이 없어(`showSelectionControls` 가
+   함께 켠다) 이 드롭다운에만 붙인 클래스(`wrapperAttr`)로 좁혀 숨긴다 — 떠 있던 요소가 사라져 밀림도 같이 없어진다. */
 .audit-action-popup .dx-list-select-all {
   display: none;
 }
