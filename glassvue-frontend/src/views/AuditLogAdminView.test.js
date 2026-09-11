@@ -29,6 +29,7 @@ vi.mock('../api/audit', async (importOriginal) => {
 
 import { DxSelectBox } from 'devextreme-vue/select-box';
 import { DxTagBox } from 'devextreme-vue/tag-box';
+import eventsEngine from 'devextreme/events/core/events_engine';
 import AuditLogAdminView from './AuditLogAdminView.vue';
 import { AUDIT_ACTION_LABEL, AUDIT_ACTION_GROUPS, AUDIT_TARGET_TYPE_LABEL } from '../api/audit';
 
@@ -210,6 +211,29 @@ describe('AuditLogAdminView', () => {
     expect(box.props('searchExpr')).toEqual(['label', 'group']); // «주문» 만 쳐도 분류 통째로
     expect(box.props('showSelectionControls')).toBe(true);
     expect(box.props('grouped')).toBe(true);
+  });
+
+  it('🔴 입력칸을 **여러 번 눌러도 목록이 닫혔다 열렸다 하지 않는다** — 누르면 열기만 한다 (2026-09-11)', async () => {
+    // ⚠ 두 종류의 클릭을 다 보낸다: DevExtreme 은 자기 이벤트(`dxclick`)로 열고 닫고, 화면의 «열기» 는 네이티브
+    //    클릭(버블)로 받는다. 한쪽만 보내면 브라우저에서 일어나는 일과 다르다(`input.trigger('click')` 로는
+    //    DevExtreme 이 반응하지 않아 **모두 «닫힘» 으로 나온다** — 안 눌린 것을 «안 열린다» 로 읽게 된다).
+    const w = await mountWith([log()]);
+    const inst = actionBox(w).vm.instance;
+    const input = actionBox(w).find('input.dx-texteditor-input').element;
+    // 🔴 **최종 상태만 보면 못 잡는다** — 닫혔다가 곧바로 다시 열려도 끝은 «열림» 이다. 그 사이 한 번 닫힌 것이
+    //    바로 눈에 보이는 깜빡임이라, **닫힘이 몇 번 일어났는지**를 센다.
+    let closed = 0;
+    inst.on('closed', () => { closed += 1; });
+    const seq = [];
+    for (let i = 0; i < 3; i++) {
+      eventsEngine.trigger(input, 'dxclick');
+      input.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushPromises();
+      seq.push(inst.option('opened'));
+    }
+    // 고치기 전(DevExtreme 기본)은 [true, false, true] 였다 — 한 번 더 누르면 닫혔다.
+    expect(seq).toEqual([true, true, true]);
+    expect(closed).toBe(0);
   });
 
   it('🔴 조작 종류를 **여러 개** 고르면 그대로 검색에 실린다', async () => {

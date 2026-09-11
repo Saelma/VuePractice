@@ -59,6 +59,16 @@ function actionGroupTitle(key) {
 function onMultiTag(e) {
   e.text = `${e.selectedItems.length}개 선택`;
 }
+/**
+ * 🔴 **입력칸을 누르면 «열기» 만 한다 — 닫지 않는다** (2026-09-11).
+ * DevExtreme 기본(`openOnFieldClick`)은 누를 때마다 **열림↔닫힘을 뒤집는다** — 검색하려고 한 번 더 누르면
+ * 목록이 닫혔다 열렸다 한다(사용자: *"나타났다가 사라졌다 하는 불쾌한 UX"*). jsdom 에서 재 보니 세 번 누르면
+ * `[열림, 닫힘, 열림]` 이었다. 닫기는 **바깥 클릭·Esc** 로 한다(DevExtreme 기본 그대로).
+ */
+const actionBoxRef = ref(null);
+function openActions() {
+  actionBoxRef.value?.instance.open();
+}
 
 /**
  * 🔴 **대상 종류 필터 (2026-08-20, V53).** 상품·쿠폰 행은 targetLogin 이 비어 있어
@@ -127,10 +137,12 @@ const actionBadge = auditActionBadge;
     <div class="card mb-4 space-y-3 p-4">
       <AdminPeriodPicker :from="form.from" :to="form.to" @change="applyPeriod" />
       <div class="flex flex-wrap items-end gap-3 border-t border-line pt-3">
-      <label class="field">
+      <label class="field" data-test="action-field" @click="openActions">
         <span class="field-label">조작 종류</span>
         <DxTagBox
+          ref="actionBoxRef"
           v-model:value="form.actions"
+          :open-on-field-click="false"
           :data-source="actionSource"
           value-expr="value"
           display-expr="label"
