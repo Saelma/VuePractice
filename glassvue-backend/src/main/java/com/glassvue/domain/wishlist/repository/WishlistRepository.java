@@ -19,6 +19,9 @@ public interface WishlistRepository extends JpaRepository<Wishlist, UUID> {
     /** 회원 삭제 정리용(F-1). */
     long deleteByMemberId(UUID memberId);
 
+    /** 상품 영구 삭제 정리용(2026-09-11, BACKLOG O-7) — 그 상품을 찜한 줄 전부. */
+    long deleteByProductId(UUID productId);
+
     /**
      * 내가 찜한 상품 id 집합 — 화면이 목록·상세에서 하트를 채울지 판단하는 데 쓴다.
      *

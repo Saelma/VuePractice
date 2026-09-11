@@ -96,6 +96,45 @@ class MemberPurgeIntegrationTest {
     // 장바구니는 Redis 다(2026-08-11) — 리포지토리가 없어 여기서만 모양이 다르다.
     @Autowired com.glassvue.domain.cart.CartStore cartStore;
     @Autowired org.springframework.data.redis.core.StringRedisTemplate redis;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    /**
+     * 🔴 <b>탈퇴 때 지우는 칸</b> — «표.칸». 확인은 <b>DB 에서 직접 센다</b>(2026-09-11, BACKLOG O-7).
+     * 전에는 리포지토리 메서드를 손으로 골라 확인했는데 <b>쿠폰은 «안 쓴 것만»·알림은 «안 읽은 것만»</b> 세고 있었다 —
+     * 쓴 쿠폰·읽은 알림이 남아도 통과했다. 여기 적은 칸은 심은 뒤 ≥1, 탈퇴 뒤 0 이어야 한다.
+     */
+    private static final java.util.Set<String> DELETED_ON_WITHDRAW = java.util.Set.of(
+            "MEMBER_ADDRESS.MEMBER_ID", "MEMBER_COUPON.MEMBER_ID", "MEMBER_NOTIFICATION_PREF.MEMBER_ID",
+            "NOTIFICATION.MEMBER_ID", "POINT_ACCOUNT.MEMBER_ID", "POINT_HISTORY.MEMBER_ID",
+            "RESTOCK_SUBSCRIPTION.MEMBER_ID", "WISHLIST.MEMBER_ID", "INQUIRY.AUTHOR_ID");
+
+    /** 탈퇴해도 <b>남기는</b> 칸 — 이유와 함께({@code MemberWithdrawnEvent} javadoc 과 같은 판단). */
+    private static final java.util.Map<String, String> KEPT_ON_WITHDRAW = java.util.Map.of(
+            "ORDERS.MEMBER_ID", "매출·환불의 원장 — 구매자명이 스냅샷이다",
+            "REVIEW.AUTHOR_ID", "다른 고객의 판단 근거 + 별점 집계",
+            "NOTICE.AUTHOR_ID", "관리자가 쓴 공지 — 작성자 계정이 사라져도 글은 남는다",
+            "STOCK_HISTORY.ACTOR_ID", "재고 원장의 «누가 바꿨나»(B-19) — 원장은 대상보다 오래 산다",
+            "ADMIN_AUDIT_LOG.ACTOR_ID", "감사 원장 — 원장은 대상보다 오래 산다",
+            "ADMIN_AUDIT_LOG.TARGET_ID", "감사 원장 — target_login 스냅샷이 남는다(V44)");
+
+    /**
+     * 회원을 가리키는 칸의 <b>이름</b>. ⚠ <b>한계</b>: 이 이름 밖(예: {@code buyer_id})으로 회원을 가리키면
+     * 덮개가 못 본다 — 새 칸은 이 넷 중 하나로 이름 짓는 것이 이 저장소의 관행이다(09-11 실측: 15칸 전부 이 넷).
+     */
+    private static final java.util.Set<String> MEMBER_REF_COLUMNS =
+            java.util.Set.of("MEMBER_ID", "AUTHOR_ID", "ACTOR_ID", "TARGET_ID");
+
+    @Autowired jakarta.persistence.EntityManager entityManager;
+
+    private int refCount(String tableDotColumn) {
+        // 🔴 JdbcTemplate 은 Hibernate 의 자동 flush 를 안 탄다 — 안 내리면 JPA 로 심은 행이 **안 보여 전부 0** 이다
+        //    (2026-09-11 실측: 심은 9칸이 전부 0 — 위 «심었나» 단언이 잡았다. 없었으면 «탈퇴 뒤 0» 이 헛돌았다).
+        entityManager.flush();
+        String[] tc = tableDotColumn.split("\\.");
+        return jdbcTemplate.queryForObject(
+                "select count(*) from " + tc[0] + " where " + tc[1] + " = hextoraw(?)", Integer.class,
+                targetId.toString().replace("-", ""));
+    }
 
     private static final String PW = "password123";
 
@@ -169,8 +208,20 @@ class MemberPurgeIntegrationTest {
                 .minOrderAmount(0).validFrom(Instant.now().minus(1, ChronoUnit.DAYS))
                 .validUntil(Instant.now().plus(30, ChronoUnit.DAYS)).build());
         memberCouponRepository.save(MemberCoupon.issue(targetId, coupon));
+        // 🔴 **쓴 쿠폰·읽은 알림도 심는다**(2026-09-11, O-7) — 전에는 안 쓴 것·안 읽은 것만 심고 그것만 셌다.
+        //    정리가 «안 쓴 것만» 지우도록 틀어져도 **아무도 몰랐을** 자리다.
+        Coupon usedCoupon = couponRepository.save(Coupon.builder()
+                .name("ZZ정리쿠폰-씀").discountType(DiscountType.FIXED).discountValue(1_000)
+                .minOrderAmount(0).validFrom(Instant.now().minus(1, ChronoUnit.DAYS))
+                .validUntil(Instant.now().plus(30, ChronoUnit.DAYS)).build());
+        MemberCoupon used = MemberCoupon.issue(targetId, usedCoupon);
+        used.use();
+        memberCouponRepository.save(used);
         notificationRepository.save(Notification.of(targetId, NotificationType.ORDER,
                 "ZZ알림", "본문", "/orders"));
+        Notification read = Notification.of(targetId, NotificationType.ORDER, "ZZ읽은알림", "본문", "/orders");
+        read.markRead();
+        notificationRepository.save(read);
         notificationPrefRepository.save(NotificationPref.of(targetId, NotificationType.ORDER, false));
         restockRepository.save(RestockSubscription.of(targetId, productId));
         inquiryRepository.save(Inquiry.builder()
@@ -196,6 +247,15 @@ class MemberPurgeIntegrationTest {
 
     /** 심어 둔 것이 실제로 다 있는지 — 이게 없으면 "0건"이 정리 때문인지 애초에 없어서인지 모른다. */
     private void assertSeeded() {
+        // 🔴 지울 칸 전부에 실제로 심겼는가 — 안 심긴 칸의 «탈퇴 뒤 0» 은 아무것도 증명하지 않는다(WA §3-3).
+        assertThat(DELETED_ON_WITHDRAW.stream().filter(c -> refCount(c) < 1).toList())
+                .as("심지 않은 칸이다 — seedEverything 에 한 줄 더할 것").isEmpty();
+        // 쓴 쿠폰·읽은 알림이 **실제로** 있다 — 이게 있어야 «탈퇴 뒤 0» 이 그 둘까지 본 것이 된다.
+        String hex = targetId.toString().replace("-", "");
+        assertThat(jdbcTemplate.queryForObject("select count(*) from member_coupon where member_id = hextoraw(?) and used_at is not null",
+                Integer.class, hex)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("select count(*) from notification where member_id = hextoraw(?) and is_read = 1",
+                Integer.class, hex)).isEqualTo(1);
         assertThat(cartStore.items(targetId)).hasSize(1);
         assertThat(addressRepository.countByMemberId(targetId)).isEqualTo(1);
         assertThat(pointAccountRepository.findByMemberId(targetId)).isPresent();
@@ -232,6 +292,9 @@ class MemberPurgeIntegrationTest {
     }
 
     private void assertMemberDataGone() {
+        // 🔴 DB 에서 직접 센다 — 쓴 쿠폰·읽은 알림까지 걸린다(아래 손으로 고른 확인은 그걸 못 봤다).
+        assertThat(DELETED_ON_WITHDRAW.stream().filter(c -> refCount(c) > 0).toList())
+                .as("탈퇴했는데 남은 칸이다 — 그 도메인의 *MemberWithdrawnListener 를 볼 것").isEmpty();
         assertThat(cartStore.items(targetId)).isEmpty();
         assertNoRedisResidue();
         assertThat(addressRepository.countByMemberId(targetId)).isZero();
@@ -259,6 +322,29 @@ class MemberPurgeIntegrationTest {
                 .isPresent();
         assertThat(orderRepository.findById(orderId).orElseThrow().getBuyerNickname())
                 .isEqualTo("ZZ정리대상");
+    }
+
+    @Test
+    @DisplayName("🔴 회원을 가리키는 칸은 전부 «탈퇴 때 지운다 / 이유 있게 남긴다» 중 하나다 — DB 에서 꺼내 대조 (O-7)")
+    void everyMemberReferenceIsDecided() {
+        java.util.Set<String> columns = new java.util.TreeSet<>(jdbcTemplate.queryForList(
+                "select table_name || '.' || column_name from user_tab_columns where column_name in ("
+                        + MEMBER_REF_COLUMNS.stream().map(c -> "'" + c + "'").collect(java.util.stream.Collectors.joining(","))
+                        + ")", String.class));
+        assertThat(columns).as("회원 참조 칸을 하나도 못 찾았다 — 조회가 헛돈다(WA §3-6)").isNotEmpty();
+
+        assertThat(columns.stream()
+                .filter(c -> !DELETED_ON_WITHDRAW.contains(c) && !KEPT_ON_WITHDRAW.containsKey(c)).toList())
+                .as("""
+                        회원을 가리키는데 탈퇴 때 어떻게 할지 정해지지 않은 칸이다 — 빠뜨리면 탈퇴 회원의 흔적이 조용히 남는다.
+                        → 지운다면 그 도메인에 *MemberWithdrawnListener + DELETED_ON_WITHDRAW + seedEverything,
+                          남긴다면 KEPT_ON_WITHDRAW 에 이유와 함께(MemberWithdrawnEvent javadoc 도).""")
+                .isEmpty();
+
+        java.util.Set<String> listed = new java.util.TreeSet<>(DELETED_ON_WITHDRAW);
+        listed.addAll(KEPT_ON_WITHDRAW.keySet());
+        listed.removeAll(columns);
+        assertThat(listed).as("목록에 있는데 DB 에 그 칸이 없다 — 목록이 낡았다").isEmpty();
     }
 
     // ---------- 본인 탈퇴 ----------

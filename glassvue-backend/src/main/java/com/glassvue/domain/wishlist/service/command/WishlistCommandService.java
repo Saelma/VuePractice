@@ -52,6 +52,19 @@ public class WishlistCommandService {
         }
     }
 
+    /**
+     * 상품 영구 삭제 정리(2026-09-11, BACKLOG O-7) — 그 상품을 찜한 줄 전부.
+     *
+     * <p>🔴 <b>찜은 «가리키는 것» 뿐이다</b> — 상품 이름도 안 담는다. 상품이 사라지면 남는 것이 없어
+     * 읽을 때 건너뛰기만 하던 줄이 영원히 남았다({@code WishlistQueryService}). 알림(M-4)과 같은 판단이다.
+     */
+    public void deleteAllForProduct(UUID productId) {
+        long deleted = wishlistRepository.deleteByProductId(productId);
+        if (deleted > 0) {
+            log.info("Wishlist deleted for purged product {}: {}", productId, deleted);
+        }
+    }
+
     /** 회원 삭제 정리(F-1) — 찜 전체 삭제. */
     public void deleteAllForMember(UUID memberId) {
         long deleted = wishlistRepository.deleteByMemberId(memberId);

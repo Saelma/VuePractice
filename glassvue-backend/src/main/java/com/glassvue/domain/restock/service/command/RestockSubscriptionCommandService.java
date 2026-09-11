@@ -50,6 +50,19 @@ public class RestockSubscriptionCommandService {
         }
     }
 
+    /**
+     * 상품 영구 삭제 정리(2026-09-11, BACKLOG O-7) — 그 상품의 구독 전부.
+     *
+     * <p>🔴 <b>상품이 없으면 재입고도 없다</b> — 이 구독은 영영 안 울린다. 지우던 곳은 «재입고 알림을 보낸 뒤»
+     * 하나뿐이라({@code RestockNotificationHandler}) 영구 삭제된 상품의 구독은 영원히 남았다.
+     */
+    public void deleteAllForProduct(UUID productId) {
+        long deleted = subscriptionRepository.deleteByProductId(productId);
+        if (deleted > 0) {
+            log.info("Restock subscriptions deleted for purged product {}: {}", productId, deleted);
+        }
+    }
+
     /** 회원 삭제 정리(F-1) — 재입고 구독 전체 삭제. */
     public void deleteAllForMember(UUID memberId) {
         long deleted = subscriptionRepository.deleteByMemberId(memberId);
