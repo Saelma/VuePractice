@@ -120,12 +120,31 @@ public class Coupon extends BaseTimeEntity {
         if (itemsTotal <= 0) {
             return 0;
         }
+        return Math.min(ruleAmount(itemsTotal), itemsTotal);
+    }
+
+    /**
+     * <b>상품합계가 모자라 버려지는 몫</b> — 쿠폰 규칙으로는 더 깎을 수 있는데 상품합계에서 잘린 금액 (Q-6).
+     * 쿠폰은 한 번 쓰면 끝이라 이 몫은 <b>사라진다</b>(5,000원 쿠폰을 1,000원 주문에 쓰면 4,000원).
+     *
+     * <p>⚠ 정률의 {@code maxDiscountAmount} 상한은 <b>여기 안 든다</b> — 그건 쿠폰의 규칙이지 잘린 것이 아니다.
+     * 정률은 100% 이하라(Q-5) 사실상 늘 0 이고, 주로 «정액 > 상품합계» 에서 생긴다.
+     */
+    public long forfeitFor(long itemsTotal) {
+        if (itemsTotal <= 0) {
+            return 0;
+        }
+        return ruleAmount(itemsTotal) - discountFor(itemsTotal);
+    }
+
+    /** 쿠폰 규칙만으로 정해지는 할인액(정률 상한 포함) — 상품합계로 자르기 <b>전</b>. */
+    private long ruleAmount(long itemsTotal) {
         long raw = (discountType == DiscountType.FIXED)
                 ? discountValue
                 : itemsTotal * discountValue / 100;
         if (discountType == DiscountType.PERCENT && maxDiscountAmount != null) {
             raw = Math.min(raw, maxDiscountAmount);
         }
-        return Math.min(raw, itemsTotal);
+        return raw;
     }
 }

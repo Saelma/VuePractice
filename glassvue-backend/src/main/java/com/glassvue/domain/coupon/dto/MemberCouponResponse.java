@@ -12,6 +12,10 @@ import java.util.UUID;
  * <p>{@code discountPreview} 는 <b>지금 장바구니 기준으로 얼마 깎이는지</b>다 —
  * "10% 할인"만 보여주면 고객이 직접 계산해야 하고, 최소주문금액을 못 채웠는지도 알 수 없다.
  * {@code usable} 이 false 면 이유({@code reason})를 함께 준다.
+ *
+ * <p>{@code forfeitPreview} 는 <b>이 주문에 쓰면 사라지는 몫</b>이다({@link Coupon#forfeitFor}, Q-6).
+ * {@code discountPreview} 만으로는 «잘린 값» 인지 알 수 없다 — 화면이 액면가로 다시 계산하지 않게 서버가 준다.
+ * 못 쓰는 쿠폰은 둘 다 0 이다.
  */
 public record MemberCouponResponse(
         UUID id,
@@ -22,6 +26,7 @@ public record MemberCouponResponse(
         Long maxDiscountAmount,
         Instant validUntil,
         long discountPreview,
+        long forfeitPreview,
         boolean usable,
         String reason
 ) {
@@ -36,6 +41,7 @@ public record MemberCouponResponse(
                 mc.getId(), c.getName(), c.getDiscountType(), c.getDiscountValue(),
                 c.getMinOrderAmount(), c.getMaxDiscountAmount(), c.getValidUntil(),
                 (inPeriod && minOk) ? c.discountFor(itemsTotal) : 0,
+                (inPeriod && minOk) ? c.forfeitFor(itemsTotal) : 0,
                 inPeriod && minOk, reason);
     }
 }

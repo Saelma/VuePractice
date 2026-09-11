@@ -99,6 +99,39 @@ class CouponFlowIntegrationTest {
     }
 
     @Test
+    @DisplayName("🔴 Q-6 — 정액이 상품합계보다 크면 사라지는 몫(forfeitPreview)을 함께 준다")
+    void forfeitPreview_whenFixedExceedsTotal() throws Exception {
+        String admin = login(adminLoginId);
+        String user = login(userLoginId);
+
+        // Q-4 의 모양 그대로 — 5,000원 쿠폰 / 최소주문 1,000원 (일부러 안 막은 조합)
+        String body = mockMvc.perform(post("/api/admin/coupons").header("Authorization", admin)
+                        .contentType(JSON)
+                        .content("{\"name\":\"ZZ 잘리는쿠폰\",\"discountType\":\"FIXED\",\"discountValue\":5000,"
+                               + "\"minOrderAmount\":1000,"
+                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2027-01-01T00:00:00Z\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String couponId = JsonPath.read(body, "$.data");
+        mockMvc.perform(post("/api/admin/coupons/" + couponId + "/issue?memberId=" + userId)
+                        .header("Authorization", admin))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/coupons/me?itemsTotal=1000").header("Authorization", user))
+                .andExpect(jsonPath("$.data[0].discountPreview").value(1000))
+                .andExpect(jsonPath("$.data[0].forfeitPreview").value(4000));
+
+        // 대조군 — 안 잘리면 0
+        mockMvc.perform(get("/api/coupons/me?itemsTotal=5000").header("Authorization", user))
+                .andExpect(jsonPath("$.data[0].discountPreview").value(5000))
+                .andExpect(jsonPath("$.data[0].forfeitPreview").value(0));
+
+        // 못 쓰는 쿠폰은 사라질 것도 없다 — 최소주문 미달
+        mockMvc.perform(get("/api/coupons/me?itemsTotal=999").header("Authorization", user))
+                .andExpect(jsonPath("$.data[0].usable").value(false))
+                .andExpect(jsonPath("$.data[0].forfeitPreview").value(0));
+    }
+
+    @Test
     @DisplayName("권한 — 내 쿠폰은 비로그인 401 / 쿠폰 생성·발급은 일반 사용자 403")
     void permissions() throws Exception {
         String user = login(userLoginId);

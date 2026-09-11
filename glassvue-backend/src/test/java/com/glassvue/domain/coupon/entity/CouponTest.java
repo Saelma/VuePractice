@@ -44,6 +44,23 @@ class CouponTest {
     }
 
     @Test
+    @DisplayName("🔴 버려지는 몫(Q-6): 정액이 상품합계보다 크면 그 차이가 사라진다")
+    void forfeit_fixedOverTotal() {
+        assertThat(fixed(5_000, 1_000).forfeitFor(1_000)).isEqualTo(4_000);
+        assertThat(fixed(5_000, 1_000).forfeitFor(4_999)).isEqualTo(1);   // 경계 바로 아래
+        assertThat(fixed(5_000, 1_000).forfeitFor(5_000)).isZero();       // 딱 맞으면 안 버린다
+        assertThat(fixed(5_000, 1_000).forfeitFor(30_000)).isZero();
+    }
+
+    @Test
+    @DisplayName("버려지는 몫: 정률 상한은 «잘린 것» 이 아니다 — 쿠폰의 규칙이다")
+    void forfeit_percentCapIsNotForfeit() {
+        assertThat(percent(20, 5_000L).forfeitFor(50_000)).isZero();   // 10,000 → 상한 5,000 이어도 0
+        assertThat(percent(100, null).forfeitFor(7_000)).isZero();     // 전액 할인도 잘린 게 없다
+        assertThat(fixed(5_000, 0).forfeitFor(0)).isZero();            // 빈 장바구니
+    }
+
+    @Test
     @DisplayName("빈 장바구니(0원)엔 할인이 없다")
     void noDiscountForEmpty() {
         assertThat(fixed(5_000, 0).discountFor(0)).isZero();

@@ -186,6 +186,34 @@ describe('CheckoutView — 요약이 장바구니를 그대로 읽는다', () =>
   });
 });
 
+describe('CheckoutView — 쿠폰이 잘리면 사라지는 몫을 알린다 (Q-6)', () => {
+  /**
+   * 🔴 **`MemberCouponResponse` 의 칸 이름이다**(`discountValue`·`discountPreview`·`forfeitPreview`).
+   * ⚠ `forfeitPreview` 를 일부러 `discountValue − discountPreview`(4,000)와 **다르게** 준다 —
+   *    같으면 화면이 액면가로 다시 계산해도 통과해서, «서버 값을 그린다» 를 반증하지 못한다.
+   */
+  function cutCoupon(forfeitPreview) {
+    return {
+      id: 'mc9', name: 'ZZ정액쿠폰', discountType: 'FIXED', discountValue: 5_000,
+      minOrderAmount: 1_000, maxDiscountAmount: null, validUntil: null,
+      discountPreview: 1_000, forfeitPreview, usable: true, reason: null,
+    };
+  }
+
+  it('🔴 잘린 쿠폰은 «이 주문엔 얼마만 · 남은 얼마는 사라진다» 를 서버 값 그대로 말한다', async () => {
+    const w = await open({ coupons: [cutCoupon(3_500)] });
+    const note = w.find('[data-test="coupon-forfeit"]');
+    expect(note.exists()).toBe(true);
+    expect(note.text()).toContain('1,000원만');
+    expect(note.text()).toContain('남은 3,500원은 사라져요');
+  });
+
+  it('대조군 — 안 잘린 쿠폰에는 안내가 없다', async () => {
+    const w = await open({ coupons: [cutCoupon(0)] });
+    expect(w.find('[data-test="coupon-forfeit"]').exists()).toBe(false);
+  });
+});
+
 describe('CheckoutView — 서버에 무엇을 보내는가', () => {
 
   it('🔴 쿠폰은 **id 만** 보낸다 — 할인액을 실으면 위조된다', async () => {

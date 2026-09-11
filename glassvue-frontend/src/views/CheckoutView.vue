@@ -244,13 +244,20 @@ async function submit() {
           <label
             v-for="c in coupons"
             :key="c.id"
-            class="flex items-center gap-2 py-1 text-sm"
+            class="block py-1 text-sm"
             :class="c.usable ? '' : 'opacity-50'"
           >
-            <input v-model="selectedCouponId" type="radio" :value="c.id" :disabled="!c.usable" />
-            <span class="min-w-0 flex-1 truncate text-ink-900">{{ c.name }}</span>
-            <span v-if="c.usable" class="shrink-0 tabular-nums text-danger">−{{ priceText(c.discountPreview) }}</span>
-            <span v-else class="muted shrink-0">{{ c.reason }}</span>
+            <span class="flex items-center gap-2">
+              <input v-model="selectedCouponId" type="radio" :value="c.id" :disabled="!c.usable" />
+              <span class="min-w-0 flex-1 truncate text-ink-900">{{ c.name }}</span>
+              <span v-if="c.usable" class="shrink-0 tabular-nums text-danger">−{{ priceText(c.discountPreview) }}</span>
+              <span v-else class="muted shrink-0">{{ c.reason }}</span>
+            </span>
+            <!-- Q-6: 쿠폰은 한 번 쓰면 끝이라 상품합계에서 잘린 몫은 사라진다. 잘렸는지는 서버가 준다
+                 (forfeitPreview) — 액면가로 여기서 다시 계산하지 않는다. -->
+            <span v-if="c.usable && c.forfeitPreview > 0" data-test="coupon-forfeit" class="mt-0.5 block pl-5 text-xs text-warning">
+              이 주문에는 {{ priceText(c.discountPreview) }}만 쓰여요 · 남은 {{ priceText(c.forfeitPreview) }}은 사라져요
+            </span>
           </label>
         </div>
 
