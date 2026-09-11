@@ -12,11 +12,16 @@ import { apiGet } from './client';
  * targetLogin 이 비어 있어 「대상 아이디」로 못 찾는다 — 그전에는 「조작 종류」를 하나씩
  * 골라 보는 수밖에 없었다.
  */
-export function fetchAuditLogs({ action = null, targetType = null, targetLogin = null,
+export function fetchAuditLogs({ actions = [], targetType = null, targetLogin = null,
   from = null, to = null,
   page = 0, size = 20 } = {}) {
   // ⚠ from·to 는 **날짜 문자열**('yyyy-MM-dd') — 경계는 서버가 만든다(B-26).
-  return apiGet('/api/admin/audit', { action, targetType, targetLogin, from, to, page, size });
+  // 🔴 actions 는 **여러 개**다(2026-09-11) — 쉼표로 잇는다. 비었으면 파라미터를 빼서 «전체» 로 둔다
+  //    (빈 문자열을 보내면 서버가 enum 변환에 실패해 400 이고, 화면엔 «이력이 없다» 로 보인다).
+  return apiGet('/api/admin/audit', {
+    actions: actions?.length ? actions.join(',') : null,
+    targetType, targetLogin, from, to, page, size,
+  });
 }
 
 /**
@@ -184,4 +189,44 @@ export const AUDIT_ACTION_BADGE = {
 };
 export function auditActionBadge(action) {
   return AUDIT_ACTION_BADGE[action] || 'badge-neutral';
+}
+
+/**
+ * 조작 종류의 **분류** (2026-09-11) — 필터 드롭다운이 이 순서로 묶어 보인다.
+ *
+ * 🔴 **왜 생겼나**: 조작 종류가 34개가 되자 한 줄 드롭다운이 너무 길어졌다(사용자). GitHub 감사 로그가
+ * `분류.동작`(`team.create`)으로 **분류 통째로도, 하나만도** 거르게 하는 것을 따랐다. 검색은 분류 이름에도
+ * 걸려서 «주문» 만 쳐도 주문 분류가 통째로 나온다.
+ * ⚠ **대상 종류(`targetType`)와 다른 축이다** — 리뷰 숨김의 대상은 «회원» 이지만 분류는 «리뷰·문의» 다.
+ * 대상은 «누구·무엇에» 를, 분류는 «어느 업무에서» 를 답한다.
+ * → **`audit.test.js` 가 키 집합을 `AuditAction.java` 와 대조한다** — 새 조작이 분류 없이 들어오면 빨개진다.
+ */
+export const AUDIT_ACTION_GROUPS = ['회원', '주문', '상품', '리뷰·문의', '쿠폰', '공지·마케팅'];
+export const AUDIT_ACTION_GROUP = {
+  MEMBER_SUSPEND: '회원', MEMBER_UNSUSPEND: '회원', MEMBER_ROLE_CHANGE: '회원', MEMBER_DELETE: '회원',
+  ORDER_SHIP: '주문', ORDER_DELIVER: '주문', ORDER_CANCEL: '주문', ORDER_ITEM_CANCEL: '주문',
+  ORDER_RETURN_REQUEST: '주문', ORDER_RETURN_APPROVE: '주문', ORDER_RETURN_REJECT: '주문',
+  PRODUCT_CREATE: '상품', PRODUCT_UPDATE: '상품', PRODUCT_DELETE: '상품', PRODUCT_RESTORE: '상품',
+  DISCOUNT_CREATE: '상품', DISCOUNT_UPDATE: '상품', DISCOUNT_DELETE: '상품',
+  CATEGORY_CREATE: '상품', CATEGORY_DELETE: '상품',
+  REVIEW_HIDE: '리뷰·문의', REVIEW_UNHIDE: '리뷰·문의', REVIEW_DELETE: '리뷰·문의',
+  INQUIRY_HIDE: '리뷰·문의', INQUIRY_UNHIDE: '리뷰·문의', INQUIRY_DELETE: '리뷰·문의', INQUIRY_ANSWER: '리뷰·문의',
+  COUPON_CREATE: '쿠폰', COUPON_ISSUE: '쿠폰', COUPON_WELCOME_SET: '쿠폰',
+  NOTICE_CREATE: '공지·마케팅', NOTICE_UPDATE: '공지·마케팅', NOTICE_DELETE: '공지·마케팅',
+  MARKETING_SEND: '공지·마케팅',
+};
+
+/**
+ * 필터 드롭다운의 선택지 — `{ value, label, group, groupIndex }` 를 분류 순서대로.
+ * ⚠ 라벨·분류 **두 맵에서 만든다**(손으로 목록을 또 적지 않는다). 분류를 모르는 값은 맨 뒤 «기타» 로 —
+ * 드리프트 테스트가 막는 자리지만, 새어 나와도 **고를 수는 있어야** 한다(빈칸보다 낫다).
+ */
+export function auditActionOptions() {
+  return Object.entries(AUDIT_ACTION_LABEL)
+    .map(([value, label]) => {
+      const group = AUDIT_ACTION_GROUP[value] || '기타';
+      const index = AUDIT_ACTION_GROUPS.indexOf(group);
+      return { value, label, group, groupIndex: index < 0 ? AUDIT_ACTION_GROUPS.length : index };
+    })
+    .sort((a, b) => a.groupIndex - b.groupIndex);
 }

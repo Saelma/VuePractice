@@ -7,6 +7,7 @@ import com.glassvue.domain.audit.service.query.AdminAuditQueryService;
 import com.glassvue.global.response.ApiResponse;
 import com.glassvue.global.response.PageResponse;
 import java.time.LocalDate;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.data.domain.Pageable;
@@ -30,13 +31,13 @@ public class AdminAuditControllerImpl implements AdminAuditController {
     @Override
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<AdminAuditLogResponse>>> list(
-            @RequestParam(required = false) AuditAction action,
+            @RequestParam(required = false) List<AuditAction> actions,
             @RequestParam(required = false) AuditTargetType targetType,
             @RequestParam(required = false) String targetLogin,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.ok(
-                auditQueryService.search(action, targetType, targetLogin, from, to, pageable)));
+                auditQueryService.search(actions, targetType, targetLogin, from, to, pageable)));
     }
 }

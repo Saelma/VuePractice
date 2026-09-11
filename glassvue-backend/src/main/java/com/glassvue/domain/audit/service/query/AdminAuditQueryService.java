@@ -8,6 +8,9 @@ import com.glassvue.domain.audit.repository.AdminAuditLogRepository;
 import com.glassvue.global.common.KstDates;
 import com.glassvue.global.response.PageResponse;
 import java.time.LocalDate;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -38,12 +41,15 @@ public class AdminAuditQueryService {
      * «빈 날을 채워 막대를 그리기» 때문이고, 여기는 <b>페이징된 목록</b>이라 기간이 길어도
      * 한 쪽 크기는 그대로다. 🔴 <b>상한은 기간의 성질이 아니라 «그리는 방식» 의 성질이다.</b>
      */
-    public PageResponse<AdminAuditLogResponse> search(AuditAction action, AuditTargetType targetType,
+    public PageResponse<AdminAuditLogResponse> search(List<AuditAction> actions, AuditTargetType targetType,
                                                       String targetLogin, LocalDate from, LocalDate to,
                                                       Pageable pageable) {
         String login = (targetLogin == null || targetLogin.isBlank()) ? null : targetLogin.trim();
+        // 🔴 비었으면 «전체» — 빈 IN 을 DB 에 보내지 않는다(리포지토리 주석).
+        Set<AuditAction> actionSet = (actions == null || actions.isEmpty())
+                ? EnumSet.allOf(AuditAction.class) : EnumSet.copyOf(actions);
         Page<AdminAuditLog> page = auditLogRepository.search(
-                action, targetType, login,
+                actionSet, targetType, login,
                 from == null ? null : KstDates.startOfDay(from),
                 to == null ? null : KstDates.startOfNextDay(to),
                 withDefaultSort(pageable));

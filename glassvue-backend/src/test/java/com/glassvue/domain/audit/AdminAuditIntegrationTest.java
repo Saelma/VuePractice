@@ -211,13 +211,23 @@ class AdminAuditIntegrationTest {
                 .andExpect(jsonPath("$.data.totalElements").value(3))
                 .andExpect(jsonPath("$.data.content[0].action").value("MEMBER_ROLE_CHANGE"));
 
-        // action 필터는 종류로 좁힌다
+        // actions 필터는 종류로 좁힌다
         mockMvc.perform(get("/api/admin/audit").header("Authorization", actor)
                         .param("targetLogin", targetLoginId)
-                        .param("action", "MEMBER_SUSPEND"))
+                        .param("actions", "MEMBER_SUSPEND"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.content[0].action").value("MEMBER_SUSPEND"));
+
+        // 🔴 여러 개를 한 번에 (2026-09-11 — 조작 종류가 34개가 되어 화면이 체크 드롭다운으로 바뀌었다).
+        // 표본 3건 중 2건을 고른다 — «하나만(1)» 과도 «전체(3)» 와도 갈리는 값이다.
+        mockMvc.perform(get("/api/admin/audit").header("Authorization", actor)
+                        .param("targetLogin", targetLoginId)
+                        .param("actions", "MEMBER_SUSPEND,MEMBER_UNSUSPEND"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[*].action",
+                        org.hamcrest.Matchers.containsInAnyOrder("MEMBER_UNSUSPEND", "MEMBER_SUSPEND")));
     }
 
     @Test

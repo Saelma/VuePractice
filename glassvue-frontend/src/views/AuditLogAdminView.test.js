@@ -28,8 +28,9 @@ vi.mock('../api/audit', async (importOriginal) => {
 });
 
 import { DxSelectBox } from 'devextreme-vue/select-box';
+import { DxTagBox } from 'devextreme-vue/tag-box';
 import AuditLogAdminView from './AuditLogAdminView.vue';
-import { AUDIT_ACTION_LABEL, AUDIT_TARGET_TYPE_LABEL } from '../api/audit';
+import { AUDIT_ACTION_LABEL, AUDIT_ACTION_GROUPS, AUDIT_TARGET_TYPE_LABEL } from '../api/audit';
 
 function log(overrides = {}) {
   return {
@@ -91,8 +92,16 @@ function selectBoxes(w) {
   return w.findAllComponents(DxSelectBox);
 }
 async function pickTargetType(w, value) {
-  // [0] 조작 종류 · [1] 대상 종류 — 템플릿 순서다.
-  selectBoxes(w)[1].vm.instance.option('value', value);
+  // ⚠ 조작 종류가 TagBox 로 바뀌어(2026-09-11) SelectBox 는 **대상 종류 하나**다.
+  selectBoxes(w)[0].vm.instance.option('value', value);
+  await flushPromises();
+}
+/** 조작 종류 TagBox — 같은 이유로 **위젯 인스턴스로** 값을 넣는다(팝업은 jsdom 에서 안 열린다). */
+function actionBox(w) {
+  return w.findComponent(DxTagBox);
+}
+async function pickActions(w, values) {
+  actionBox(w).vm.instance.option('value', values);
   await flushPromises();
 }
 
@@ -174,7 +183,7 @@ describe('AuditLogAdminView', () => {
     //    api/audit.test.js 는 맵과 enum 을 대조할 뿐, 화면이 그 맵을 쓰는지는 모른다.
     const w = await mountWith([log()]);
 
-    const items = selectBoxes(w)[1].props('items');
+    const items = selectBoxes(w)[0].props('items');
     expect(items[0]).toEqual({ value: null, label: '전체' }); // 「전체」가 맨 앞이어야 비울 수 있다
     expect(items.slice(1)).toEqual(
       Object.entries(AUDIT_TARGET_TYPE_LABEL).map(([value, label]) => ({ value, label })),
@@ -183,16 +192,35 @@ describe('AuditLogAdminView', () => {
     expect(items.map((i) => i.value)).toEqual(expect.arrayContaining(['CATEGORY', 'NOTICE']));
   });
 
-  it('조작 종류 선택지도 라벨 맵에서 온다 (같은 이유)', async () => {
+  it('조작 종류 선택지도 라벨 맵에서 온다 — **분류 순서대로 묶여** 34개 전부 (2026-09-11)', async () => {
     const w = await mountWith([log()]);
 
-    const items = selectBoxes(w)[0].props('items');
-    expect(items.slice(1)).toEqual(
-      Object.entries(AUDIT_ACTION_LABEL).map(([value, label]) => ({ value, label })),
-    );
-    expect(items.map((i) => i.value)).toEqual(
-      expect.arrayContaining(['CATEGORY_CREATE', 'NOTICE_DELETE', 'INQUIRY_ANSWER']),
-    );
+    // 🔴 위젯이 실제로 쓰는 데이터 소스를 **불러서** 본다 — 설정값(props)만 보면 묶음이 도는지 모른다.
+    const groups = await actionBox(w).vm.instance.getDataSource().load();
+    expect(groups.map((g) => g.key)).toEqual(AUDIT_ACTION_GROUPS.map((_, i) => i)); // 정한 순서(이름순이 아니다)
+    const values = groups.flatMap((g) => g.items.map((i) => i.value));
+    expect(values.sort()).toEqual(Object.keys(AUDIT_ACTION_LABEL).sort());
+    expect(groups[0].items.map((i) => i.value)).toContain('MEMBER_SUSPEND'); // 0번 = 회원
+  });
+
+  it('🔴 조작 종류는 **검색되고 · 체크로 · 여러 개** 고른다 — 이 셋이 이 필터를 바꾼 이유다', async () => {
+    const w = await mountWith([log()]);
+    const box = actionBox(w);
+    expect(box.props('searchEnabled')).toBe(true);
+    expect(box.props('searchExpr')).toEqual(['label', 'group']); // «주문» 만 쳐도 분류 통째로
+    expect(box.props('showSelectionControls')).toBe(true);
+    expect(box.props('grouped')).toBe(true);
+  });
+
+  it('🔴 조작 종류를 **여러 개** 고르면 그대로 검색에 실린다', async () => {
+    const w = await mountWith([log()]);
+    fetchAuditLogs.mockClear();
+
+    await pickActions(w, ['REVIEW_DELETE', 'INQUIRY_DELETE']);
+    await w.findAll('button').find((b) => b.text() === '검색').trigger('click');
+
+    await vi.waitUntil(() => fetchAuditLogs.mock.calls.length > 0, { timeout: 12_000, interval: 20 });
+    expect(fetchAuditLogs.mock.calls.at(-1)[0].actions).toEqual(['REVIEW_DELETE', 'INQUIRY_DELETE']);
   });
 
   // ── 검색 · 초기화 ──────────────────────────────────────────────
@@ -231,7 +259,7 @@ describe('AuditLogAdminView', () => {
     await vi.waitUntil(() => fetchAuditLogs.mock.calls.length > 0, { timeout: 12_000, interval: 20 });
     const last = fetchAuditLogs.mock.calls.at(-1)[0];
     expect(last.targetLogin).toBe('');
-    expect(last.action).toBeNull();
+    expect(last.actions).toEqual([]);
   });
 
   it('🔴 초기화는 **대상 종류도** 비운다 — 안 지우면 「전체로 돌렸는데 안 늘어난다」가 된다', async () => {

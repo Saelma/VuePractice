@@ -12,13 +12,16 @@ import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxSelectBox } from 'devextreme-vue/select-box';
+import { DxTagBox } from 'devextreme-vue/tag-box';
+import DataSource from 'devextreme/data/data_source';
 import {
   fetchAuditLogs, auditActionText, auditActionBadge, auditTargetTypeText,
-  AUDIT_ACTION_LABEL, AUDIT_TARGET_TYPE_LABEL,
+  auditActionOptions, AUDIT_ACTION_GROUPS, AUDIT_TARGET_TYPE_LABEL,
 } from '../api/audit';
 import AdminPeriodPicker from '../components/AdminPeriodPicker.vue';
 
-const form = ref({ action: null, targetType: null, targetLogin: '', from: '', to: '' });
+const EMPTY_FORM = () => ({ actions: [], targetType: null, targetLogin: '', from: '', to: '' });
+const form = ref(EMPTY_FORM());
 
 /**
  * 기간 선택 (B-26 잔여, 2026-09-07).
@@ -34,10 +37,27 @@ function applyPeriod({ from, to }) {
 const applied = ref({ ...form.value });
 const gridRef = ref(null);
 
-const actionOptions = [
-  { value: null, label: '전체' },
-  ...Object.entries(AUDIT_ACTION_LABEL).map(([value, label]) => ({ value, label })),
-];
+/**
+ * 🔴 **조작 종류 — 검색되는 분류별 체크 드롭다운** (2026-09-11).
+ *
+ * 조작이 34개가 되자 한 줄 목록이 너무 길어졌다(사용자). 벤치마크: GitHub 감사 로그(분류.동작 —
+ * 분류 통째로도 하나만도 거른다) · Datadog Audit Trail(체크박스 패싯 — 여러 개를 동시에).
+ * → `DxTagBox` 하나로 **검색 + 분류 묶음 + 체크박스 + 여러 개**. 비우면 «전체» 다.
+ * ⚠ **검색은 분류 이름에도 걸린다** — «주문» 만 쳐도 주문 분류가 통째로 나온다.
+ * ⚠ 닫혀 있을 때는 한 칸 폭을 지킨다 — 둘 이상 고르면 «N개 선택» 한 조각으로 접는다(`onMultiTag`).
+ */
+const actionSource = new DataSource({
+  store: auditActionOptions(),
+  // 분류는 **정한 순서**로 — 이름으로 정렬되면 «공지·마케팅» 이 맨 위로 온다. 머리글은 템플릿이 이름으로 바꾼다.
+  group: 'groupIndex',
+  paginate: false,
+});
+function actionGroupTitle(key) {
+  return AUDIT_ACTION_GROUPS[key] ?? '기타';
+}
+function onMultiTag(e) {
+  e.text = `${e.selectedItems.length}개 선택`;
+}
 
 /**
  * 🔴 **대상 종류 필터 (2026-08-20, V53).** 상품·쿠폰 행은 targetLogin 이 비어 있어
@@ -64,7 +84,7 @@ function search() {
   gridRef.value?.instance.refresh();
 }
 function reset() {
-  form.value = { action: null, targetType: null, targetLogin: '', from: '', to: '' };
+  form.value = EMPTY_FORM();
   search();
 }
 
@@ -95,13 +115,25 @@ const actionBadge = auditActionBadge;
       <div class="flex flex-wrap items-end gap-3 border-t border-line pt-3">
       <label class="field">
         <span class="field-label">조작 종류</span>
-        <DxSelectBox
-          v-model:value="form.action"
-          :items="actionOptions"
+        <DxTagBox
+          v-model:value="form.actions"
+          :data-source="actionSource"
           value-expr="value"
           display-expr="label"
-          :width="160"
-        />
+          :grouped="true"
+          group-template="actionGroup"
+          :search-enabled="true"
+          :search-expr="['label', 'group']"
+          :show-selection-controls="true"
+          :max-displayed-tags="1"
+          :show-multi-tag-only="true"
+          :on-multi-tag-preparing="onMultiTag"
+          select-all-text="전체 선택"
+          placeholder="전체"
+          :width="220"
+        >
+          <template #actionGroup="{ data }">{{ actionGroupTitle(data.key) }}</template>
+        </DxTagBox>
       </label>
       <label class="field">
         <span class="field-label">대상 아이디</span>

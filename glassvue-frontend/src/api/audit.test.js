@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import {
   fetchAuditLogs, auditActionText, auditActionBadge,
   AUDIT_ACTION_LABEL, AUDIT_ACTION_BADGE, AUDIT_TARGET_TYPE_LABEL,
+  AUDIT_ACTION_GROUP, AUDIT_ACTION_GROUPS, auditActionOptions,
 } from './audit';
 import { clearSession } from '../stores/auth';
 
@@ -75,6 +76,13 @@ describe('감사 라벨 ↔ 백엔드 enum 드리프트 (2026-08-10)', () => {
 
   // 2026-09-11 (O-6 · O-8) — 대상 종류 라벨은 **대조가 없었다.** 필터 선택지가 이 객체로 만들어져
   // 빠지면 «마케팅 발송만 보기» 를 고를 수 없다. 조작 라벨과 같은 방식으로 원문을 읽어 대조한다.
+  it('🔴 분류 맵 키 집합도 enum 과 같다 — 새 조작이 분류 없이 들어오면 «기타» 로 떨어진다 (2026-09-11)', () => {
+    expect(Object.keys(AUDIT_ACTION_GROUP).sort()).toEqual(enumValuesFromJava().sort());
+    // 분류 값은 정한 목록 안에서만 — 오타(«리뷰/문의») 하나가 분류를 둘로 쪼갠다.
+    expect(new Set(Object.values(AUDIT_ACTION_GROUP))).toEqual(new Set(AUDIT_ACTION_GROUPS));
+    expect(auditActionOptions().some((o) => o.group === '기타')).toBe(false);
+  });
+
   it('🔴 대상 종류 라벨 키 집합도 `AuditTargetType` enum 과 같다 (빠지면 필터에서 못 고른다)', () => {
     const values = enumValuesFromJava(AUDIT_TARGET_TYPE_JAVA);
     expect(values).toContain('MEMBER'); // 파서가 헛돌면 [] == [] 로 초록이 된다(위 첫 가드와 같은 이유)
@@ -117,14 +125,20 @@ describe('감사 이력 조회 파라미터', () => {
     expect((await callOf()).pathname).toBe('/api/admin/audit');
   });
 
-  it('action 이 null 이면(=전체) 파라미터가 아예 빠진다', async () => {
-    expect((await callOf({ action: null })).searchParams.has('action')).toBe(false);
+  it('actions 가 비면(=전체) 파라미터가 아예 빠진다', async () => {
+    expect((await callOf({ actions: [] })).searchParams.has('actions')).toBe(false);
+    expect((await callOf()).searchParams.has('actions')).toBe(false);
     // ⚠ 「전체」에 'ALL' 같은 문자열을 보내면 서버가 enum 변환에 실패해 400 이고,
     //    화면엔 그게 "이력이 없다" 로 보인다(문의·리뷰·주문에서 반복된 자리).
   });
 
   it('오늘 늘어난 종류로도 좁힐 수 있다 — 이게 안 되면 감사를 남겨도 못 찾는다', async () => {
-    expect((await callOf({ action: 'ORDER_CANCEL' })).searchParams.get('action')).toBe('ORDER_CANCEL');
-    expect((await callOf({ action: 'INQUIRY_HIDE' })).searchParams.get('action')).toBe('INQUIRY_HIDE');
+    expect((await callOf({ actions: ['ORDER_CANCEL'] })).searchParams.get('actions')).toBe('ORDER_CANCEL');
+    expect((await callOf({ actions: ['MARKETING_SEND'] })).searchParams.get('actions')).toBe('MARKETING_SEND');
+  });
+
+  it('🔴 여러 개는 **쉼표로 이어** 한 파라미터로 간다 — 서버가 List 로 받는다 (2026-09-11)', async () => {
+    expect((await callOf({ actions: ['REVIEW_DELETE', 'INQUIRY_DELETE'] })).searchParams.get('actions'))
+      .toBe('REVIEW_DELETE,INQUIRY_DELETE');
   });
 });
