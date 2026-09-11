@@ -17,6 +17,7 @@ import { ref, onMounted } from 'vue';
 import CustomStore from 'devextreme/data/custom_store';
 import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-grid';
 import { fetchStockHistory, stockReasonText, stockDeltaText } from '../api/product';
+import { PAGER_INFO } from '../constants/labels';
 
 const props = defineProps({ productId: { type: String, required: true } });
 
@@ -95,7 +96,7 @@ function sourceText(row) {
       <DxColumn caption="누가 · 왜" :calculate-cell-value="sourceText" />
 
       <DxPaging :page-size="20" />
-      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50]" :show-info="true" info-text="{2}건 중 {0}-{1}" />
+      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50]" :show-info="true" :info-text="PAGER_INFO" />
 
       <template #reasonCell="{ data }">
         <span class="badge" :class="reasonBadge(data.data.reason)">{{ stockReasonText(data.data.reason) }}</span>

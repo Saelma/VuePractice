@@ -23,7 +23,7 @@ import { DxSelectBox } from 'devextreme-vue/select-box';
 import {
   fetchAdminReviews, hideReview, unhideReview, REVIEW_HIDDEN_OPTIONS,
 } from '../api/review';
-import { DELETED_PRODUCT } from '../constants/labels';
+import { DELETED_PRODUCT, PAGER_INFO } from '../constants/labels';
 
 const filter = ref({ hidden: null });
 const gridRef = ref(null);
@@ -127,7 +127,7 @@ function ratingBadge(rating) {
       <DxColumn caption="처리" :width="110" alignment="center" cell-template="actionCell" />
 
       <DxPaging :page-size="20" />
-      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50]" :show-info="true" info-text="{2}건 중 {0}-{1}" />
+      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50]" :show-info="true" :info-text="PAGER_INFO" />
 
       <template #productCell="{ data }">
         <!-- ⚠ 「비었다」와 「지워졌다」는 화면에서 같아 보인다 — 판정은 서버(productDeleted)가 하고

@@ -13,6 +13,7 @@ import { DxDataGrid, DxColumn, DxPaging, DxPager } from 'devextreme-vue/data-gri
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { fetchAdminMembers, roleText } from '../api/member';
 import { isAdminRole } from '../stores/auth';
+import { PAGER_INFO_MEMBERS } from '../constants/labels';
 
 const router = useRouter();
 const form = ref({ keyword: '' });
@@ -82,7 +83,7 @@ function fmt(v) {
       <DxColumn caption="처리" :width="90" alignment="center" cell-template="actionCell" />
 
       <DxPaging :page-size="10" />
-      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[10, 20, 50]" :show-info="true" info-text="{2}명 중 {0}-{1}" />
+      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[10, 20, 50]" :show-info="true" :info-text="PAGER_INFO_MEMBERS" />
 
       <template #roleCell="{ data }">
         <span class="badge" :class="isAdminRole(data.data.role) ? 'badge-neutral' : 'bg-canvas text-ink-400'">

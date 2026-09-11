@@ -17,6 +17,7 @@ import {
 import { fetchAdminMemberPointAccount, fetchAdminMemberPointHistory, gradeText, pointTypeText } from '../api/point';
 import { fetchAdminMemberOrders, ORDER_STATUS_OPTIONS, orderStatusText, orderStatusClass } from '../api/order';
 import { priceText } from '../api/product';
+import { PAGER_INFO } from '../constants/labels';
 
 const route = useRoute();
 const router = useRouter();
@@ -255,7 +256,7 @@ function signedPoint(n) {
         <DxColumn data-field="status" caption="상태" :width="100" alignment="center" cell-template="statusCell" />
         <DxColumn caption="처리" :width="80" alignment="center" cell-template="actionCell" />
         <DxPaging :page-size="10" />
-        <DxPager :show-info="true" info-text="{2}건 중 {0}-{1}" />
+        <DxPager :show-info="true" :info-text="PAGER_INFO" />
         <template #statusCell="{ data }">
           <span class="badge" :class="orderStatusClass(data.data.status)">{{ orderStatusText(data.data.status) }}</span>
         </template>
@@ -283,7 +284,7 @@ function signedPoint(n) {
         <DxColumn data-field="balanceAfter" caption="잔액" :width="120" alignment="right" :calculate-display-value="(r) => priceText(r.balanceAfter)" />
         <DxColumn data-field="reason" caption="사유" />
         <DxPaging :page-size="10" />
-        <DxPager :show-info="true" info-text="{2}건 중 {0}-{1}" />
+        <DxPager :show-info="true" :info-text="PAGER_INFO" />
       </DxDataGrid>
     </div>
   </section>

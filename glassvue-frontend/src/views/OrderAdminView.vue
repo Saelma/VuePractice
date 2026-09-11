@@ -20,6 +20,7 @@ import {
 } from '../api/order';
 import { priceText } from '../api/product';
 import AdminPeriodPicker from '../components/AdminPeriodPicker.vue';
+import { PAGER_INFO } from '../constants/labels';
 
 const router = useRouter();
 const route = useRoute();
@@ -396,7 +397,7 @@ function fmt(v) {
       <DxColumn caption="처리" :width="150" alignment="center" cell-template="actionCell" />
 
       <DxPaging :page-size="10" />
-      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[10, 20, 50]" :show-info="true" info-text="{2}건 중 {0}-{1}" />
+      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[10, 20, 50]" :show-info="true" :info-text="PAGER_INFO" />
 
       <template #summaryCell="{ data }">
         <div class="min-w-0">

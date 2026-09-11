@@ -223,6 +223,15 @@ describe('AuditLogAdminView', () => {
     expect(fetchAuditLogs.mock.calls.at(-1)[0].actions).toEqual(['REVIEW_DELETE', 'INQUIRY_DELETE']);
   });
 
+  it('🔴 **검색 결과 건수가 표 위에 늘 보인다** — 한 쪽에 다 들어가 페이저가 숨어도 (2026-09-11)', async () => {
+    // 표본 조건: 서버 총건수가 **정확히 한 쪽(20)** 이라 페이저가 `visible: 'auto'` 로 숨는 경우다.
+    // 사용자가 «반품 승인 + 발송» 20건을 거르자 건수가 사라진 바로 그 모양.
+    fetchAuditLogs.mockResolvedValue({ content: [log()], totalElements: 20 });
+    wrapper = mount(AuditLogAdminView);
+    await vi.waitUntil(() => wrapper.find('[data-test="audit-total"]').exists(), { timeout: 12_000, interval: 20 });
+    expect(wrapper.find('[data-test="audit-total"]').text()).toBe('총 20건');
+  });
+
   // ── 검색 · 초기화 ──────────────────────────────────────────────
 
   it('검색은 **폼 값을 실어** 서버에 다시 묻는다', async () => {

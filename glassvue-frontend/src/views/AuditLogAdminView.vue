@@ -19,6 +19,7 @@ import {
   auditActionOptions, AUDIT_ACTION_GROUPS, AUDIT_TARGET_TYPE_LABEL,
 } from '../api/audit';
 import AdminPeriodPicker from '../components/AdminPeriodPicker.vue';
+import { PAGER_INFO } from '../constants/labels';
 
 const EMPTY_FORM = () => ({ actions: [], targetType: null, targetLogin: '', from: '', to: '' });
 const form = ref(EMPTY_FORM());
@@ -69,13 +70,26 @@ const targetTypeOptions = [
   ...Object.entries(AUDIT_TARGET_TYPE_LABEL).map(([value, label]) => ({ value, label })),
 ];
 
+/**
+ * 🔴 **검색 결과 건수 — 표 위에 늘 보인다** (2026-09-11). 페이저도 건수를 말하지만 **한 쪽에 다 들어가면
+ * 페이저째 숨는다**(DevExtreme `visible: 'auto'`) — 20건을 거르자 건수가 사라졌다(사용자: *"몇 건인지 안 뜨네"*).
+ * ⚠ 못 읽으면 `null` 로 — «0건» 으로 그리면 «아무 일도 없었다» 로 읽힌다(대시보드와 같은 규칙).
+ */
+const total = ref(null);
+
 const store = new CustomStore({
   key: 'id',
   load: async (options) => {
     const size = options.take || 20;
     const page = Math.floor((options.skip || 0) / size);
-    const res = await fetchAuditLogs({ ...applied.value, page, size });
-    return { data: res.content, totalCount: res.totalElements };
+    try {
+      const res = await fetchAuditLogs({ ...applied.value, page, size });
+      total.value = res.totalElements;
+      return { data: res.content, totalCount: res.totalElements };
+    } catch (e) {
+      total.value = null;
+      throw e;
+    }
   },
 });
 
@@ -154,6 +168,9 @@ const actionBadge = auditActionBadge;
       </div>
     </div>
 
+    <p v-if="total !== null" class="muted mb-2" data-test="audit-total">
+      총 <strong class="tabular-nums text-ink-900">{{ total.toLocaleString('ko-KR') }}</strong>건
+    </p>
     <DxDataGrid
       ref="gridRef"
       :data-source="store"
@@ -184,7 +201,7 @@ const actionBadge = auditActionBadge;
       <DxColumn data-field="detail" caption="내용" :calculate-display-value="(r) => r.detail || '—'" />
 
       <DxPaging :page-size="20" />
-      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50, 100]" :show-info="true" info-text="{2}건 중 {0}-{1}" />
+      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50, 100]" :show-info="true" :info-text="PAGER_INFO" />
 
       <template #actionCell="{ data }">
         <span class="badge" :class="actionBadge(data.data.action)">

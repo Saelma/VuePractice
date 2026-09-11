@@ -26,7 +26,7 @@ import {
   fetchAdminInquiries, answerInquiry, hideInquiry, unhideInquiry,
   INQUIRY_STATUS_OPTIONS, INQUIRY_HIDDEN_OPTIONS, inquiryTypeText,
 } from '../api/inquiry';
-import { DELETED_PRODUCT } from '../constants/labels';
+import { DELETED_PRODUCT, PAGER_INFO } from '../constants/labels';
 
 // 기본 「답변대기」 — 목록을 여는 이유가 그것이다(위 주석).
 //
@@ -218,7 +218,7 @@ function productText(row) {
       <DxColumn caption="처리" :width="150" alignment="center" cell-template="actionCell" />
 
       <DxPaging :page-size="20" />
-      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50]" :show-info="true" info-text="{2}건 중 {0}-{1}" />
+      <DxPager :show-page-size-selector="true" :allowed-page-sizes="[20, 50]" :show-info="true" :info-text="PAGER_INFO" />
 
       <template #titleCell="{ data }">
         <span>{{ data.data.title }}</span>
