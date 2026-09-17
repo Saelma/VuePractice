@@ -3,6 +3,7 @@ package com.glassvue.domain.coupon.controller;
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
+import com.glassvue.domain.coupon.dto.IssuedCouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
 import com.glassvue.domain.coupon.dto.PromotionCalendarResponse;
 import com.glassvue.domain.coupon.service.CouponService;
@@ -99,6 +100,28 @@ public class CouponControllerImpl implements CouponController {
     public ResponseEntity<ApiResponse<UUID>> create(@LoginUser AuthUser user,
                                                     @Valid @RequestBody CouponCreateRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(couponService.create(request, user)));
+    }
+
+    @Override
+    @GetMapping("/admin/coupons/{couponId}/issued")
+    public ResponseEntity<ApiResponse<List<IssuedCouponResponse>>> issued(@PathVariable UUID couponId) {
+        return ResponseEntity.ok(ApiResponse.ok(couponService.issuedOf(couponId)));
+    }
+
+    @Override
+    @DeleteMapping("/admin/coupons/{couponId}/issued/{memberCouponId}")
+    public ResponseEntity<ApiResponse<Void>> revoke(@LoginUser AuthUser user,
+                                                    @PathVariable UUID couponId,
+                                                    @PathVariable UUID memberCouponId) {
+        couponService.revoke(couponId, memberCouponId, user);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Override
+    @DeleteMapping("/admin/coupons/{couponId}")
+    public ResponseEntity<ApiResponse<Void>> delete(@LoginUser AuthUser user, @PathVariable UUID couponId) {
+        couponService.delete(couponId, user);
+        return ResponseEntity.ok(ApiResponse.ok());
     }
 
     // 지정/해제를 POST·DELETE 로 나눈다 — 회원 정지/해제(suspend·unsuspend)와 같은 결.

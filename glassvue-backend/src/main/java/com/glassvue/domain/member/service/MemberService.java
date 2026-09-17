@@ -112,6 +112,21 @@ public class MemberService {
         return memberRepository.findById(memberId).map(Member::getLoginId).orElse(null);
     }
 
+    /**
+     * loginId 여럿을 한 번에 — 쿠폰 보유자 목록(Q-7)용 공개 API. {@link #loginIdOf} 의 묶음판이다.
+     *
+     * <p>⚠ <b>없는 회원은 맵에 안 들어간다</b> — 호출부는 {@code get} 이 {@code null} 인 것으로 «없다» 를 읽는다
+     * ({@link #loginIdOf} 가 {@code null} 을 주는 것과 같은 뜻). 지어낸 값으로 메우지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<UUID, String> loginIdsOf(java.util.Collection<UUID> memberIds) {
+        if (memberIds.isEmpty()) {
+            return java.util.Map.of(); // Oracle 은 빈 IN () 을 문법 오류로 받는다
+        }
+        return memberRepository.findAllById(memberIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Member::getId, Member::getLoginId));
+    }
+
     public MemberResponse changeNickname(UUID memberId, String nickname) {
         Member member = find(memberId);
         // 닉네임은 유니크. 본인은 제외해 같은 값 재저장은 허용하고, 남이 쓰는 값이면 막는다.

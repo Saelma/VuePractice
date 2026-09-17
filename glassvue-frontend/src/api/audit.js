@@ -88,6 +88,8 @@ export const AUDIT_ACTION_LABEL = {
   COUPON_CREATE: '쿠폰 등록',
   COUPON_ISSUE: '쿠폰 발급',
   COUPON_WELCOME_SET: '가입 쿠폰 지정',
+  COUPON_REVOKE: '쿠폰 회수',
+  COUPON_DELETE: '쿠폰 삭제',
   DISCOUNT_CREATE: '세일 등록',
   DISCOUNT_UPDATE: '세일 수정',
   DISCOUNT_DELETE: '세일 삭제',
@@ -156,11 +158,14 @@ export const AUDIT_ACTION_BADGE = {
   PRODUCT_CREATE: 'badge-neutral',
   PRODUCT_UPDATE: 'badge-neutral',
   COUPON_CREATE: 'badge-neutral',
-  // 🔴 **회수할 방법이 없다** — 발급 취소 API 자체가 없다(쿠폰을 «되돌리는» 경로는 주문 취소뿐).
-  //    되돌릴 수 없다는 기준에 그대로 걸린다. ⚠ 빈도가 낮아(수동 발급) 원장을 덮지 않는다.
+  // ⚠ 2026-09-17(Q-7)부터 **미사용분은 회수할 수 있다** — 그래도 danger 로 둔다: 받은 순간 쓰일 수 있고
+  //    쓰인 것은 영영 못 거둔다. ⚠ 빈도가 낮아(수동 발급) 원장을 덮지 않는다.
   COUPON_ISSUE: 'badge-danger',
   // 지정/해제가 한 값이라 색이 하나다 — 토글이고 둘 다 되돌릴 수 있다.
   COUPON_WELCOME_SET: 'badge-neutral',
+  // 🔴 **둘 다 되돌릴 수 없다**(Q-7, V65) — 행을 지운다. 「내용」이 유일한 흔적이다.
+  COUPON_REVOKE: 'badge-danger',
+  COUPON_DELETE: 'badge-danger',
   // 🔴 **세 값 다 warning 이다.** 세일은 등록·수정·삭제가 전부 «가격이 움직인다» 이고,
   //    어느 방향이 고객에게 유리한지가 그때그때 달라 **색으로는 못 가른다**
   //    (진행 중인 세일을 지우면 값이 오르고, 거는 것은 내린다).
@@ -212,6 +217,7 @@ export const AUDIT_ACTION_GROUP = {
   REVIEW_HIDE: '리뷰·문의', REVIEW_UNHIDE: '리뷰·문의', REVIEW_DELETE: '리뷰·문의',
   INQUIRY_HIDE: '리뷰·문의', INQUIRY_UNHIDE: '리뷰·문의', INQUIRY_DELETE: '리뷰·문의', INQUIRY_ANSWER: '리뷰·문의',
   COUPON_CREATE: '쿠폰', COUPON_ISSUE: '쿠폰', COUPON_WELCOME_SET: '쿠폰',
+  COUPON_REVOKE: '쿠폰', COUPON_DELETE: '쿠폰',
   NOTICE_CREATE: '공지·마케팅', NOTICE_UPDATE: '공지·마케팅', NOTICE_DELETE: '공지·마케팅',
   MARKETING_SEND: '공지·마케팅',
 };

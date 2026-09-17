@@ -2,12 +2,16 @@
 /**
  * 관리자 쿠폰 관리 (2026-07-28). 그동안 쿠폰은 API만 있고 화면이 없어 curl 로만 만들 수 있었다.
  * 여기서 쿠폰을 만들고(정액/정률), 목록을 보고, 회원을 검색해 발급한다.
+ * 2026-09-17(Q-7): 쿠폰마다 **보유자**를 펼쳐 미사용분을 회수하고, 발급분이 없으면 정의를 삭제한다.
  *
  * 발급 대상 memberId 는 회원 검색(/api/admin/members)으로 찾는다 — 쿠폰 목록에 없는 건 회원 정보라
  * member 도메인 admin API 를 그대로 쓴다(도메인 경계).
  */
 import { reactive, ref, computed, onMounted } from 'vue';
-import { fetchAdminCoupons, createCoupon, issueCoupon, couponDiscountText, setWelcomeCoupon } from '../api/coupon';
+import {
+  fetchAdminCoupons, createCoupon, issueCoupon, couponDiscountText, setWelcomeCoupon,
+  fetchIssuedCoupons, revokeIssuedCoupon, deleteCoupon,
+} from '../api/coupon';
 import { fetchAdminMembers, roleText } from '../api/member';
 import { priceText } from '../api/product';
 import EmptyState from '../components/EmptyState.vue';
@@ -188,8 +192,93 @@ async function onIssue(member) {
   try {
     await issueCoupon(selected.value.id, member.id);
     issueMsg.ok = `${member.loginId}(${member.nickname}) 에게 '${selected.value.name}' 발급 완료.`;
+    // 같은 쿠폰의 보유자를 펼쳐 둔 채 발급했으면 그 목록도 낡았다 — 다시 읽는다.
+    if (holders.couponId === selected.value.id) await loadHolders(selected.value.id);
   } catch (e) {
     issueMsg.err = e.message;
+  }
+}
+
+// ---------- 보유자 · 회수 · 정의 삭제 (Q-7) ----------
+/*
+ * 🔴 **둘 다 되돌릴 수 없다** — 서버가 행을 지우고 흔적은 감사 원장에만 남는다. 그래서 확인 대화에
+ * «무엇이 함께 일어나는지» 를 적는다(리뷰 숨김·상품 복구 대화와 같은 규칙, DESIGN §10).
+ * ⚠ **쓰인 발급분에는 회수 버튼을 안 그린다** — 주문이 그 발급분을 가리켜 서버가 409 로 거절한다.
+ *    누를 수 있는 버튼을 두고 에러로 가르치지 않는다.
+ * ⚠ 삭제 가능 여부를 화면이 «판정» 하지 않는다 — 버튼은 발급분이 0장일 때만 보이고, 가입 쿠폰 등
+ *    나머지 거절은 서버 문구를 그대로 띄운다.
+ */
+// loadErr = 목록을 못 읽었다(목록을 감춘다) · err = 회수·삭제가 거절됐다(목록은 그대로 보인다)
+const holders = reactive({ couponId: null, items: [], loading: false, loadErr: '', err: '', ok: '', busy: '' });
+const usedCount = computed(() => holders.items.filter((h) => h.usedAt).length);
+
+/*
+ * ⚠ 응답이 도착했을 때 **아직 그 쿠폰이 펼쳐져 있는지** 본다 — A 를 열고 곧바로 B 를 열면 늦게 온 A 의
+ *    보유자가 B 패널에 그려진다(A 가 0장이면 B 에 「쿠폰 삭제」 버튼까지 뜬다).
+ * ⚠ 조회 실패와 조작 거절은 **칸을 나눈다** — 회수 거절(409) 뒤 목록을 다시 읽을 때 성공한 재조회가
+ *    거절 문구를 지우면 관리자는 왜 안 됐는지 모른 채 줄이 «사용함» 으로 바뀌는 것만 본다(2026-09-17 리뷰).
+ */
+async function loadHolders(couponId) {
+  holders.loading = true;
+  try {
+    const items = await fetchIssuedCoupons(couponId);
+    if (holders.couponId !== couponId) return;
+    holders.items = items;
+    holders.loadErr = '';
+  } catch (e) {
+    if (holders.couponId !== couponId) return;
+    holders.items = [];
+    holders.loadErr = e.message; // 실패를 «발급분 없음» 으로 위장하지 않는다 — 그러면 삭제 버튼이 뜬다
+  } finally {
+    if (holders.couponId === couponId) holders.loading = false;
+  }
+}
+
+async function toggleHolders(c) {
+  holders.ok = '';
+  if (holders.couponId === c.id) {
+    holders.couponId = null;
+    holders.loading = false;
+    return;
+  }
+  holders.couponId = c.id;
+  holders.items = [];
+  holders.err = '';
+  holders.loadErr = '';
+  await loadHolders(c.id);
+}
+
+async function onRevoke(c, h) {
+  const who = h.loginId || '(알 수 없는 회원)';
+  if (!window.confirm(`${who} 의 '${c.name}' 쿠폰을 회수할까요?\n`
+      + '고객 쿠폰함에서 바로 사라지고 되돌릴 수 없어요. 필요하면 다시 발급할 수 있어요.')) return;
+  holders.busy = h.id;
+  holders.err = ''; holders.ok = '';
+  try {
+    await revokeIssuedCoupon(c.id, h.id);
+    holders.ok = `${who} 의 쿠폰을 회수했어요.`;
+    await loadHolders(c.id);
+  } catch (e) {
+    holders.err = e.message;
+    await loadHolders(c.id); // 거절(이미 사용됨)이면 그 사이 상태가 바뀐 것이다 — 목록을 맞춘다
+  } finally {
+    holders.busy = '';
+  }
+}
+
+async function onDeleteCoupon(c) {
+  if (!window.confirm(`'${c.name}' 쿠폰을 삭제할까요? 되돌릴 수 없어요.`)) return;
+  holders.busy = c.id;
+  holders.err = '';
+  try {
+    await deleteCoupon(c.id);
+    holders.couponId = null;
+    if (selected.value?.id === c.id) selected.value = null; // 지운 쿠폰을 발급 대상으로 잡고 있지 않게
+    await loadCoupons();
+  } catch (e) {
+    holders.err = e.message;
+  } finally {
+    holders.busy = '';
   }
 }
 </script>
@@ -370,6 +459,51 @@ async function onIssue(member) {
             <button type="button" class="btn btn-secondary btn-sm" :class="selected?.id === c.id ? 'border-brand-600 text-ink-900' : ''" @click="pickCoupon(c)">
               {{ selected?.id === c.id ? '선택됨' : '발급' }}
             </button>
+            <button type="button" class="btn btn-secondary btn-sm" :aria-expanded="holders.couponId === c.id" @click="toggleHolders(c)">
+              {{ holders.couponId === c.id ? '보유자 닫기' : '보유자' }}
+            </button>
+          </div>
+
+          <!-- 보유자 (Q-7) — 줄 아래로 펼친다. 한 번에 한 쿠폰만. -->
+          <div v-if="holders.couponId === c.id" class="w-full rounded-card border border-line p-4">
+            <p v-if="holders.loadErr" class="alert-error mb-2">{{ holders.loadErr }}</p>
+            <p v-if="holders.err" class="alert-error mb-2">{{ holders.err }}</p>
+            <p v-if="holders.ok" class="alert-success mb-2">{{ holders.ok }}</p>
+
+            <div v-if="holders.loading" class="skeleton h-10 w-full rounded-card"></div>
+
+            <template v-else-if="!holders.loadErr">
+              <!-- 발급분 0장 — 여기서만 정의를 지울 수 있다 -->
+              <div v-if="!holders.items.length" class="flex flex-wrap items-center justify-between gap-3">
+                <p class="muted">발급된 쿠폰이 없어요.</p>
+                <button type="button" class="btn btn-danger btn-sm" :disabled="holders.busy === c.id" @click="onDeleteCoupon(c)">
+                  쿠폰 삭제
+                </button>
+              </div>
+
+              <template v-else>
+                <p class="mb-2 text-sm text-ink-700 tabular-nums">
+                  발급 {{ holders.items.length }}장 · 사용 {{ usedCount }}장
+                </p>
+                <ul class="divide-y divide-line">
+                  <li v-for="h in holders.items" :key="h.id" class="flex items-center justify-between gap-3 py-2">
+                    <div class="min-w-0">
+                      <p class="truncate text-sm text-ink-900">{{ h.loginId || '—' }}</p>
+                      <p class="muted tabular-nums">발급 {{ fmtDate(h.issuedAt) }}</p>
+                    </div>
+                    <span v-if="h.usedAt" class="muted shrink-0 tabular-nums">사용함 · {{ fmtDate(h.usedAt) }}</span>
+                    <button v-else type="button" class="btn btn-secondary btn-sm shrink-0" :disabled="holders.busy === h.id" @click="onRevoke(c, h)">
+                      회수
+                    </button>
+                  </li>
+                </ul>
+                <!-- 삭제 버튼이 왜 없는지 말한다 — 안 보이는 버튼은 «기능이 없다» 로 읽힌다 -->
+                <p class="mt-2 text-xs text-ink-500">
+                  <template v-if="usedCount">사용된 쿠폰이 있어 이 쿠폰은 삭제할 수 없어요 — 그 주문이 쿠폰을 가리킵니다.</template>
+                  <template v-else>미사용분을 모두 회수하면 쿠폰을 삭제할 수 있어요.</template>
+                </p>
+              </template>
+            </template>
           </div>
         </li>
       </ul>

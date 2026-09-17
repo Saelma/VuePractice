@@ -99,6 +99,24 @@ export function createCoupon(payload) {
   return apiPost('/api/admin/coupons', payload);
 }
 
+/**
+ * 쿠폰 한 종류의 발급분 전부(관리자, Q-7) — 사용한 것도 함께 온다.
+ * ⚠ `usedAt` 이 있으면 **회수할 수 없다**(주문이 그 발급분을 가리킨다). 화면은 그 줄에 회수 버튼을 안 그린다.
+ */
+export function fetchIssuedCoupons(couponId) {
+  return apiGet(`/api/admin/coupons/${couponId}/issued`);
+}
+
+/** 미사용 발급분 회수(관리자, Q-7). **되돌릴 수 없다** — 흔적은 감사 원장에만 남는다. */
+export function revokeIssuedCoupon(couponId, memberCouponId) {
+  return apiDelete(`/api/admin/coupons/${couponId}/issued/${memberCouponId}`);
+}
+
+/** 쿠폰 정의 삭제(관리자, Q-7). 발급분이 0장이고 가입 쿠폰이 아닐 때만 서버가 받는다. */
+export function deleteCoupon(couponId) {
+  return apiDelete(`/api/admin/coupons/${couponId}`);
+}
+
 /** 회원에게 발급(관리자). apiPost는 쿼리 파라미터를 안 받아 경로에 붙인다. */
 export function issueCoupon(couponId, memberId) {
   return apiPost(`/api/admin/coupons/${couponId}/issue?memberId=${encodeURIComponent(memberId)}`);

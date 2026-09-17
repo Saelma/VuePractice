@@ -28,8 +28,8 @@ package com.glassvue.domain.audit.entity;
  * </ul>
  * 🔴 <b>쓰기 엔드포인트마다 «남긴다 / 안 남긴다(이유)» 가 정해져 있어야 한다</b> —
  * {@code WriteEndpointAuditCoverageTest} 가 전부 꺼내 대조한다(WA §2-12). 새 쓰기 API 를 만들면 거기서 빨개진다.
- * ⚠ <b>안 일어나는 일에는 값을 만들지 않는다</b> — 쿠폰·카테고리에 「수정/삭제」 API 가 없어
- * 값도 없다. 만들어 두면 «왜 한 번도 안 쌓이지» 를 나중에 되짚게 된다.
+ * ⚠ <b>안 일어나는 일에는 값을 만들지 않는다</b> — 쿠폰·카테고리에 「수정」 API 가 없어
+ * 값도 없다(쿠폰 삭제는 Q-7 에서 API 와 함께 생겼다). 만들어 두면 «왜 한 번도 안 쌓이지» 를 나중에 되짚게 된다.
  *
  * <h2>과거는 백필하지 않는다</h2>
  * 🔴 <b>각 값의 원장은 그 값이 생긴 날부터 시작한다.</b> 이전 조작은 «누가·언제» 를 남긴 곳이
@@ -62,7 +62,7 @@ package com.glassvue.domain.audit.entity;
  * <p>경위(왜 이 순서로 늘었나 · 그날의 실측)는 핸드오프에 있다 —
  * {@code handoffs/2026-08-10}(주문·콘텐츠) · {@code 2026-08-14}(상품·주문 진행) ·
  * {@code 2026-08-20}(상품 등록수정·쿠폰·할인) · {@code 2026-08-21}(카테고리·공지·문의답변) ·
- * {@code 2026-08-27}(§I-15 대행 반품요청) · {@code 2026-09-11}(O-6 관리자 삭제·마케팅 발송).
+ * {@code 2026-08-27}(§I-15 대행 반품요청) · {@code 2026-09-11}(O-6 관리자 삭제·마케팅 발송) · {@code 2026-09-17}(Q-7 쿠폰 회수·삭제).
  */
 public enum AuditAction {
     /** 회원 정지. */
@@ -179,6 +179,16 @@ public enum AuditAction {
     COUPON_CREATE(AuditTargetType.COUPON),
     COUPON_ISSUE(AuditTargetType.MEMBER),
     COUPON_WELCOME_SET(AuditTargetType.COUPON),
+    /**
+     * 발급분 <b>회수</b> · 쿠폰 정의 <b>삭제</b>. V65 (2026-09-17, BACKLOG Q-7).
+     *
+     * <p>🔴 <b>둘 다 되돌릴 수 없다</b> — 행을 지운다(revoked 표시가 아니다, 사용자 결정). 그래서
+     * <b>이 줄이 유일한 흔적</b>이다({@link #NOTICE_DELETE} 와 같다). 회수는 {@link #COUPON_ISSUE} 의 짝이라
+     * 대상도 같이 <b>회원</b>이고 쿠폰은 detail 로 간다 — 같은 회원의 발급·회수가 한 {@code target_id} 로 묶인다.
+     * 정의 삭제는 대상이 <b>쿠폰 정의</b>다.
+     */
+    COUPON_REVOKE(AuditTargetType.MEMBER),
+    COUPON_DELETE(AuditTargetType.COUPON),
     /**
      * 기간 할인(타임세일) <b>등록·수정·삭제</b> (G-5 의 후속). V53.
      *

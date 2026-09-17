@@ -5,6 +5,7 @@ import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
+import com.glassvue.domain.coupon.dto.IssuedCouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
 import com.glassvue.domain.coupon.dto.PromotionCalendarResponse;
 import com.glassvue.domain.coupon.dto.PromotionSpanResponse;
@@ -26,6 +27,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -250,6 +252,92 @@ public class CouponService {
         publishAudit(AuditAction.COUPON_ISSUE, actor, memberId,
                 memberService.loginIdOf(memberId), describe(coupon));
         return issuedId;
+    }
+
+    /**
+     * 쿠폰 한 종류의 발급분 전부 — 관리자 보유자 목록 (2026-09-17, Q-7).
+     *
+     * <p>⚠ 쓰인 발급분도 함께 준다 — 빼면 «발급 3장인데 목록엔 1장» 이 되고, 정의 삭제가 왜 막히는지
+     * 화면이 설명할 수 없다(쓰인 것은 회수도 삭제도 안 된다).
+     */
+    @Transactional(readOnly = true)
+    public List<IssuedCouponResponse> issuedOf(UUID couponId) {
+        if (!couponRepository.existsById(couponId)) {
+            throw new BusinessException(ErrorCode.COUPON_NOT_FOUND);
+        }
+        List<MemberCoupon> issued = memberCouponRepository.findByCouponIdOrderByCreatedAtDesc(couponId);
+        Map<UUID, String> loginIds = memberService.loginIdsOf(
+                issued.stream().map(MemberCoupon::getMemberId).distinct().toList());
+        return issued.stream()
+                .map(mc -> IssuedCouponResponse.of(mc, loginIds.get(mc.getMemberId())))
+                .toList();
+    }
+
+    /**
+     * 발급분 <b>회수</b>(관리자) — 미사용만 (2026-09-17, BACKLOG Q-7).
+     *
+     * <p>🔴 <b>행을 지운다</b>(사용자 결정). revoked 표시로 남기면 «내 쿠폰»·「받기」·중복 검사 조회를
+     * 전부 고쳐야 하고, {@code ux_member_coupon_once} 때문에 <b>같은 회원에게 다시 줄 수 없다.</b>
+     * 탈퇴 정리({@link #deleteAllForMember})와 같은 방식이고, 흔적은 감사 원장이 갖는다.
+     *
+     * <p>🔴 <b>쓰인 발급분은 못 지운다</b> — 주문이 {@code member_coupon_id} 로 가리켜 취소·반품 때 되돌릴 대상이다(V46).
+     * ⚠ <b>미사용인데 주문이 가리키는 행</b>도 있다 — 전체 취소·반품이 쿠폰을 되돌려 놓은 주문이다.
+     * 그 주문은 더 되돌릴 것이 없어 지워도 {@link #restore} 가 불릴 일이 없다.
+     *
+     * <p>⚠ 경로의 {@code couponId} 와 발급분의 쿠폰이 다르면 «없는 것» 으로 답한다 — 화면이 고른 쿠폰과
+     * 다른 쿠폰을 지우지 않는다.
+     */
+    @Transactional
+    public void revoke(UUID couponId, UUID memberCouponId, AuthUser actor) {
+        MemberCoupon mc = memberCouponRepository.findById(memberCouponId)
+                .filter(found -> found.getCoupon().getId().equals(couponId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+        if (mc.isUsed()) {
+            throw new BusinessException(ErrorCode.COUPON_REVOKE_USED);
+        }
+        // 지우기 전에 읽는다 — 뒤에서 읽으면 적을 값이 없다(AuditAction «detail 공통 규칙»).
+        UUID memberId = mc.getMemberId();
+        String detail = describe(mc.getCoupon());
+        // 🔴 위 isUsed 는 흔한 경우에 뜻 있는 답을 주려는 것이고, 경합은 이 조건부 DELETE 가 막는다.
+        if (memberCouponRepository.deleteUnusedById(memberCouponId) == 0) {
+            throw new BusinessException(ErrorCode.COUPON_REVOKE_USED);
+        }
+        publishAudit(AuditAction.COUPON_REVOKE, actor, memberId, memberService.loginIdOf(memberId), detail);
+        log.info("Coupon revoked: {} ({}) from member {}", memberCouponId, couponId, memberId);
+    }
+
+    /**
+     * 쿠폰 <b>정의 삭제</b>(관리자) — 발급분이 하나도 없을 때만 (2026-09-17, BACKLOG Q-7).
+     *
+     * <p>⚠ 발급분이 남아 있으면 409 — 미사용은 먼저 회수하면 되지만 <b>쓰인 것이 있으면 영영 못 지운다.</b>
+     * 그건 막힌 게 아니라 맞는 결과다: 그 쿠폰으로 산 주문이 있다. 주문은 쿠폰명을 스냅샷하므로
+     * (V17 {@code coupon_name}) 정의가 사라져도 주문 내역은 멀쩡하지만, 쓰인 발급분 행이 정의를 FK 로 붙잡는다.
+     *
+     * <p>🔴 <b>가입 쿠폰은 지정부터 풀게 한다</b> — 지우면 가입 자동 발급과 홈의 «가입하면 쿠폰» 안내가
+     * <b>조용히 꺼진다.</b> 그걸 원하는지는 해제 버튼이 묻는다.
+     *
+     * <p>⚠ 확인과 삭제 사이에 발급이 끼면 FK 가 막는다 — {@code flush} 로 그 예외를 여기서 받아 같은 409 로 답한다
+     * ({@link #claimEventCoupon} 이 {@code saveAndFlush} 를 쓰는 것과 같은 이유).
+     */
+    @Transactional
+    public void delete(UUID couponId, AuthUser actor) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+        if (coupon.isWelcome()) {
+            throw new BusinessException(ErrorCode.COUPON_WELCOME_DELETE);
+        }
+        if (memberCouponRepository.existsByCouponId(couponId)) {
+            throw new BusinessException(ErrorCode.COUPON_HAS_ISSUED);
+        }
+        String detail = describe(coupon);
+        try {
+            couponRepository.delete(coupon);
+            couponRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.COUPON_HAS_ISSUED);
+        }
+        publishAudit(AuditAction.COUPON_DELETE, actor, couponId, null, detail);
+        log.info("Coupon deleted: {} ({})", couponId, coupon.getName());
     }
 
     /**

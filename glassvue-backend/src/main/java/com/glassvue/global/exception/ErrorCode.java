@@ -190,6 +190,14 @@ public enum ErrorCode {
             "사용 마감은 시작일 이후여야 합니다."),
     COUPON_PERCENT_OVER_100("COUPON-400P", HttpStatus.BAD_REQUEST,
             "정률 할인은 100%를 넘을 수 없습니다."),
+    // 회수·정의 삭제 (2026-09-17, BACKLOG Q-7). 셋 다 «지금은 못 한다 — 먼저 할 일이 있다» 라 409 다.
+    // ⚠ 쓰인 발급분은 주문이 member_coupon_id 로 가리킨다(V46) — 지우면 취소 때 쿠폰 복구가 대상을 잃는다.
+    COUPON_REVOKE_USED("COUPON-409U", HttpStatus.CONFLICT,
+            "이미 사용한 쿠폰은 회수할 수 없습니다."),
+    COUPON_HAS_ISSUED("COUPON-409D", HttpStatus.CONFLICT,
+            "발급된 쿠폰이 있어 삭제할 수 없습니다. 미사용 발급분을 먼저 회수해 주세요."),
+    COUPON_WELCOME_DELETE("COUPON-409W", HttpStatus.CONFLICT,
+            "가입 쿠폰으로 지정된 쿠폰은 삭제할 수 없습니다. 지정을 먼저 해제해 주세요."),
 
     // 적립금 · 회원 등급 (2026-07-24)
     POINT_NOT_ENOUGH("POINT-400N", HttpStatus.BAD_REQUEST, "적립금이 부족합니다."),

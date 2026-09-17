@@ -3,6 +3,7 @@ package com.glassvue.domain.coupon.controller;
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
+import com.glassvue.domain.coupon.dto.IssuedCouponResponse;
 import com.glassvue.domain.coupon.dto.MemberCouponResponse;
 import com.glassvue.domain.coupon.dto.PromotionCalendarResponse;
 import com.glassvue.global.response.ApiResponse;
@@ -62,6 +63,20 @@ public interface CouponController {
 
     @Operation(summary = "회원에게 쿠폰 발급 (관리자)")
     ResponseEntity<ApiResponse<UUID>> issue(AuthUser user, UUID couponId, UUID memberId);
+
+    @Operation(summary = "쿠폰 보유자 목록 (관리자)",
+            description = "이 쿠폰의 발급분 전부(Q-7). 사용한 것도 함께 준다 — usedAt 이 있으면 회수할 수 없다.")
+    ResponseEntity<ApiResponse<List<IssuedCouponResponse>>> issued(UUID couponId);
+
+    @Operation(summary = "발급분 회수 (관리자)",
+            description = "미사용 발급분을 지운다(Q-7). **되돌릴 수 없다** — 흔적은 감사 원장(COUPON_REVOKE)에만 남는다. "
+                    + "이미 사용했으면 COUPON-409U(주문이 그 발급분을 가리킨다). 회수한 회원에게는 다시 발급할 수 있다.")
+    ResponseEntity<ApiResponse<Void>> revoke(AuthUser user, UUID couponId, UUID memberCouponId);
+
+    @Operation(summary = "쿠폰 정의 삭제 (관리자)",
+            description = "발급분이 하나도 없을 때만 지운다(Q-7). 남아 있으면 COUPON-409D, 가입 쿠폰으로 지정돼 있으면 "
+                    + "COUPON-409W. **되돌릴 수 없다.** 이미 쓰인 주문은 쿠폰명을 스냅샷해 두어 영향이 없다.")
+    ResponseEntity<ApiResponse<Void>> delete(AuthUser user, UUID couponId);
 
     @Operation(summary = "가입 쿠폰으로 지정 (관리자)",
             description = "가입 즉시 자동 발급될 쿠폰으로 지정한다(V36). **전체에서 한 장만** 지정되며, "

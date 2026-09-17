@@ -86,6 +86,8 @@ class WriteEndpointAuditCoverageTest {
             Map.entry("POST /api/admin/coupons/{couponId}/issue", Set.of(COUPON_ISSUE)),
             Map.entry("POST /api/admin/coupons/{couponId}/welcome", Set.of(COUPON_WELCOME_SET)),
             Map.entry("DELETE /api/admin/coupons/{couponId}/welcome", Set.of(COUPON_WELCOME_SET)),
+            Map.entry("DELETE /api/admin/coupons/{couponId}/issued/{memberCouponId}", Set.of(COUPON_REVOKE)),
+            Map.entry("DELETE /api/admin/coupons/{couponId}", Set.of(COUPON_DELETE)),
             // 공지·마케팅
             Map.entry("POST /api/notices", Set.of(NOTICE_CREATE)),
             Map.entry("PUT /api/notices/{id}", Set.of(NOTICE_UPDATE)),
