@@ -174,6 +174,18 @@ public class CouponService {
      */
     @Transactional(readOnly = true)
     public Optional<CouponResponse> welcomeCoupon() {
+        // 🔴 **만료된 가입 쿠폰은 «없음» 이다**(2026-09-17). 지정만 보고 답하면 기한이 지난 뒤에도 홈·가입 화면이
+        //    «가입하면 N원 쿠폰» 을 광고하고 가입자는 못 쓰는 쿠폰을 받는다 — 관리자가 아무것도 안 해도 시간이 만든다.
+        //    ⚠ 지정은 지우지 않는다(사람이 안 누른 조작이라 감사에 못 남는다) — 관리자 목록이 «만료됨» 을 보여 준다.
+        return designatedWelcomeCoupon().filter(c -> !c.expired());
+    }
+
+    /**
+     * 지정된 가입 쿠폰 — <b>만료여도</b> 준다. 가입 자동 발급({@code WelcomeCouponHandler})이 «지정 없음» 과
+     * «지정됐는데 만료» 를 갈라 <b>후자만 경고</b>하려고 쓴다. 공개 안내에는 {@link #welcomeCoupon} 을 쓴다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<CouponResponse> designatedWelcomeCoupon() {
         return couponRepository.findByWelcomeTrue().map(CouponResponse::from);
     }
 
@@ -189,6 +201,17 @@ public class CouponService {
         Coupon coupon = couponRepository.findById(couponId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
         if (welcome) {
+            // 🔴 **기존 지정을 풀기 전에** 거절한다 — 뒤에서 거절하면 트랜잭션이 롤백되긴 하지만, 순서가 곧 규칙을 읽히게 한다.
+            //    2026-09-17 브라우저 검증에서 만료된 이벤트 쿠폰(ZZ-이벤트쿠폰3)이 지정됐고, 그 순간 실제 가입 쿠폰이
+            //    풀려 **공개 안내가 만료 쿠폰을 광고했다.** 해제(welcome=false)는 어떤 쿠폰이든 늘 된다.
+            if (coupon.isExpiredAt(Instant.now())) {
+                throw new BusinessException(ErrorCode.COUPON_WELCOME_EXPIRED);
+            }
+            // 이벤트 쿠폰은 「받기」로 나가는 쿠폰이다. 가입 발급으로도 주면 회원당 1장(ux_member_coupon_once)이라
+            // 그 회원은 이벤트 날 「받기」가 «이미 받음» 이 된다 — 두 발급 경로가 한 쿠폰에서 섞인다.
+            if (coupon.isEventCoupon()) {
+                throw new BusinessException(ErrorCode.COUPON_WELCOME_EVENT);
+            }
             couponRepository.findByWelcomeTrue()
                     .filter(current -> !current.getId().equals(couponId))
                     .ifPresent(current -> {

@@ -49,15 +49,19 @@ class WelcomeCouponHandlerTest {
     }
 
     private CouponResponse welcome() {
+        return welcome(false);
+    }
+
+    private CouponResponse welcome(boolean expired) {
         // issueUntil = null — 가입 쿠폰은 이벤트 쿠폰이 아니다(V49).
         return new CouponResponse(couponId, "가입 축하 5천원", DiscountType.FIXED, 5_000L, 10_000L, null,
-                Instant.now().minusSeconds(60), Instant.now().plusSeconds(60), true, null, Instant.now());
+                Instant.now().minusSeconds(60), Instant.now().plusSeconds(60), true, null, Instant.now(), expired);
     }
 
     @Test
     @DisplayName("지정된 가입 쿠폰을 **가입한 그 회원**에게 발급한다")
     void issuesDesignatedCoupon() {
-        given(couponService.welcomeCoupon()).willReturn(Optional.of(welcome()));
+        given(couponService.designatedWelcomeCoupon()).willReturn(Optional.of(welcome()));
 
         handler.handle(event());
 
@@ -65,9 +69,19 @@ class WelcomeCouponHandlerTest {
     }
 
     @Test
+    @DisplayName("🔴 지정된 가입 쿠폰이 만료됐으면 발급하지 않는다 — 못 쓰는 쿠폰을 주지 않는다")
+    void expiredDesignationNoIssue() {
+        given(couponService.designatedWelcomeCoupon()).willReturn(Optional.of(welcome(true)));
+
+        handler.handle(event());
+
+        verify(couponService, never()).issue(any(), any());
+    }
+
+    @Test
     @DisplayName("지정된 쿠폰이 없으면 발급하지 않는다 — 기능 꺼짐이 기본 상태다")
     void noDesignationNoIssue() {
-        given(couponService.welcomeCoupon()).willReturn(Optional.empty());
+        given(couponService.designatedWelcomeCoupon()).willReturn(Optional.empty());
 
         handler.handle(event());
 
@@ -77,7 +91,7 @@ class WelcomeCouponHandlerTest {
     @Test
     @DisplayName("⚠ 발급 도중 실패해도 **예외가 밖으로 나가지 않는다** — 가입은 이미 커밋됐다")
     void failureDoesNotBlowUp() {
-        given(couponService.welcomeCoupon()).willReturn(Optional.of(welcome()));
+        given(couponService.designatedWelcomeCoupon()).willReturn(Optional.of(welcome()));
         willThrow(new BusinessException(ErrorCode.COUPON_NOT_FOUND))
                 .given(couponService).issue(couponId, memberId);
 

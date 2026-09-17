@@ -22,12 +22,16 @@ public record CouponResponse(
         boolean welcome,
         // 이벤트 발급 마감(V49). null 이면 상시 쿠폰 — 관리자 목록의 「이벤트」 배지가 이 값을 본다.
         Instant issueUntil,
-        Instant createdAt
+        Instant createdAt,
+        // 사용 기간이 끝났나(응답 시각 기준, 2026-09-17). 관리자 목록이 «가입 쿠폰인데 만료» 를 알리고
+        // 「가입 쿠폰으로」 버튼을 감추는 근거다 — 화면이 시계로 다시 판정하지 않게 서버가 준다.
+        boolean expired
 ) {
     public static CouponResponse from(Coupon c) {
         return new CouponResponse(
                 c.getId(), c.getName(), c.getDiscountType(), c.getDiscountValue(),
                 c.getMinOrderAmount(), c.getMaxDiscountAmount(),
-                c.getValidFrom(), c.getValidUntil(), c.isWelcome(), c.getIssueUntil(), c.getCreatedAt());
+                c.getValidFrom(), c.getValidUntil(), c.isWelcome(), c.getIssueUntil(), c.getCreatedAt(),
+                c.isExpiredAt(Instant.now()));
     }
 }

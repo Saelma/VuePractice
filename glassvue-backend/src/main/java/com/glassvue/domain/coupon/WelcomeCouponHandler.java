@@ -38,10 +38,16 @@ public class WelcomeCouponHandler {
 
     @Transactional
     public void handle(MemberSignedUpEvent event) {
-        Optional<CouponResponse> welcome = couponService.welcomeCoupon();
+        Optional<CouponResponse> welcome = couponService.designatedWelcomeCoupon();
         if (welcome.isEmpty()) {
             // 지정 안 함 = 기능 꺼짐. 경고가 아니다(기본 상태다).
             log.debug("[가입쿠폰] 지정된 쿠폰 없음 — member={} 건너뜀", event.memberId());
+            return;
+        }
+        if (welcome.get().expired()) {
+            // 🔴 지정됐는데 만료 — 사람이 고쳐야 하는 상태라 **경고**다(2026-09-17). 발급하면 못 쓰는 쿠폰을 준다.
+            log.warn("[가입쿠폰] 지정된 쿠폰이 만료돼 발급하지 않는다 — member={} coupon={}({}) validUntil={}",
+                    event.memberId(), welcome.get().id(), welcome.get().name(), welcome.get().validUntil());
             return;
         }
         UUID couponId = welcome.get().id();

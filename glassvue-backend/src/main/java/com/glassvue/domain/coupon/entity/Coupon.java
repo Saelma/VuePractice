@@ -88,6 +88,14 @@ public class Coupon extends BaseTimeEntity {
         return !at.isBefore(validFrom) && !at.isAfter(validUntil);
     }
 
+    /**
+     * 사용 기간이 <b>끝났나</b>. ⚠ {@code !isValidAt} 과 다르다 — 아직 시작 전인 쿠폰은 «못 쓰지만 만료는 아니다».
+     * 가입 쿠폰이 이 질문을 쓴다(2026-09-17): 시작 전 쿠폰은 받아 두면 나중에 쓰이지만, 끝난 쿠폰은 영영 못 쓴다.
+     */
+    public boolean isExpiredAt(Instant at) {
+        return at.isAfter(validUntil);
+    }
+
     /** 이벤트 쿠폰인가 — 발급 마감이 정해져 있으면 그렇다(G-8). */
     public boolean isEventCoupon() {
         return issueUntil != null;

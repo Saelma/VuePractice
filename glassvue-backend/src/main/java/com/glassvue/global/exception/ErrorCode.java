@@ -196,6 +196,12 @@ public enum ErrorCode {
             "이미 사용한 쿠폰은 회수할 수 없습니다."),
     COUPON_HAS_ISSUED("COUPON-409D", HttpStatus.CONFLICT,
             "발급된 쿠폰이 있어 삭제할 수 없습니다. 미사용 발급분을 먼저 회수해 주세요."),
+    // 가입 쿠폰 지정 (2026-09-17, Q-7 브라우저 검증에서 발견) — 만료·이벤트 쿠폰이 지정되면
+    // 가입자가 못 쓰는 쿠폰을 받거나(만료) 두 발급 경로가 섞인다(이벤트 — 회원당 1장이라 나중에 「받기」가 막힌다).
+    COUPON_WELCOME_EXPIRED("COUPON-400X", HttpStatus.BAD_REQUEST,
+            "사용 기간이 끝난 쿠폰은 가입 쿠폰으로 지정할 수 없습니다."),
+    COUPON_WELCOME_EVENT("COUPON-400G", HttpStatus.BAD_REQUEST,
+            "이벤트 쿠폰은 가입 쿠폰으로 지정할 수 없습니다."),
     COUPON_WELCOME_DELETE("COUPON-409W", HttpStatus.CONFLICT,
             "가입 쿠폰으로 지정된 쿠폰은 삭제할 수 없습니다. 지정을 먼저 해제해 주세요."),
 

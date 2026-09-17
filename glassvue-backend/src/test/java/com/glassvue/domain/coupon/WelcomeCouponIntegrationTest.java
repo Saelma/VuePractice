@@ -188,6 +188,58 @@ class WelcomeCouponIntegrationTest {
         assertThat(couponRepository.findById(next).orElseThrow().isWelcome()).isTrue();
     }
 
+    private Coupon coupon(String name, Instant validUntil, Instant issueUntil) {
+        return couponRepository.save(Coupon.builder()
+                .name(name).discountType(DiscountType.FIXED).discountValue(1_000L).minOrderAmount(0L)
+                .validFrom(Instant.now().minus(30, ChronoUnit.DAYS)).validUntil(validUntil).issueUntil(issueUntil)
+                .build());
+    }
+
+    /**
+     * 🔴 2026-09-17 브라우저 검증에서 <b>만료된 이벤트 쿠폰</b>(ZZ-이벤트쿠폰3)이 지정됐고, 그 순간 실제 가입 쿠폰이 풀려
+     * 공개 안내가 만료 쿠폰을 광고했다. ⚠ <b>거절이 기존 지정을 안 건드리는지</b>까지 본다 — 풀고 나서 거절하면 같은 사고다.
+     */
+    @Test
+    @DisplayName("🔴 만료된 쿠폰·이벤트 쿠폰은 지정이 거절되고, 기존 가입 쿠폰은 그대로다")
+    void expiredOrEventCouponCannotBeDesignated() throws Exception {
+        String admin = adminToken();
+        UUID current = designateWelcomeCoupon(admin);
+        UUID expired = coupon("ZZ 만료", Instant.now().minus(1, ChronoUnit.DAYS), null).getId();
+        UUID event = coupon("ZZ 이벤트", Instant.now().plus(30, ChronoUnit.DAYS),
+                Instant.now().plus(1, ChronoUnit.DAYS)).getId();
+
+        mockMvc.perform(post("/api/admin/coupons/" + expired + "/welcome").header("Authorization", admin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COUPON-400X"));
+        mockMvc.perform(post("/api/admin/coupons/" + event + "/welcome").header("Authorization", admin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COUPON-400G"));
+
+        mockMvc.perform(get("/api/coupons/welcome")).andExpect(jsonPath("$.data.id").value(current.toString()));
+    }
+
+    @Test
+    @DisplayName("🔴 지정된 가입 쿠폰이 시간이 지나 만료되면 공개 안내는 «없음» 이고, 관리자 목록은 expired 로 알린다 — 해제는 된다")
+    void expiredDesignationIsHiddenButClearable() throws Exception {
+        String admin = adminToken();
+        UUID couponId = designateWelcomeCoupon(admin);
+        // 시간이 흐른 것을 만든다 — 지정은 유효할 때 했고 지금은 끝났다(Coupon 에 기간 수정 API 가 없어 JPQL 로 민다).
+        entityManager.createQuery("update Coupon c set c.validUntil = :past where c.id = :id")
+                .setParameter("past", Instant.now().minus(1, ChronoUnit.MINUTES)).setParameter("id", couponId)
+                .executeUpdate();
+        entityManager.clear();
+
+        mockMvc.perform(get("/api/coupons/welcome"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").doesNotExist());
+        mockMvc.perform(get("/api/admin/coupons").param("size", "200").header("Authorization", admin))
+                .andExpect(jsonPath("$.data.content[?(@.id=='" + couponId + "')].welcome").value(true))
+                .andExpect(jsonPath("$.data.content[?(@.id=='" + couponId + "')].expired").value(true));
+
+        mockMvc.perform(delete("/api/admin/coupons/" + couponId + "/welcome").header("Authorization", admin))
+                .andExpect(status().isOk());
+    }
+
     @Test
     @DisplayName("⚠ 지정은 **한 장만** — 새로 지정하면 이전 것은 자동 해제된다")
     void designatingAnotherClearsPrevious() throws Exception {

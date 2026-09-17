@@ -433,6 +433,11 @@ async function onDeleteCoupon(c) {
               <span v-if="c.welcome" class="ml-1 rounded-full border border-ink-900 px-2 py-0.5 text-[11px] text-ink-900">
                 가입 쿠폰
               </span>
+              <!--
+                🔴 지정은 남아 있는데 기한이 끝났다 — 서버가 공개 안내·자동 발급에서 «없음» 으로 취급한다(2026-09-17).
+                관리자만 이 상태를 알 수 있어 **말해 준다**(상태 표시라 강조색을 쓴다, DESIGN §2). 판정은 서버의 expired.
+              -->
+              <span v-if="c.welcome && c.expired" class="badge badge-danger ml-1">만료됨 · 가입 시 발급 안 됨</span>
               <span v-if="c.issueUntil" class="ml-1 rounded-full border border-ink-900 px-2 py-0.5 text-[11px] text-ink-900">
                 이벤트
               </span>
@@ -447,7 +452,12 @@ async function onDeleteCoupon(c) {
             </p>
           </div>
           <div class="flex shrink-0 items-center gap-2">
+            <!--
+              ⚠ 만료·이벤트 쿠폰은 지정을 서버가 거절한다(COUPON-400X·400G) — 누를 수 있는 버튼을 두고 에러로
+                가르치지 않는다. 이미 지정된 것은 **해제는 늘 된다**(만료된 가입 쿠폰을 푸는 자리다).
+            -->
             <button
+              v-if="c.welcome || (!c.expired && !c.issueUntil)"
               type="button"
               class="btn btn-secondary btn-sm"
               :class="c.welcome ? 'border-ink-900 text-ink-900' : ''"
