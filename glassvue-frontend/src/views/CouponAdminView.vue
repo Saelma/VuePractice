@@ -22,17 +22,44 @@ const listError = ref('');
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '');
 
+/*
+ * 목록 탭 (2026-09-17) — 「사용 가능」이 기본, 「만료됨」은 따로. 둘 다 최신 생성순(서버 기본 정렬).
+ * ⚠ 탭 경계(사용 마감이 지났나)는 **서버가 가른다** — 화면 시계로 거르면 사람마다 마감 근처 쿠폰이 다른 탭에 선다.
+ * ⚠ 「사용 가능」 목록은 **탭과 무관하게 늘 읽는다** — 생성 폼의 «이미 잡힌 발급 창» 이 그걸 쓰는데,
+ *    「만료됨」 탭에 있을 때 그 목록으로 계산하면 끝난 이벤트만 겹칠 대상으로 보인다.
+ */
+const LIST_TABS = [
+  { value: 'ACTIVE', label: '사용 가능', empty: '사용 가능한 쿠폰이 없어요. 위에서 만들어 보세요.' },
+  { value: 'EXPIRED', label: '만료됨', empty: '만료된 쿠폰이 없어요.' },
+];
+const tab = ref('ACTIVE');
+const activeCoupons = ref([]);
+const currentTab = computed(() => LIST_TABS.find((t) => t.value === tab.value));
+
 async function loadCoupons() {
   loading.value = true;
+  listError.value = '';
+  const want = tab.value;
   try {
-    coupons.value = (await fetchAdminCoupons({ size: 50 })).content;
+    const active = (await fetchAdminCoupons({ size: 50, status: 'ACTIVE' })).content;
+    activeCoupons.value = active;
+    const list = want === 'ACTIVE' ? active : (await fetchAdminCoupons({ size: 50, status: want })).content;
+    if (tab.value === want) coupons.value = list; // 그 사이 탭을 바꿨으면 늦게 온 목록을 안 그린다
   } catch (e) {
     listError.value = e.message;
   } finally {
-    loading.value = false;
+    if (tab.value === want) loading.value = false;
   }
 }
 onMounted(loadCoupons);
+
+function switchTab(value) {
+  if (tab.value === value) return;
+  tab.value = value;
+  coupons.value = [];
+  holders.couponId = null; // 펼친 보유자는 그 탭의 줄에 붙어 있었다
+  loadCoupons();
+}
 
 /*
  * 가입 쿠폰 지정(V36, 2026-07-31).
@@ -104,7 +131,7 @@ function plusOneMonth(day) {
  * **누르기 전에 아는 편**이 낫다.
  */
 const eventWindows = computed(() =>
-  coupons.value
+  activeCoupons.value
     .filter((c) => c.issueUntil)
     .map((c) => `${c.name} (${fmtDate(c.validFrom)}~${fmtDate(c.issueUntil)})`));
 
@@ -415,8 +442,22 @@ async function onDeleteCoupon(c) {
       </div>
     </div>
 
-    <!-- 쿠폰 목록 -->
-    <div class="card mt-6 p-5">
+    <!-- 쿠폰 목록 — 폴더 탭(index.css .folder-tabs) -->
+    <div role="tablist" aria-label="쿠폰 상태" class="folder-tabs mt-6">
+      <button
+        v-for="t in LIST_TABS"
+        :key="t.value"
+        type="button"
+        role="tab"
+        :aria-selected="tab === t.value"
+        class="folder-tab"
+        :class="{ 'is-active': tab === t.value }"
+        @click="switchTab(t.value)"
+      >
+        {{ t.label }}
+      </button>
+    </div>
+    <div class="card p-5" role="tabpanel">
       <h2 class="section-title mb-3">쿠폰 목록</h2>
       <p v-if="listError" class="alert-error">{{ listError }}</p>
 
@@ -466,7 +507,8 @@ async function onDeleteCoupon(c) {
             >
               {{ c.welcome ? '가입 쿠폰 해제' : '가입 쿠폰으로' }}
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" :class="selected?.id === c.id ? 'border-brand-600 text-ink-900' : ''" @click="pickCoupon(c)">
+            <!-- 끝난 쿠폰은 서버가 발급을 거절한다(COUPON-400F) — 버튼을 두고 에러로 가르치지 않는다 -->
+            <button v-if="!c.expired" type="button" class="btn btn-secondary btn-sm" :class="selected?.id === c.id ? 'border-brand-600 text-ink-900' : ''" @click="pickCoupon(c)">
               {{ selected?.id === c.id ? '선택됨' : '발급' }}
             </button>
             <button type="button" class="btn btn-secondary btn-sm" :aria-expanded="holders.couponId === c.id" @click="toggleHolders(c)">
@@ -518,7 +560,7 @@ async function onDeleteCoupon(c) {
         </li>
       </ul>
 
-      <EmptyState v-else icon="🎟️" message="아직 만든 쿠폰이 없어요. 위에서 만들어 보세요." />
+      <EmptyState v-else icon="🎟️" :message="currentTab.empty" />
     </div>
   </section>
 </template>

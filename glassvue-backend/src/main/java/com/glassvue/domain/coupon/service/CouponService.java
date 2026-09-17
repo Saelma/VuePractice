@@ -3,6 +3,7 @@ package com.glassvue.domain.coupon.service;
 import com.glassvue.domain.audit.entity.AuditAction;
 import com.glassvue.domain.audit.event.AdminActionEvent;
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
+import com.glassvue.domain.coupon.dto.CouponListStatus;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
 import com.glassvue.domain.coupon.dto.IssuedCouponResponse;
@@ -153,13 +154,21 @@ public class CouponService {
         }
     }
 
-    /** 쿠폰 정의 목록(관리자). 정렬 미지정 시 최신 생성순. */
+    /**
+     * 쿠폰 정의 목록(관리자). 정렬 미지정 시 최신 생성순.
+     *
+     * <p>{@code status} 가 오면 그 탭만(2026-09-17) — 비우면 <b>전부</b>다(탭이 생기기 전의 계약을 그대로 둔다).
+     */
     @Transactional(readOnly = true)
-    public PageResponse<CouponResponse> listAll(Pageable pageable) {
+    public PageResponse<CouponResponse> listAll(CouponListStatus status, Pageable pageable) {
         Pageable p = pageable.getSort().isSorted() ? pageable
                 : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
                         Sort.by(Sort.Direction.DESC, "createdAt"));
-        return PageResponse.from(couponRepository.findAll(p).map(CouponResponse::from));
+        Instant now = Instant.now();
+        var page = (status == null) ? couponRepository.findAll(p)
+                : (status == CouponListStatus.ACTIVE) ? couponRepository.findByValidUntilGreaterThanEqual(now, p)
+                : couponRepository.findByValidUntilLessThan(now, p);
+        return PageResponse.from(page.map(CouponResponse::from));
     }
 
     /**
@@ -244,6 +253,11 @@ public class CouponService {
     public UUID issue(UUID couponId, UUID memberId) {
         Coupon coupon = couponRepository.findById(couponId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+        // 🔴 끝난 쿠폰은 내보내지 않는다(2026-09-17) — 받는 순간부터 못 쓰는 쿠폰이 쿠폰함에 남는다.
+        //    ⚠ 이벤트 쿠폰의 발급 창은 안 본다 — 관리자 발급은 CS 로 챙겨 주는 통로다(사용자 결정).
+        if (coupon.isExpiredAt(Instant.now())) {
+            throw new BusinessException(ErrorCode.COUPON_ISSUE_EXPIRED);
+        }
         if (memberCouponRepository.existsByMemberIdAndCouponId(memberId, couponId)) {
             throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
         }

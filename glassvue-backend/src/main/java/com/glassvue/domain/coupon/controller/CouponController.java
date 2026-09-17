@@ -1,6 +1,7 @@
 package com.glassvue.domain.coupon.controller;
 
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
+import com.glassvue.domain.coupon.dto.CouponListStatus;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
 import com.glassvue.domain.coupon.dto.IssuedCouponResponse;
@@ -47,8 +48,10 @@ public interface CouponController {
     ResponseEntity<ApiResponse<UUID>> claimEvent(@Parameter(hidden = true) AuthUser user);
 
     @Operation(summary = "쿠폰 정의 목록 (관리자)",
-            description = "발급 가능한 쿠폰(정의) 목록. 정렬 미지정 시 최신 생성순. 회원별 발급분이 아니라 쿠폰 그 자체다.")
-    ResponseEntity<ApiResponse<PageResponse<CouponResponse>>> list(@ParameterObject Pageable pageable);
+            description = "쿠폰(정의) 목록. 정렬 미지정 시 최신 생성순. 회원별 발급분이 아니라 쿠폰 그 자체다. "
+                    + "status=ACTIVE(사용 마감 전) · EXPIRED(사용 마감이 지남) — 비우면 전부.")
+    ResponseEntity<ApiResponse<PageResponse<CouponResponse>>> list(CouponListStatus status,
+                                                                   @ParameterObject Pageable pageable);
 
     @Operation(summary = "프로모션 달력 (관리자)",
             description = "그 달에 **살아 있는** 쿠폰의 기간 막대(B-27). 이벤트 쿠폰은 막대가 둘이다 — "

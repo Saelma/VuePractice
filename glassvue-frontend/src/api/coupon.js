@@ -72,9 +72,12 @@ export function couponDiscountText(c) {
   return c.discountType === 'PERCENT' ? `${c.discountValue}% 할인` : `${priceText(c.discountValue)} 할인`;
 }
 
-/** 쿠폰 정의 목록(관리자). 최신 생성순. */
-export function fetchAdminCoupons({ page = 0, size = 50 } = {}) {
-  return apiGet('/api/admin/coupons', { page, size });
+/**
+ * 쿠폰 정의 목록(관리자). 최신 생성순.
+ * `status` — `'ACTIVE'`(사용 마감 전) · `'EXPIRED'`(지남). 비우면 전부. ⚠ 경계는 서버가 정한다(화면 시계로 가르지 않는다).
+ */
+export function fetchAdminCoupons({ page = 0, size = 50, status } = {}) {
+  return apiGet('/api/admin/coupons', { page, size, status });
 }
 
 export const DISCOUNT_TYPE_LABEL = { FIXED: '정액(원)', PERCENT: '정률(%)' };

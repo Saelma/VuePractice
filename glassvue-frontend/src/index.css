@@ -91,6 +91,23 @@ body {
 .card-pad {
   @apply rounded-card border border-line bg-surface p-5 shadow-card;
 }
+/*
+ * --- 폴더 탭 (2026-09-17, 쿠폰 목록) --- 카드 위로 튀어나온 책갈피. 고른 탭은 **카드와 한 장**으로 이어진다.
+ * 마크업: <div role="tablist" class="folder-tabs"><button role="tab" class="folder-tab" :class="{ 'is-active': … }">
+ *          바로 아래에 <div role="tabpanel" class="card">.
+ * ⚠ 고른 탭만 1px 내려와(-mb-px) 카드 윗선을 **자기 배경으로 덮는다** — 안 고른 탭까지 내리면 선이 전부 끊겨 어느 것이 열렸는지 안 읽힌다.
+ * ⚠ 강조색을 안 쓴다(무채색 원칙, DESIGN §2) — 고른 것은 **바탕(흰 카드와 같은 색)·굵기**로, 나머지는 캔버스 회색으로 가라앉힌다.
+ */
+.folder-tabs {
+  @apply flex items-end gap-1 pl-3;
+}
+.folder-tab {
+  @apply relative rounded-t-control border border-b-0 border-line bg-canvas px-4 py-2 text-sm text-ink-500 transition-colors hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600;
+}
+.folder-tab.is-active {
+  @apply z-10 -mb-px bg-surface pb-[calc(0.5rem+1px)] font-medium text-ink-900;
+}
+
 .card-link {
   @apply transition duration-200 hover:-translate-y-0.5 hover:shadow-lift;
 }

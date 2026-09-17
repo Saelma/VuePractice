@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,6 +21,14 @@ public interface CouponRepository extends JpaRepository<Coupon, UUID> {
      * {@code ux_coupon_welcome} 이 {@code welcome=1} 인 행을 하나로 막는다(V36 주석).
      */
     Optional<Coupon> findByWelcomeTrue();
+
+    /**
+     * 관리자 목록의 탭(2026-09-17). ⚠ 경계는 {@code Coupon.isExpiredAt} 과 같다 — 만료는 {@code validUntil < at},
+     * 사용 가능은 그 나머지({@code >=}). 한쪽만 등호를 바꾸면 마감 그 순간의 쿠폰이 <b>두 탭에 다 나오거나 어디에도 안 나온다.</b>
+     */
+    Page<Coupon> findByValidUntilGreaterThanEqual(Instant at, Pageable pageable);
+
+    Page<Coupon> findByValidUntilLessThan(Instant at, Pageable pageable);
 
     /**
      * 지금 발급 창이 열려 있는 이벤트 쿠폰(G-8, V49).

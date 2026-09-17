@@ -202,6 +202,10 @@ public enum ErrorCode {
             "사용 기간이 끝난 쿠폰은 가입 쿠폰으로 지정할 수 없습니다."),
     COUPON_WELCOME_EVENT("COUPON-400G", HttpStatus.BAD_REQUEST,
             "이벤트 쿠폰은 가입 쿠폰으로 지정할 수 없습니다."),
+    // 🔴 관리자 수동 발급도 기간을 안 봤다(2026-09-17 브라우저 검증) — 08-28 에 끝난 쿠폰이 회원 쿠폰함에 들어갔다.
+    //    ⚠ 이벤트 쿠폰의 **발급 창**은 여기서 안 본다(사용자 결정) — 이벤트 날 못 받은 고객에게 CS 로 챙겨 줄 수 있어야 한다.
+    COUPON_ISSUE_EXPIRED("COUPON-400F", HttpStatus.BAD_REQUEST,
+            "사용 기간이 끝난 쿠폰은 발급할 수 없습니다."),
     COUPON_WELCOME_DELETE("COUPON-409W", HttpStatus.CONFLICT,
             "가입 쿠폰으로 지정된 쿠폰은 삭제할 수 없습니다. 지정을 먼저 해제해 주세요."),
 

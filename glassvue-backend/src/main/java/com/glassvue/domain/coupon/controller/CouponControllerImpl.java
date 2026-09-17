@@ -1,6 +1,7 @@
 package com.glassvue.domain.coupon.controller;
 
 import com.glassvue.domain.coupon.dto.CouponCreateRequest;
+import com.glassvue.domain.coupon.dto.CouponListStatus;
 import com.glassvue.domain.coupon.dto.CouponResponse;
 import com.glassvue.domain.coupon.dto.EventCouponResponse;
 import com.glassvue.domain.coupon.dto.IssuedCouponResponse;
@@ -77,8 +78,9 @@ public class CouponControllerImpl implements CouponController {
     // 관리자 API는 /api/admin/** 아래로 모아 SecurityConfig 한 줄로 막는다(개별 매처를 잊을 수 없게).
     @Override
     @GetMapping("/admin/coupons")
-    public ResponseEntity<ApiResponse<PageResponse<CouponResponse>>> list(Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(couponService.listAll(pageable)));
+    public ResponseEntity<ApiResponse<PageResponse<CouponResponse>>> list(
+            @RequestParam(required = false) CouponListStatus status, Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(couponService.listAll(status, pageable)));
     }
 
     /**

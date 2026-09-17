@@ -181,6 +181,54 @@ class CouponFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].maxDiscountAmount").value(3000));
     }
 
+    /**
+     * 🔴 2026-09-17 브라우저 검증에서 08-28 에 끝난 쿠폰이 수동 발급됐다. ⚠ 대조군 — 기한이 남은 이벤트 쿠폰은
+     * <b>발급 창이 닫혀도</b> 관리자가 줄 수 있다(CS 통로, 사용자 결정).
+     */
+    @Test
+    @DisplayName("🔴 사용 기간이 끝난 쿠폰은 수동 발급이 거절되고, 발급 창만 닫힌 이벤트 쿠폰은 발급된다")
+    void issueRejectsExpiredButAllowsClosedEventWindow() throws Exception {
+        String admin = login(adminLoginId);
+        String expired = JsonPath.read(createCoupon(admin, couponBody("FIXED", 1000,
+                "2026-01-01T00:00:00Z", "2026-01-31T00:00:00Z")).andReturn().getResponse().getContentAsString(), "$.data");
+        String closedEvent = JsonPath.read(createCoupon(admin,
+                "{\"name\":\"ZZ 창닫힌이벤트\",\"discountType\":\"FIXED\",\"discountValue\":1000,\"minOrderAmount\":0,"
+                        + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"issueUntil\":\"2026-01-01T23:59:59Z\","
+                        + "\"validUntil\":\"2099-01-01T00:00:00Z\"}")
+                .andReturn().getResponse().getContentAsString(), "$.data");
+
+        mockMvc.perform(post("/api/admin/coupons/" + expired + "/issue?memberId=" + userId).header("Authorization", admin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COUPON-400F"));
+        mockMvc.perform(post("/api/admin/coupons/" + closedEvent + "/issue?memberId=" + userId).header("Authorization", admin))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("목록 탭 — ACTIVE 는 사용 마감 전만, EXPIRED 는 지난 것만, 비우면 전부 · 셋 다 최신 생성순")
+    void adminListFiltersByStatus() throws Exception {
+        String admin = login(adminLoginId);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String expiredName = "ZZ탭만료 " + suffix;
+        String activeName = "ZZ탭유효 " + suffix;
+        createCoupon(admin, couponBody("FIXED", 1000, "2026-01-01T00:00:00Z", "2026-01-31T00:00:00Z")
+                .replace("ZZ Q축", expiredName)).andExpect(status().isOk());
+        createCoupon(admin, couponBody("FIXED", 1000, "2026-01-01T00:00:00Z", "2099-01-01T00:00:00Z")
+                .replace("ZZ Q축", activeName)).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/coupons").param("status", "ACTIVE").param("size", "500").header("Authorization", admin))
+                .andExpect(jsonPath("$.data.content[0].name").value(activeName))
+                .andExpect(jsonPath("$.data.content[?(@.name=='" + expiredName + "')]").isEmpty())
+                .andExpect(jsonPath("$.data.content[?(@.expired==true)]").isEmpty());
+        mockMvc.perform(get("/api/admin/coupons").param("status", "EXPIRED").param("size", "500").header("Authorization", admin))
+                .andExpect(jsonPath("$.data.content[0].name").value(expiredName))
+                .andExpect(jsonPath("$.data.content[?(@.name=='" + activeName + "')]").isEmpty())
+                .andExpect(jsonPath("$.data.content[?(@.expired==false)]").isEmpty());
+        mockMvc.perform(get("/api/admin/coupons").param("size", "500").header("Authorization", admin))
+                .andExpect(jsonPath("$.data.content[0].name").value(activeName))
+                .andExpect(jsonPath("$.data.content[1].name").value(expiredName));
+    }
+
     // ---------- 값끼리의 관계 (Q 축, 2026-09-10) ----------
 
     /** 쿠폰 생성 본문을 만든다. 기본은 «정상» 이고, 시험마다 한 칸만 비튼다. */
