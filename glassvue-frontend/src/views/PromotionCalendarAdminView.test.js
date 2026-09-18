@@ -16,7 +16,10 @@ import { mount, flushPromises } from '@vue/test-utils';
 
 const fetchPromotionCalendar = vi.fn();
 
-vi.mock('../api/coupon', () => ({
+// ⚠ 실제 모듈을 펼치고 불러오기만 덮는다 — 막대 순서·라벨이 `api/coupon.js` 로 옮겨 왔다(2026-09-18).
+//    통째로 갈아 끼우면 그 둘이 `undefined` 가 되어 **순서 테스트가 가짜로 돈다.**
+vi.mock('../api/coupon', async (importOriginal) => ({
+  ...(await importOriginal()),
   fetchPromotionCalendar: (...a) => fetchPromotionCalendar(...a),
 }));
 
@@ -86,6 +89,22 @@ describe('PromotionCalendarAdminView', () => {
 
     expect(bars(w).map((b) => b.attributes('title').split(' · ').pop()))
       .toEqual(['발급 창', '타임세일', '사용 기간']);
+  });
+
+  it('🔴 **모르는 종류는 맨 아래**로 간다 — 서버에 종류가 늘어도 아는 것끼리의 순서가 안 흐트러진다 (2026-09-18)', async () => {
+    // ⚠ 모르는 것을 **맨 앞에** 넣는다. 예전 비교(`KIND_ORDER[a] - KIND_ORDER[b]`)는 여기서 NaN 을 내고,
+    //    sort 가 NaN 을 «같다» 로 읽어 그 막대가 **서버가 준 자리(맨 위)에 박혔다.**
+    fetchPromotionCalendar.mockResolvedValue(calendar([
+      span({ id: 'n', kind: 'BUNDLE', name: 'ZZ-새종류', startDay: 3, endDay: 9 }),
+      span({ id: 'u', kind: 'USE', name: 'ZZ-사용', startDay: 3, endDay: 9 }),
+      span({ id: 'i', kind: 'ISSUE', name: 'ZZ-발급', startDay: 3, endDay: 9 }),
+    ]));
+    const w = await mountView();
+
+    expect(bars(w).map((b) => b.attributes('title').split(' · ')[0]))
+      .toEqual(['ZZ-발급', 'ZZ-사용', 'ZZ-새종류']);
+    // 라벨이 없는 종류는 **원문 그대로** — 빈칸으로 삼키지 않는다.
+    expect(bars(w)[2].attributes('title').split(' · ').pop()).toBe('BUNDLE');
   });
 
   it('🔴 같은 종류면 **시작이 이른 것부터** — 안 그러면 새로고침마다 줄 순서가 바뀐다', async () => {

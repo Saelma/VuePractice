@@ -83,6 +83,28 @@ export function fetchAdminCoupons({ page = 0, size = 50, status } = {}) {
 export const DISCOUNT_TYPE_LABEL = { FIXED: '정액(원)', PERCENT: '정률(%)' };
 
 /**
+ * 달력 막대 종류(`PromotionSpanResponse.Kind`)의 사람 말과 격자에서 쌓는 순서 (2026-09-18 에 화면에서 옮겼다, O-8).
+ *
+ * ⚠ 옮긴 이유는 **백엔드 원문과 대조하려고**다(`enumLabelDrift.test.js`) — `<script setup>` 안에 있으면 테스트가 못 읽는다.
+ * 순서는 「겹치면 안 되는 것」이 위다(발급 창 → 타임세일 → 사용 기간).
+ */
+export const PROMOTION_KIND_ORDER = { ISSUE: 0, SALE: 1, USE: 2 };
+export const PROMOTION_KIND_LABEL = { ISSUE: '발급 창', SALE: '타임세일', USE: '사용 기간' };
+
+/**
+ * 막대를 쌓는 비교 — 종류가 같으면 시작 칸 순, 다르면 위 순서.
+ *
+ * 🔴 **모르는 종류는 맨 아래로 보낸다.** 전에는 `KIND_ORDER[a] - KIND_ORDER[b]` 라 서버에 종류가 늘면
+ *    `undefined - 0 = NaN` 이 됐고, `sort` 는 NaN 을 «같다» 로 읽어 **그 막대가 서버가 준 자리에 박힌다** —
+ *    겹침을 읽는 순서가 조용히 흐트러진다(에러는 없다).
+ */
+export function comparePromotionBars(a, b) {
+  if (a.kind === b.kind) return a.col - b.col;
+  const rank = (k) => PROMOTION_KIND_ORDER[k] ?? Number.MAX_SAFE_INTEGER;
+  return rank(a.kind) - rank(b.kind);
+}
+
+/**
  * 프로모션 달력 한 달치(관리자, B-27).
  *
  * ⚠ 막대의 날짜(`startDay`·`endDay`)는 **서버가 KST 로 잘라 준 값**이다. 화면에서 `Date` 로 다시

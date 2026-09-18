@@ -24,16 +24,14 @@
  * **조회 도구**다(AdminMenu 주석의 "길게 만들지 말라"에 걸린다). 쿠폰 화면에서 링크로 들어온다.
  */
 import { ref, computed, onMounted } from 'vue';
-import { fetchPromotionCalendar } from '../api/coupon';
+import {
+  fetchPromotionCalendar, PROMOTION_KIND_LABEL, comparePromotionBars,
+} from '../api/coupon';
 import EmptyState from '../components/EmptyState.vue';
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 
-/** 격자에서 위로 올릴 순서 — 「겹치면 안 되는 것」이 위다. */
-const KIND_ORDER = { ISSUE: 0, SALE: 1, USE: 2 };
-
-/** 막대 종류의 사람 말. 서버 enum 에 값이 늘면 원문을 그대로 되돌린다. */
-const KIND_LABEL = { ISSUE: '발급 창', SALE: '타임세일', USE: '사용 기간' };
+// 막대 종류의 순서·사람 말은 `api/coupon.js` 에 있다(2026-09-18 — 백엔드 enum 과 대조하려고 옮겼다).
 
 const data = ref(null);
 const loading = ref(true);
@@ -148,7 +146,7 @@ function barsIn(weekStart, weekEnd) {
     // ⚠ 순서가 뜻을 만든다 — **겹치면 안 되는 것을 위로** 올린다:
     //    발급 창(겹치면 사고) → 세일(상품끼리는 겹쳐도 되지만 쿠폰과 겹치면 이중 할인) → 사용 기간(정상).
     //    같은 종류면 시작이 이른 것부터. 안 그러면 새로고침마다 줄 순서가 바뀐다.
-    .sort((a, b) => (a.kind === b.kind ? a.col - b.col : KIND_ORDER[a.kind] - KIND_ORDER[b.kind]));
+    .sort(comparePromotionBars);
 }
 </script>
 
@@ -254,7 +252,7 @@ function barsIn(weekStart, weekEnd) {
                   bar.openLeft ? 'rounded-l-none' : '',
                   bar.openRight ? 'rounded-r-none' : '',
                 ]"
-                :title="`${bar.name} · ${bar.label} · ${KIND_LABEL[bar.kind] ?? bar.kind}`"
+                :title="`${bar.name} · ${bar.label} · ${PROMOTION_KIND_LABEL[bar.kind] ?? bar.kind}`"
               >
                 <!--
                   이름과 할인율을 함께 적는다(2026-08-19, 사용자 결정) — 겹침을 볼 때

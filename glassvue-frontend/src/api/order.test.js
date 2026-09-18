@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { javaEnumFile, javaEnumValues } from '../test/javaEnum';
 import {
   orderStatusText, orderStatusClass, ORDER_STATUS_TEXT,
   DELIVERY_CARRIERS, shipOrder, deliverOrder, cancelOrder, adminCancelOrder, resolveOrderStatusFilter,
@@ -51,16 +49,13 @@ describe('order status 헬퍼', () => {
  * ⚠ **`audit.test.js` 의 첫 가드를 그대로 가져온다** — 파서가 0개를 내면 아래 대조가
  * 「0 == 0」으로 **영원히 초록**이면서 아무것도 안 지킨다(WA §3-3).
  */
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ORDER_STATUS_JAVA = resolve(
-  HERE,
-  '../../../glassvue-backend/src/main/java/com/glassvue/domain/order/entity/OrderStatus.java',
-);
-
-/** `OrderStatus.java` 에서 enum 값을 뽑는다. 값 뒤에 `// 주석` 이 붙어 있고 마지막은 `;` 다. */
+/**
+ * `OrderStatus.java` 에서 enum 값을 뽑는다 — 공용 파서(`test/javaEnum.js`, 2026-09-18).
+ * ⚠ 여기 있던 정규식은 «마지막 값 뒤에 `;` 가 있다» 에 기대고 있었다 — `audit.test.js` 가 09-11 에 고친
+ *    그 빈틈이 **이쪽엔 그대로** 남아 있었다. 파서가 둘이면 고친 것도 둘로 갈린다.
+ */
 function orderStatusesFromJava() {
-  const src = readFileSync(ORDER_STATUS_JAVA, 'utf8');
-  return [...src.matchAll(/^ {4}([A-Z][A-Z0-9_]*)\s*(?:\([^)]*\))?\s*[,;]/gm)].map((m) => m[1]);
+  return javaEnumValues(javaEnumFile('OrderStatus'), 'OrderStatus');
 }
 
 describe('주문 상태 라벨 ↔ 백엔드 enum 드리프트 (2026-08-26, §I-8)', () => {
@@ -77,11 +72,9 @@ describe('주문 상태 라벨 ↔ 백엔드 enum 드리프트 (2026-08-26, §I-
 });
 
 describe('택배사 선택지', () => {
-  // 값은 백엔드 DeliveryCarrier enum 이름과 같아야 한다 — 다르면 서버가 400으로 거른다.
-  it('백엔드 enum 이름과 같은 값을 쓴다', () => {
-    expect(DELIVERY_CARRIERS.map((c) => c.value))
-      .toEqual(['CJ', 'KOREA_POST', 'HANJIN', 'LOTTE', 'LOGEN', 'ETC']);
-  });
+  // ⚠ «백엔드 enum 이름과 같은 값» 은 `enumLabelDrift.test.js` 가 **원문을 읽어** 본다(2026-09-18).
+  //    여기 있던 것은 `toEqual(['CJ', …])` — **손목록을 손목록으로** 지키는 모양이라 택배사가 늘면
+  //    코드와 같이 낡았다(WA §1-2-1).
 
   it('모든 선택지에 표시명이 있다', () => {
     for (const c of DELIVERY_CARRIERS) {

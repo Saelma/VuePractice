@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { javaEnumFile, javaEnumValues } from '../test/javaEnum';
 import {
   fetchAuditLogs, auditActionText, auditActionBadge,
   AUDIT_ACTION_LABEL, AUDIT_ACTION_BADGE, AUDIT_TARGET_TYPE_LABEL,
@@ -26,33 +24,17 @@ import { clearSession } from '../stores/auth';
  *   `check-infra-drift.sh` 가 서버 설정과 `infra/` 를 대조하는 것과 같은 발상이다.
  */
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const AUDIT_ACTION_JAVA = resolve(
-  HERE,
-  '../../../glassvue-backend/src/main/java/com/glassvue/domain/audit/entity/AuditAction.java',
-);
-const AUDIT_TARGET_TYPE_JAVA = resolve(
-  HERE,
-  '../../../glassvue-backend/src/main/java/com/glassvue/domain/audit/entity/AuditTargetType.java',
-);
+const AUDIT_TARGET_TYPE = 'AuditTargetType';
 
 /**
- * `AuditAction.java` 에서 enum 값을 뽑는다.
+ * 감사 enum 값을 원문에서 뽑는다 — 공용 파서(`test/javaEnum.js`, 2026-09-18 O-8).
  *
- * ⚠ javadoc 줄은 `     * ` 로 시작하므로(공백 5 + `*`) 4칸 들여쓰기 + 대문자 규칙에 안 걸린다.
- *
- * 🔴 **2026-08-20(V53)에 한 번 깨졌다.** 값에 생성자 인자가 붙으면서
- * (`PRODUCT_CREATE(AuditTargetType.PRODUCT),`) 예전 정규식이 **하나도 못 잡았다.**
- * ⚠ 그런데 그건 «대조가 실패» 가 아니라 **«대조가 사라짐»** 이다 — 키 집합끼리 비교하는
- * 아래 두 테스트는 `[] == []` 로 **초록**이 된다. 그걸 막으라고 있던 것이 첫 번째 가드이고,
- * **실제로 그 가드가 잡았다.** 이 주석은 그 가드가 값을 한 일의 기록이다.
+ * 🔴 여기 있던 정규식은 **두 번 깨졌다**: 2026-08-20(V53) 값에 생성자 인자가 붙자 하나도 못 잡았고,
+ * 2026-09-11 `AuditTargetType` 의 마지막 값(`;` 없음)을 못 읽었다. 두 번 다 **첫 가드(«0개가 아니다»)가 잡았다** —
+ * 키 집합끼리 비교하는 아래 테스트는 `[] == []` 로 초록이 되기 때문이다. 그 가드는 그대로 둔다.
  */
-function enumValuesFromJava(file = AUDIT_ACTION_JAVA) {
-  const src = readFileSync(file, 'utf8');
-  // 값 뒤의 `(...)` 는 있어도 없어도 된다. 마지막 값은 `;` 로 끝나거나 — 🔴 **아무것도 없이 끝난다**
-  // (`AuditTargetType` 은 필드가 없어 `MARKETING` 다음 줄이 바로 `}` 다). 2026-09-11 에 대상 종류를
-  // 대조에 넣자 **마지막 값 하나를 못 읽어** 빨개졌다 — 조작 쪽은 `;` 가 있어 몰랐던 빈틈이다.
-  return [...src.matchAll(/^ {4}([A-Z][A-Z0-9_]*)\s*(?:\([^)]*\))?\s*[,;]?\s*$/gm)].map((m) => m[1]);
+function enumValuesFromJava(enumName = 'AuditAction') {
+  return javaEnumValues(javaEnumFile(enumName), enumName);
 }
 
 describe('감사 라벨 ↔ 백엔드 enum 드리프트 (2026-08-10)', () => {
@@ -84,7 +66,7 @@ describe('감사 라벨 ↔ 백엔드 enum 드리프트 (2026-08-10)', () => {
   });
 
   it('🔴 대상 종류 라벨 키 집합도 `AuditTargetType` enum 과 같다 (빠지면 필터에서 못 고른다)', () => {
-    const values = enumValuesFromJava(AUDIT_TARGET_TYPE_JAVA);
+    const values = enumValuesFromJava(AUDIT_TARGET_TYPE);
     expect(values).toContain('MEMBER'); // 파서가 헛돌면 [] == [] 로 초록이 된다(위 첫 가드와 같은 이유)
     expect(Object.keys(AUDIT_TARGET_TYPE_LABEL).sort()).toEqual(values.sort());
   });
