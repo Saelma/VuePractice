@@ -217,15 +217,15 @@ class CouponFlowIntegrationTest {
         createCoupon(admin, couponBody("FIXED", 1000, "2026-01-01T00:00:00Z", "2099-01-01T00:00:00Z")
                 .replace("ZZ Q축", activeName)).andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/admin/coupons").param("status", "ACTIVE").param("size", "500").header("Authorization", admin))
+        mockMvc.perform(get("/api/admin/coupons").param("status", "ACTIVE").param("size", "100").header("Authorization", admin))
                 .andExpect(jsonPath("$.data.content[0].name").value(activeName))
                 .andExpect(jsonPath("$.data.content[?(@.name=='" + expiredName + "')]").isEmpty())
                 .andExpect(jsonPath("$.data.content[?(@.expired==true)]").isEmpty());
-        mockMvc.perform(get("/api/admin/coupons").param("status", "EXPIRED").param("size", "500").header("Authorization", admin))
+        mockMvc.perform(get("/api/admin/coupons").param("status", "EXPIRED").param("size", "100").header("Authorization", admin))
                 .andExpect(jsonPath("$.data.content[0].name").value(expiredName))
                 .andExpect(jsonPath("$.data.content[?(@.name=='" + activeName + "')]").isEmpty())
                 .andExpect(jsonPath("$.data.content[?(@.expired==false)]").isEmpty());
-        mockMvc.perform(get("/api/admin/coupons").param("size", "500").header("Authorization", admin))
+        mockMvc.perform(get("/api/admin/coupons").param("size", "100").header("Authorization", admin))
                 .andExpect(jsonPath("$.data.content[0].name").value(activeName))
                 .andExpect(jsonPath("$.data.content[1].name").value(expiredName));
     }

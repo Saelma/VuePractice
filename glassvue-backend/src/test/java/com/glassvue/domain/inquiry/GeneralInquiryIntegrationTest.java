@@ -147,7 +147,7 @@ class GeneralInquiryIntegrationTest {
     void generalInquiry_doesNotLeakIntoProductList() throws Exception {
         String id = createGeneral(me, "REFUND", "ZZ환불 계좌를 바꾸고 싶어요");
 
-        String body = mockMvc.perform(get("/api/products/" + productId + "/inquiries?size=200"))
+        String body = mockMvc.perform(get("/api/products/" + productId + "/inquiries?size=100"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         List<String> ids = JsonPath.read(body, "$.data.content[*].id");
 
@@ -202,7 +202,7 @@ class GeneralInquiryIntegrationTest {
     void myInquiries_onlyMine() throws Exception {
         String id = createGeneral(me, "ETC", "ZZ내 일반 문의");
 
-        List<String> ids = JsonPath.read(mine(me, "?size=200"), "$.data.content[*].id");
+        List<String> ids = JsonPath.read(mine(me, "?size=100"), "$.data.content[*].id");
 
         assertThat(ids).contains(id);
         assertThat(ids).as("남이 쓴 문의가 섞이면 목록 API 의 가장 흔한 구멍이다")
@@ -214,7 +214,7 @@ class GeneralInquiryIntegrationTest {
     void myInquiries_mixesProductAndGeneral() throws Exception {
         String general = createGeneral(me, "DELIVERY", "ZZ배송 문의");
 
-        String body = mine(me, "?size=200");
+        String body = mine(me, "?size=100");
         List<String> ids = JsonPath.read(body, "$.data.content[*].id");
         List<String> types = JsonPath.read(body, "$.data.content[*].type");
 
@@ -229,7 +229,7 @@ class GeneralInquiryIntegrationTest {
     void myInquiries_productNameOnlyForProductInquiry() throws Exception {
         String general = createGeneral(me, "ETC", "ZZ일반");
 
-        String body = mine(me, "?size=200");
+        String body = mine(me, "?size=100");
         List<String> mineName = JsonPath.read(body,
                 "$.data.content[?(@.id == '" + myProductInquiry + "')].productName");
         List<String> generalName = JsonPath.read(body,
@@ -254,7 +254,7 @@ class GeneralInquiryIntegrationTest {
         createGeneral(me, "ETC", "ZZ카운트용2");
 
         int total = JsonPath.read(mine(me, "?size=1"), "$.data.totalElements");
-        int rows = ((List<?>) JsonPath.read(mine(me, "?size=200"), "$.data.content[*].id")).size();
+        int rows = ((List<?>) JsonPath.read(mine(me, "?size=100"), "$.data.content[*].id")).size();
         int othersTotal = JsonPath.read(mine(other, "?size=1"), "$.data.totalElements");
 
         assertThat(total).as("한 페이지에 다 담기는 크기라 총건수와 줄 수가 같아야 한다").isEqualTo(rows);
@@ -271,7 +271,7 @@ class GeneralInquiryIntegrationTest {
     void adminList_carriesType() throws Exception {
         String id = createGeneral(me, "REFUND", "ZZ환불 문의");
 
-        String body = mockMvc.perform(get("/api/admin/inquiries?size=200").header("Authorization", admin))
+        String body = mockMvc.perform(get("/api/admin/inquiries?size=100").header("Authorization", admin))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         List<String> types = JsonPath.read(body, "$.data.content[?(@.id == '" + id + "')].type");
         List<String> names = JsonPath.read(body, "$.data.content[?(@.id == '" + id + "')].productName");

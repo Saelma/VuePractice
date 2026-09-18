@@ -232,7 +232,7 @@ class WelcomeCouponIntegrationTest {
         mockMvc.perform(get("/api/coupons/welcome"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").doesNotExist());
-        mockMvc.perform(get("/api/admin/coupons").param("size", "200").header("Authorization", admin))
+        mockMvc.perform(get("/api/admin/coupons").param("size", "100").header("Authorization", admin))
                 .andExpect(jsonPath("$.data.content[?(@.id=='" + couponId + "')].welcome").value(true))
                 .andExpect(jsonPath("$.data.content[?(@.id=='" + couponId + "')].expired").value(true));
 

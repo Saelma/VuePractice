@@ -131,7 +131,7 @@ class AdminInquiryListIntegrationTest {
     @Test
     @DisplayName("🔴 관리자 목록은 **상품을 가로지른다** — 상품 상세에 들어가지 않고도 전부 보인다")
     void adminList_crossesProducts() throws Exception {
-        List<String> ids = JsonPath.read(listAs(admin, "?size=200"), "$.data.content[*].id");
+        List<String> ids = JsonPath.read(listAs(admin, "?size=100"), "$.data.content[*].id");
 
         assertThat(ids)
                 .as("서로 다른 상품(A·B)에 달린 문의가 **한 목록**에 나와야 한다 — 이게 G-3 을 막던 자리다")
@@ -141,7 +141,7 @@ class AdminInquiryListIntegrationTest {
     @Test
     @DisplayName("목록에 **상품명**이 실린다(가로지르므로 무엇에 달린 문의인지 알아야 한다)")
     void adminList_carriesProductName() throws Exception {
-        List<String> names = JsonPath.read(listAs(admin, "?size=200"), "$.data.content[*].productName");
+        List<String> names = JsonPath.read(listAs(admin, "?size=100"), "$.data.content[*].productName");
 
         assertThat(names).contains(productAName);
     }
@@ -153,9 +153,9 @@ class AdminInquiryListIntegrationTest {
     void adminList_statusFilterHasThreeStates() throws Exception {
         answer(openId);
 
-        List<String> all = JsonPath.read(listAs(admin, "?size=200"), "$.data.content[*].id");
-        List<String> waiting = JsonPath.read(listAs(admin, "?size=200&status=WAITING"), "$.data.content[*].id");
-        List<String> answered = JsonPath.read(listAs(admin, "?size=200&status=ANSWERED"), "$.data.content[*].id");
+        List<String> all = JsonPath.read(listAs(admin, "?size=100"), "$.data.content[*].id");
+        List<String> waiting = JsonPath.read(listAs(admin, "?size=100&status=WAITING"), "$.data.content[*].id");
+        List<String> answered = JsonPath.read(listAs(admin, "?size=100&status=ANSWERED"), "$.data.content[*].id");
 
         assertThat(all).as("안 보내면 전체다").contains(openId.toString(), secretId.toString());
         assertThat(waiting).as("답변된 것은 미답변 탭에서 빠진다")
@@ -199,7 +199,7 @@ class AdminInquiryListIntegrationTest {
     @Test
     @DisplayName("🔴 비밀글도 관리자에게는 **본문이 그대로** 실린다(가리면 답을 쓸 수가 없다)")
     void adminList_secretBodyNotMasked() throws Exception {
-        String body = listAs(admin, "?size=200");
+        String body = listAs(admin, "?size=100");
 
         List<String> contents = JsonPath.read(body,
                 "$.data.content[?(@.id == '" + secretId + "')].content");

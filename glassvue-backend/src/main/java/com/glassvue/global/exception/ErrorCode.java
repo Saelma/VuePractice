@@ -14,6 +14,9 @@ public enum ErrorCode {
 
     // 공통
     INVALID_INPUT("COMMON-400", HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
+    // 페이지 크기 상한(2026-09-18, H-3) — 넘으면 **자르지 않고 거절한다**(PageSizeGuard). 조용히 자르면
+    // 부르는 쪽은 «전부 받았다» 고 믿는다. ⚠ 숫자는 PageSizeGuard.MAX_PAGE_SIZE 와 같아야 한다(테스트가 본다).
+    PAGE_SIZE_TOO_LARGE("COMMON-400S", HttpStatus.BAD_REQUEST, "한 번에 100개까지 조회할 수 있습니다."),
     // 아래 둘은 **도메인이 던지지 않는다** — 스프링이 던진 예외를 전역 핸들러가 옮겨 담는 자리다.
     // 도메인별 404(PRODUCT-404 등)는 "그 자원이 없다"이고, 이건 "그런 경로/메서드가 없다"라 층이 다르다.
     ENDPOINT_NOT_FOUND("COMMON-404", HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),
