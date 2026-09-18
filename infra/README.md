@@ -250,6 +250,9 @@ create or replace directory GLASSVUE_BACKUP as '/opt/glassvue-backup';
 # [ecstel@ecstel ~]$
 ./scripts/backup-db.sh            # sudo 불필요 · 최근 7벌 보관 · 끝에 scp 명령을 찍는다
 ```
+🔴 **백엔드 배포 때 자동으로 돈다**(2026-09-18, `deploy-backend.sh` — 새 jar 가 뜨기 **전**, 즉 Flyway 가 스키마를 바꾸기 직전 벌).
+실패해도 배포는 막지 않고 `⚠⚠` 로 알린다. 한 벌 3분 남짓 — 급하면 `SKIP_BACKUP=1 ./scripts/deploy-backend.sh`.
+⚠ 자동인 것은 **VM 안에 뜨는 것까지**다 — 호스트로 가져가는 `scp` 는 여전히 손이다.
 ```powershell
 # PS> (호스트) — 스크립트가 찍어 준 줄 그대로
 scp -P 2222 "ecstel@127.0.0.1:/opt/glassvue-backup/*-<STAMP>.*" .

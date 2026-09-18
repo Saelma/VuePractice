@@ -33,6 +33,27 @@ fi
 HANDOFF_CHECK="$(dirname "${BASH_SOURCE[0]}")/check-handoff.sh"
 [ -x "$HANDOFF_CHECK" ] && "$HANDOFF_CHECK" || true
 
+# --- 배포 전 데이터 백업 (2026-09-18, BACKLOG F-5 · 사용자 결정 «배포할 때 자동») ---
+# 🔴 **새 jar 가 뜨기 전**에 뜬다 — 새 jar 는 뜨면서 Flyway 마이그레이션을 돌리므로, 여기서 뜬 벌이
+#    «스키마가 바뀌기 직전» 으로 돌아갈 지점이 된다. 백업은 손으로 두면 안 돈다(09-18 첫 벌 뒤로 아무도 안 불렀다).
+# **막지는 않는다** — 위 검사들과 같은 판단. 대신 실패하면 크게 알린다.
+# ⚠ 한 벌에 3분 남짓 걸린다(09-18 실측 — expdp 기동이 대부분). 급하면 `SKIP_BACKUP=1 ./scripts/deploy-backend.sh`.
+# ⚠ 여기서 뜬 벌도 **VM 안**이다 — 스크립트가 찍는 `scp` 로 호스트에 가져가야 백업이다.
+BACKUP_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/backup-db.sh"
+if [ "${SKIP_BACKUP:-0}" = "1" ]; then
+  echo "⚠ SKIP_BACKUP=1 — 배포 전 백업을 건너뛴다"
+elif [ -x "$BACKUP_SCRIPT" ]; then
+  echo "▶ 배포 전 백업…"
+  if [ "$(id -un)" = "root" ]; then
+    BACKUP_OK=0; runuser -l ecstel -c "'$BACKUP_SCRIPT'" || BACKUP_OK=$?
+  else
+    BACKUP_OK=0; "$BACKUP_SCRIPT" || BACKUP_OK=$?
+  fi
+  if [ "$BACKUP_OK" -ne 0 ]; then
+    echo "⚠⚠ 배포 전 백업이 실패했다(종료코드 $BACKUP_OK) — **되돌아갈 벌 없이** 배포한다. 위 출력을 볼 것 (배포는 계속한다)"
+  fi
+fi
+
 echo "▶ bootJar 빌드…"
 if [ "$(id -un)" = "root" ]; then
   runuser -l ecstel -c "'$BACK_DIR/gradlew' -p '$BACK_DIR' bootJar"
