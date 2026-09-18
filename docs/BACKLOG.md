@@ -1129,7 +1129,8 @@ catalog 가 발행 주체"* 라고 적고 있었다. **설계 의도는 문서�
 ①`DATA_PUMP_DIR` 는 `ecstel` 이 못 읽는다(`oracle:oinstall 750`) → **1회 sudo** 로 `/opt/glassvue-backup`(oracle:ecstel 2770) + 디렉터리 객체
 ②🔴 **이미지는 DB 밖**이다(`/var/www/glassvue-uploads`) → 같은 타임스탬프로 tar 를 함께 뜬다
 ③«떴다» 는 «풀린다» 가 아니다 → `check-backup-restore.sh` 가 `esptest` 에 풀고 **덤프 로그의 행 수**와 대조한다.
-⚠ **새 서버에서의 실제 복구는 안 밟아 봤다** — 🔴 기존 스키마에 풀면 `SEQ_ORDER_NO` 가 옛 값으로 남는다(빈 스키마에 풀 것).
+✅ **복구 리허설(같은 날 · §10)**: 빈 `esptest` → 이미지(해시 12/12) → `esptest-app.sh` 기동 → **공개 API 21개 경로가 운영과 같다** · 비밀번호 해시·주문·`SEQ_ORDER_NO` 같다.
+⚠ OS 단계(Oracle 설치·nginx·유닛)는 안 밟았다. 🔴 기존 스키마에 풀면 `SEQ_ORDER_NO` 가 옛 값으로 남는다(빈 스키마에 풀 것).
 ⚠ 곁가지 관측: 운영 계정 `ESP` 가 **DBA 역할**을 갖고 있다 — §D «외부 노출 단계는 새 환경에서 새로 만든다» 묶음에 속한다(지금 안 고친다).
 
 ---
