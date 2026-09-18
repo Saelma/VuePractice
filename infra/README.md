@@ -271,9 +271,12 @@ scp -P 2222 "ecstel@127.0.0.1:/opt/glassvue-backup/*-<STAMP>.*" .
 ⚠ impdp 가 **종료코드 5** 로 끝나는 게 정상이다 — `ESPTEST` 사용자·`SEQ_ORDER_NO` 가 이미 있어 `ORA-31684` 두 건을 오류로 센다.
 그 밖의 `ORA-` 가 나오면 스크립트가 따로 찍는다. ⚠ 돌리고 나면 `esptest` 에 **운영 데이터 사본**이 남는다 — 다음 마이그레이션 검증이 어차피 비운다.
 
-### 실제 복구 (새 서버) — ⚠ **아직 끝까지 밟아 본 적 없다**
+### 실제 복구 (새 서버) — ✅ **`esptest` 로 리허설했다**(2026-09-18) · ⚠ OS 단계는 안 밟았다
 
-2026-09-18 에 확인한 것은 **`esptest` 로 풀리는 것까지**다. 새 VM 에서 처음부터는 안 해 봤다. 순서는 이렇게 본다:
+**리허설한 것**(`handoffs/2026-09-18-handoff.md` §10): 빈 `esptest` 에 덤프를 풀고(`reset-esptest.sh` → `check-backup-restore.sh`) →
+이미지 tar 를 격리 폴더에 풀어 **해시 12/12 일치** → `./scripts/esptest-app.sh` 로 기동(Flyway «적용할 것 없음» · health UP) →
+**공개 API 21개 경로가 운영과 한 글자도 같다** · 응답이 가리키는 이미지 전부 존재 · 회원(비밀번호 해시)·주문 해시 합과 **주문번호 시퀀스 다음 값**이 운영과 같다.
+**안 밟은 것**: Oracle 설치·`ESP` 사용자 만들기·nginx·유닛(아래 1) — 새 VM 이 있어야 한다. 순서는 이렇게 본다:
 
 1. 위 「서버를 처음부터 세울 때」대로 Oracle·`ESP` 사용자(**빈 스키마**)·nginx·유닛을 세운다. `.env` 를 보관처에서 되돌린다.
 2. 1회 설정(폴더 + 디렉터리 객체)을 하고, 호스트의 덤프를 `/opt/glassvue-backup` 에 올린다.
@@ -304,8 +307,8 @@ set -a; . /home/ecstel/work/.env; set +a
 - 🔴 **회원이나 상품이 하나라도 있으면 아무것도 안 하고 1 로 끝난다** — dev 는 운영과 같은 `espdb` 에 붙으므로(`application-dev.yml`)
   «dev 면 시드» 로 두면 운영이 채워진다. 그래서 `seed` 는 **따로 켜야만** 돌고, 켜도 빈 DB 가 아니면 거절한다.
 - 비밀번호는 실행 때 무작위(16자)로 만든다 — 저장소에 없다. 들어간 뒤엔 평소처럼 띄운다.
-- 검증 계정에서 먼저 보려면 `SPRING_DATASOURCE_USERNAME=esptest` · `SPRING_DATASOURCE_PASSWORD="$ESPTEST_PASSWORD"` 를 붙이고,
-  `./scripts/reset-esptest.sh` 로 먼저 비운다(2026-09-18 에 그렇게 확인했다).
+- 검증 계정에서 먼저 보려면 `./scripts/reset-esptest.sh` 로 비운 뒤 **`./scripts/esptest-app.sh seed`** — 🔴 손으로 `SPRING_DATASOURCE_*` 만 바꿔 띄우면
+  **Redis·업로드 폴더·배치가 운영과 같다**(공지 조회수 플러셔가 운영 키를 가져간다 · 2026-09-18). 스크립트가 격리한다.
 
 1. **Oracle 19c 설치·`espdb` PDB 생성** — 스키마는 Flyway(`V1__init.sql`)가 만들지만 DB 자체는 아니다.
 2. **`/etc/nginx/ssl/`** 인증서 배치(위 절차).

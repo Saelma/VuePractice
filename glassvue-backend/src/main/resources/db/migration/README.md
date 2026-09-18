@@ -60,9 +60,12 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
   #    `/proc/<pid>/cmdline` 이 **누구에게나 읽히므로** 같은 호스트의 다른 사용자에게 평문으로 보인다
   #    (2026-08-03 V37 검증 때 실제로 프로세스 목록에서 확인했다).
   #    스프링이 읽는 **환경변수**로 넘기면 인자에 값이 남지 않는다(relaxed binding).
-  export SPRING_DATASOURCE_USERNAME=esptest
-  export SPRING_DATASOURCE_PASSWORD="$ESPTEST_PASSWORD"
-  ./gradlew bootRun --args="--server.port=8083 --spring.profiles.active=dev"
+  #
+  # 🔴 **2026-09-18 부터 스크립트로 띄운다** — `./scripts/esptest-app.sh`(저장소 루트).
+  #    아래 export 두 줄 + bootRun 은 DB 계정만 바꿨을 뿐 **Redis·업로드 폴더·배치는 운영과 같은 것을 봤다**:
+  #    공지 조회수 플러셔가 기동 즉시 운영 Redis(db0)의 `notice:view:*` 를 가져가고, 이미지 정리 배치(기동 5분 뒤)는
+  #    esptest 의 «주인 없는 이미지» 행을 보고 **운영 폴더의 파일**을 지울 수 있다. 스크립트가 셋 다 격리한다(Redis db2 · 배치 끔 · 별도 폴더).
+  ./scripts/esptest-app.sh          # (옛 방식: export SPRING_DATASOURCE_USERNAME/PASSWORD … ./gradlew bootRun --args="--server.port=8083 …")
   # 로그에 V1→…→Vn이 순서대로 applied 되고 앱이 뜨면 성공(ddl-auto=validate 통과 = 엔티티와 일치).
   # 확인 후 반드시 내린다 — 8083이 떠 있으면 다음 검증이 포트 충돌로 죽는다.
 
