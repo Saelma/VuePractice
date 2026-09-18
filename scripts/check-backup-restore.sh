@@ -8,6 +8,8 @@
 # 🔴 **운영 스키마는 건드리지 않는다** — 쓰는 곳은 `esptest` 하나다(`remap_schema=ESP:ESPTEST`, 테이블은 replace).
 # ⚠ `esptest` 는 마이그레이션 빈 DB 검증 계정이기도 하다 — 이걸 돌리면 **운영 데이터 사본이 들어간다.**
 #   다음 빈 DB 검증은 어차피 비우는 데서 시작하므로(db/migration/README 1단계) 그대로 둔다.
+# 🔴 **테이블만 오는 게 아니다** — 운영의 시노님(`FLYWAY_SCHEMA_HISTORY`)도 따라온다. 테이블·시퀀스만 지우면 그게 남아
+#   Flyway 가 V1 을 건너뛴다(2026-09-18 실측) → 비울 때는 반드시 `scripts/reset-esptest.sh`(객체 전부 · user_objects 로 센다).
 #
 # 실행: scripts/check-backup-restore.sh [STAMP]   (STAMP 를 안 주면 가장 최근 벌 · sudo 불필요)
 # 종료코드: 0 = 전 테이블 행 수 일치, 1 = 어긋남, 2 = 판정 불가.

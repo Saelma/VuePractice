@@ -104,8 +104,12 @@ select 'stock 이력 합 = 재고 변화|'||count(*) from (
 --    🔴 **날짜를 박지 않고 자기보정한다**: 첫 `ADMIN_CREATE` **이후에 생긴 옵션**만 본다.
 --    ⚠ 그전 옵션(`무선 키보드`, 07-24 생성)은 **그 기능이 있기 전** 것이라 이력이 없는 게 맞다 —
 --       하드코딩하면 다음에 같은 일이 또 나도 이 줄이 못 잡는다.
+--    🔴 **재고 0 으로 등록한 옵션은 제외한다**(2026-09-18) — 등록은 수량 0 이면 이력을 **일부러** 안 남긴다
+--       («변동 없음 — 원장에 남길 것이 없다», ProductCommandService.recordAdmin). 생긴 재고가 없으니 이 규칙을 안 어긴다.
+--       이 줄이 그걸 위반으로 셌다 — 운영엔 07월 이후 재고 0 등록이 없어 안 보였고, 시드의 품절 표본이 처음 밟았다.
 select 'stock 이력 없이 생긴 재고|'||count(*) from product_variant v
  where v.created_at >= (select min(created_at) from stock_history where reason='ADMIN_CREATE')
+   and v.stock <> 0
    and not exists (select 1 from stock_history h where h.variant_id=v.id);
 
 -- ⑫~⑲ 쿠폰·알림 원장 (2026-09-03). 09-02 이월이 «11개가 «다» 라는 근거는 없다 —

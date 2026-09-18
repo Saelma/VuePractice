@@ -42,30 +42,17 @@ ALTER TABLE orders ADD CONSTRAINT ck_orders_status
   export ORACLE_HOME=/opt/oracle/product/19c/dbhome_1
   export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH
 
-  # 1) 이전 검증 결과를 비운다 (빈 스키마에서 시작해야 의미가 있다)
+  # 1) 이전 검증 결과를 비운다 (빈 스키마에서 시작해야 의미가 있다) — 🔴 **스크립트로 한다**(2026-09-18)
   #
-  # ⚠ sudo·sysdba가 필요 없다 — esptest로 직접 접속해 **자기 스키마**를 비운다.
-  #    (2026-07-24에 바꿨다. 예전엔 `sudo -iu oracle ... as sysdba` + dba_tables였는데,
-  #     자기 객체를 DROP 하는 데는 DBA 권한이 필요 없다. sudo가 필요한 절차는 사람 손을
-  #     기다리게 만들어 검증을 건너뛰게 한다.)
+  #    ./scripts/reset-esptest.sh        # 저장소 루트에서. 객체 전부를 지우고 user_objects 0개인지 센다
   #
-  # ⚠ 시퀀스를 빼먹지 말 것. 테이블만 지우면 V15가 만든 seq_order_no가 살아남아
-  #    다음 검증에서 CREATE SEQUENCE가 ORA-00955(이미 사용 중인 이름)로 실패한다.
-  #    2026-07-23 V16 검증에서 실제로 걸렸다.
-  sqlplus -s "esptest/$ESPTEST_PASSWORD@//$DB_HOST:$DB_PORT/${DB_SERVICE:-espdb}" <<'EOF'
-  BEGIN
-    FOR t IN (SELECT table_name FROM user_tables) LOOP
-      EXECUTE IMMEDIATE 'DROP TABLE "'||t.table_name||'" CASCADE CONSTRAINTS PURGE';
-    END LOOP;
-    FOR s IN (SELECT sequence_name FROM user_sequences) LOOP
-      EXECUTE IMMEDIATE 'DROP SEQUENCE "'||s.sequence_name||'"';
-    END LOOP;
-  END;
-  /
-  select count(*) as tables_left from user_tables;   -- 0 이어야 한다
-  select count(*) as seqs_left   from user_sequences; -- 0 이어야 한다
-  exit
-  EOF
+  # 🔴 여기 있던 sqlplus 블록은 **테이블·시퀀스만** 지우고 **그 둘만** 셌다. 2026-09-18 에 백업 복구 확인
+  #    (scripts/check-backup-restore.sh — 운영 덤프를 esptest 에 푼다)이 운영의 시노님 FLYWAY_SCHEMA_HISTORY 를
+  #    함께 가져왔는데, 그 블록은 «0 · 0» 을 냈고 Flyway 는 **남은 시노님 하나 때문에** 빈 스키마로 안 보고
+  #    V1 을 baseline 으로 건너뛰었다 → V2 가 ORA-00942. 스크립트는 **user_objects 전체**를 센다.
+  # ⚠ sudo·sysdba 는 필요 없다 — esptest 로 자기 스키마를 비운다(2026-07-24 에 바꾼 판단 그대로).
+  # ⚠ 시퀀스를 빼먹으면 V15 의 CREATE SEQUENCE 가 ORA-00955 로 죽는다(2026-07-23 V16 검증) — 스크립트가 함께 지운다.
+  # ⚠ 지우는 명령이라 AI 세션에서는 자동 모드 분류기가 막을 수 있다 — 그러면 사람이 `! ./scripts/reset-esptest.sh` 로 돌린다.
 
   # 2) 그 계정으로 기동 (기본 DB를 안 건드리게 자격증명만 덮어쓴다)
   #
