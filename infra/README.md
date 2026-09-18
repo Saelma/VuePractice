@@ -288,6 +288,21 @@ scp -P 2222 "ecstel@127.0.0.1:/opt/glassvue-backup/*-<STAMP>.*" .
 이 디렉토리로도 **자동 복구되지 않는** 것들. 재구축 시 손으로 해야 한다.
 
 ⚠ **데이터(주문·회원·이미지)는 이 목록이 아니라 위 「데이터 백업」 절이다.**
+⚠ **되살릴 백업이 없으면 → 시드**(2026-09-18, BACKLOG F-3). 🔴 **빈 DB 에는 관리자를 만들 길이 없다** — 가입은 늘 USER 고,
+최상위 관리자(SUPER_ADMIN)는 API 로 못 준다. 시드가 **최상위 관리자 1 · 일반 1 · 카테고리 3 · 상품 8** 을 넣는다:
+
+```bash
+# [ecstel@ecstel ~]$  — 빈 스키마면 Flyway 가 테이블을 만든 뒤 시드를 넣고 **0 으로 끝난다**(서버로 남지 않는다)
+cd /home/ecstel/work/glassvue-backend
+set -a; . /home/ecstel/work/.env; set +a
+./gradlew bootRun --args="--server.port=8083 --spring.profiles.active=seed"
+# 로그의 「[시드]   최상위 관리자 admin / ……」「[시드]   일반 회원 user01 / ……」 두 줄을 **지금 적어 둔다** — 다시 볼 방법이 없다
+```
+- 🔴 **회원이나 상품이 하나라도 있으면 아무것도 안 하고 1 로 끝난다** — dev 는 운영과 같은 `espdb` 에 붙으므로(`application-dev.yml`)
+  «dev 면 시드» 로 두면 운영이 채워진다. 그래서 `seed` 는 **따로 켜야만** 돌고, 켜도 빈 DB 가 아니면 거절한다.
+- 비밀번호는 실행 때 무작위(16자)로 만든다 — 저장소에 없다. 들어간 뒤엔 평소처럼 띄운다.
+- 검증 계정에서 먼저 보려면 `SPRING_DATASOURCE_USERNAME=esptest` · `SPRING_DATASOURCE_PASSWORD="$ESPTEST_PASSWORD"` 를 붙이고,
+  `./scripts/reset-esptest.sh` 로 먼저 비운다(2026-09-18 에 그렇게 확인했다).
 
 1. **Oracle 19c 설치·`espdb` PDB 생성** — 스키마는 Flyway(`V1__init.sql`)가 만들지만 DB 자체는 아니다.
 2. **`/etc/nginx/ssl/`** 인증서 배치(위 절차).

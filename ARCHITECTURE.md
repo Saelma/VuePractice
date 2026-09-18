@@ -565,7 +565,7 @@ audit           관리자 조작 감사 이력 (append-only, 이벤트로만 유
 > **경로가 아니라 서비스 계층**에서 판단한다 — SUPER_ADMIN 은 `Role.authorities()` 로 `ROLE_ADMIN` 을 함께
 > 받아 기존 `/api/admin/**`(hasRole('ADMIN'))를 그대로 통과하고, "관리자 조작은 SUPER만" 은
 > `MemberAdminCommandService` 가 `actingRole`(JWT)로 가른다. SUPER 부여는 API로 불가(`CANNOT_GRANT_SUPER_ADMIN`),
-> 오직 데이터로만. **V31**은 role 의 CHECK 를 시스템 이름이라 **동적으로 찾아 DROP**(`search_condition_vc` 조회)한 뒤
+> 오직 데이터로만 — **빈 DB 에서 처음 한 명을 만드는 길은 `seed` 프로파일뿐**이다(2026-09-18, `global/seed`, `infra/README` 「처음부터 세울 때」). **V31**은 role 의 CHECK 를 시스템 이름이라 **동적으로 찾아 DROP**(`search_condition_vc` 조회)한 뒤
 > named `ck_member_role`(USER/ADMIN/SUPER_ADMIN)로 재생성 — enum CHECK 트랩(orders.status 사고)의 정석 대응이다.
 > ⚠ 특정 계정 승격(운영자ID)은 **신 jar 배포 후** 별도 UPDATE — 구 jar 는 SUPER_ADMIN 을 enum 으로 못 읽어
 > 그 회원 로딩이 깨지므로 순서가 반대면 안 된다. 프론트의 `role==='ADMIN'` 비교는 `stores/auth` 의
