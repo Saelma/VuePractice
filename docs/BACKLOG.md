@@ -737,6 +737,7 @@ API 는 `GET /api/admin/reviews` + `POST .../{id}/hide`·`/unhide`.
 | **HSTS / mkcert** | 도메인 + Let's Encrypt 도입 시. IP 접속엔 HSTS 가 애초에 무효 |
 | **리뷰 목록 캐시** | P6SPY 로 실제 병목이 측정될 때. 도구는 이미 검증됨(2026-07-23) |
 | **알림 Handler 실발송** | 임계치 재알림 스팸을 먼저 해결해야 한다 |
+| **운영 계정 `ESP` 의 `DBA` 역할** | 2026-09-18 실측(F-5 착수 때). 앱 계정이 DBA 라 SQL 주입 한 번이면 DB 전체다. ⚠ 지금 뜻이 있는 쓰임은 **디렉터리 객체 만들기**(백업 1회 설정) 하나뿐 — 새 환경에선 앱 계정과 관리 계정을 나누고 앱 계정엔 `CONNECT`·`RESOURCE`·필요한 `GRANT` 만. **`DB_PASSWORD` 강화와 한 묶음** |
 | **`DB_PASSWORD` 강화** | ⚠ **현재 값이 짧다**(길이는 여기 적지 않는다 — 적으면 탐색 범위를 좁혀 준다, 2026-07-29). 바꿀 때 `.env`·DB 계정·백업본 셋을 함께 맞춰야 한다. 저장소 공개를 한다면 **그 전에** 처리할 것 |
 | **Docker·RabbitMQ·관측 스택(Alloy/Loki/Prometheus/Grafana)·Spring Batch·OpenSearch** | MSA 단계 |
 | **선착순 한정 쿠폰 발급 (Redis 기반)** | 아래 참고 — MSA 단계 + 동시성이 실제로 생길 때 |
