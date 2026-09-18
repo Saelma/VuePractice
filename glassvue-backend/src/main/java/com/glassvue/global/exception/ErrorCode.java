@@ -119,6 +119,13 @@ public enum ErrorCode {
     //    이유를 말해 주는 것은 여기다(DB 제약에 걸리면 500 이 나간다).
     DISCOUNT_PERIOD_INVALID("PRODUCT-400DP", HttpStatus.BAD_REQUEST,
             "할인 종료는 시작보다 뒤여야 합니다."),
+    // 🔴 2026-09-18(쿠폰 «기간을 안 보는 쓰기» 를 세일에서 다시 셌다): 종료일이 지난 할인도 등록됐다 —
+    //    한 순간도 유효하지 않아 위 PERIOD_INVALID 와 같은 결과(세일을 걸었다고 믿는데 가격은 그대로)다.
+    DISCOUNT_PERIOD_PAST("PRODUCT-400DE", HttpStatus.BAD_REQUEST,
+            "종료일이 이미 지난 할인은 등록할 수 없습니다."),
+    // 끝난 할인은 «지난 세일의 기록» 이다 — G-5 가 컬럼 대신 테이블을 고른 이유 ②(덮어쓰면 흔적이 사라진다).
+    DISCOUNT_ENDED("PRODUCT-409DE", HttpStatus.CONFLICT,
+            "이미 끝난 할인은 수정하거나 삭제할 수 없습니다 — 지난 세일의 기록입니다."),
 
     // 주문
     CART_EMPTY("ORDER-400E", HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),
@@ -190,6 +197,12 @@ public enum ErrorCode {
             "사용 마감은 시작일 이후여야 합니다."),
     COUPON_PERCENT_OVER_100("COUPON-400P", HttpStatus.BAD_REQUEST,
             "정률 할인은 100%를 넘을 수 없습니다."),
+    // 🔴 2026-09-18: 이미 끝난 기간으로도 만들어졌다 — 발급(400F)·가입 지정(400X)이 뒤에서 막아 아무에게도
+    //    못 가는 정의가 조용히 「만료됨」 탭에 쌓인다. 이벤트 쿠폰은 발급 창이 이미 닫혔으면 아무도 못 받는다.
+    COUPON_CREATE_EXPIRED("COUPON-400Y", HttpStatus.BAD_REQUEST,
+            "사용 마감이 이미 지난 쿠폰은 만들 수 없습니다."),
+    COUPON_CREATE_WINDOW_CLOSED("COUPON-400Z", HttpStatus.BAD_REQUEST,
+            "발급 마감이 이미 지난 이벤트 쿠폰은 만들 수 없습니다."),
     // 회수·정의 삭제 (2026-09-17, BACKLOG Q-7). 셋 다 «지금은 못 한다 — 먼저 할 일이 있다» 라 409 다.
     // ⚠ 쓰인 발급분은 주문이 member_coupon_id 로 가리킨다(V46) — 지우면 취소 때 쿠폰 복구가 대상을 잃는다.
     COUPON_REVOKE_USED("COUPON-409U", HttpStatus.CONFLICT,

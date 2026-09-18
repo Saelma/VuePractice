@@ -115,7 +115,7 @@ class CouponOrderIntegrationTest {
         mockMvc.perform(post("/api/admin/coupons").header("Authorization", adminToken).contentType(JSON)
                         .content("{\"name\":\"ZZ 주문쿠폰\",\"discountType\":\"FIXED\",\"discountValue\":5000,"
                                + "\"minOrderAmount\":10000,"
-                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2027-01-01T00:00:00Z\"}"))
+                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2099-01-01T00:00:00Z\"}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String couponId = JsonPath.read(mockMvc.perform(get("/api/admin/coupons").header("Authorization", adminToken))
                 .andReturn().getResponse().getContentAsString(), "$.data.content[0].id");

@@ -45,6 +45,7 @@ public record ProductDiscountResponse(
         if (d.isUpcomingAt(now)) {
             return "UPCOMING";
         }
-        return d.isActiveAt(now) ? "ACTIVE" : "ENDED";
+        // ⚠ ENDED 는 서버가 수정·삭제를 거절하는 기준({@code isEndedAt})과 같은 줄에서 나온다.
+        return d.isEndedAt(now) ? "ENDED" : "ACTIVE";
     }
 }

@@ -7,7 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.glassvue.domain.catalog.entity.Category;
+import com.glassvue.domain.catalog.entity.ProductDiscount;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
+import com.glassvue.domain.catalog.repository.ProductDiscountRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
@@ -60,6 +62,7 @@ class PromotionCalendarSaleIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired MemberRepository memberRepository;
     @Autowired CategoryRepository categoryRepository;
+    @Autowired ProductDiscountRepository discountRepository;
     @Autowired PasswordEncoder passwordEncoder;
 
     private static final String JSON = "application/json";
@@ -103,12 +106,16 @@ class PromotionCalendarSaleIntegrationTest {
         return UUID.fromString(JsonPath.read(res, "$.data"));
     }
 
-    private void createDiscount(UUID pid, int rate, LocalDate start, LocalDate end) throws Exception {
-        mockMvc.perform(post("/api/admin/products/" + pid + "/discounts").contentType(JSON)
-                        .header(HttpHeaders.AUTHORIZATION, login())
-                        .content("{\"rate\":" + rate + ",\"startDate\":\"" + start
-                                + "\",\"endDate\":\"" + end + "\"}"))
-                .andExpect(status().isOk());
+    /**
+     * 세일을 <b>리포지토리로 바로</b> 넣는다 — 이 클래스가 보는 것은 등록이 아니라 달력이 읽는 방식이다.
+     *
+     * <p>🔴 <b>2026-09-18 까지는 API 로 넣었는데, 그러면 날짜가 조용히 시험을 좌우했다</b> — 표본이
+     * «이번 달 10~15일» 이라 중순이 지나면 **지난 기간**이 되고, 그날 생긴 등록 검사(`PRODUCT-400DE`)에
+     * 걸려 매달 후반에만 빨개진다. 경계는 서비스와 같게 만든다(시작 00:00 KST 포함 · 종료 다음 날 00:00 배타).
+     */
+    private void createDiscount(UUID pid, int rate, LocalDate start, LocalDate end) {
+        discountRepository.save(ProductDiscount.of(pid, rate,
+                start.atStartOfDay(KST).toInstant(), end.plusDays(1).atStartOfDay(KST).toInstant()));
     }
 
     /**

@@ -57,6 +57,7 @@ public interface AdminProductDiscountController {
 
                     ⚠ **삭제 대기 상품에는 걸 수 없다**(404) — 목록에 안 나오는 상품이라
                     걸어 봐야 관리자만 「걸었는데 아무 일도 안 난다」를 본다.
+                    같은 이유로 **종료일이 이미 지난 기간은 400**(`PRODUCT-400DE`)이다.
                     """)
     ResponseEntity<ApiResponse<UUID>> create(AuthUser user, UUID productId, ProductDiscountRequest request);
 
@@ -67,6 +68,9 @@ public interface AdminProductDiscountController {
 
                     ⚠ **다른 상품의 할인 id 를 넘기면 404** 다. 소속까지 확인하지 않으면
                     관리자가 **자기가 안 건드린 상품의 세일**을 바꿔 놓고 나중에야 알게 된다.
+
+                    🔴 **이미 끝난(`ENDED`) 할인은 409**(`PRODUCT-409DE`) — 지난 세일의 기록이라 고치지 않는다.
+                    새 기간의 종료일이 이미 지났으면 400(`PRODUCT-400DE`)이다.
                     """)
     ResponseEntity<ApiResponse<Void>> update(AuthUser user, UUID productId, UUID discountId,
                                              ProductDiscountRequest request);
@@ -78,6 +82,9 @@ public interface AdminProductDiscountController {
 
                     🔴 **이미 팔린 주문의 금액은 안 변한다**(주문에 정가·판매가를 복사해 두므로, B-7).
                     그 토대가 있어서 이 조작이 안전하다.
+
+                    🔴 **이미 끝난(`ENDED`) 할인은 409**(`PRODUCT-409DE`) — 되돌릴 세일이 더는 없고,
+                    지우면 달력·목록에서 지난 세일이 사라진다.
                     """)
     ResponseEntity<ApiResponse<Void>> delete(AuthUser user, UUID productId, UUID discountId);
 }

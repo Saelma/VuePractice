@@ -103,5 +103,16 @@ class ProductDiscountTest {
             assertThat(d.isActiveAt(mid)).isTrue();
             assertThat(d.isUpcomingAt(mid)).isFalse();
         }
+
+        @Test
+        @DisplayName("🔴 「끝났나」는 종료 **정각부터** 참이다 — 진행 중과 한 순간도 겹치지 않는다")
+        void endedStartsExactlyAtEnd() {
+            ProductDiscount d = discount(20);
+            // 수정·삭제 거절(409DE)과 화면의 「종료」 배지가 이 경계를 같이 쓴다.
+            assertThat(d.isEndedAt(END.minusMillis(1))).isFalse();
+            assertThat(d.isActiveAt(END.minusMillis(1))).isTrue();
+            assertThat(d.isEndedAt(END)).isTrue();
+            assertThat(d.isActiveAt(END)).isFalse();
+        }
     }
 }

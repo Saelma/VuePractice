@@ -72,6 +72,7 @@ public class ProductDiscountCommandService {
     @CacheEvict(cacheNames = "products:list", allEntries = true)
     public void update(UUID productId, UUID discountId, ProductDiscountRequest req, AuthUser actor) {
         ProductDiscount discount = findOwned(productId, discountId);
+        ensureNotEnded(discount);
         Instant startsAt = startBoundary(req);
         Instant endsAt = endBoundary(req);
         // ⚠ 자기 자신은 겹침에서 뺀다 — 안 그러면 기간을 그대로 두고 **할인율만 고치는 것이 불가능**하다.
@@ -88,10 +89,14 @@ public class ProductDiscountCommandService {
      * <p>⚠ <b>진행 중인 것도 지울 수 있다</b> — 세일을 잘못 걸었을 때 되돌릴 방법이 이것뿐이다.
      * 지우면 그 순간부터 원가로 돌아간다. 🔴 <b>이미 팔린 주문의 금액은 안 변한다</b>(B-7 스냅샷) —
      * 그 토대가 있어서 이 조작이 안전하다.
+     *
+     * <p>⚠ <b>끝난 것은 못 지운다</b>(2026-09-18) — 되돌릴 세일이 더는 없고, 지우면 달력·목록에서
+     * 지난 세일이 사라진다({@link #ensureNotEnded}).
      */
     @CacheEvict(cacheNames = "products:list", allEntries = true)
     public void delete(UUID productId, UUID discountId, AuthUser actor) {
         ProductDiscount discount = findOwned(productId, discountId);
+        ensureNotEnded(discount);
         // ⚠ 지우기 **전에** 읽는다 — 지운 뒤엔 «무엇을 지웠나» 를 적을 값이 없다.
         String detail = describe(discount);
         discountRepository.delete(discount);
@@ -155,6 +160,11 @@ public class ProductDiscountCommandService {
             // endBoundary 가 하루를 더하므로 startsAt < endsAt 가 성립한다).
             throw new BusinessException(ErrorCode.DISCOUNT_PERIOD_INVALID);
         }
+        // 종료일이 오늘(KST)보다 앞이면 한 순간도 유효하지 않다 — 위와 같은 «걸었는데 아무 일도 안 난다» 다.
+        // ⚠ 뒤집힌 기간 검사 **뒤에** 둔다 — 둘 다 해당하면 더 근본적인 쪽(400DP)으로 답한다.
+        if (!endsAt.isAfter(Instant.now())) {
+            throw new BusinessException(ErrorCode.DISCOUNT_PERIOD_PAST);
+        }
         List<ProductDiscount> overlapping =
                 discountRepository.findOverlapping(productId, startsAt, endsAt, excludeId);
         if (!overlapping.isEmpty()) {
@@ -165,6 +175,20 @@ public class ProductDiscountCommandService {
                     productId, startsAt, endsAt, first.getRate(), first.getStartsAt(), first.getEndsAt(),
                     overlapping.size() - 1);
             throw new BusinessException(ErrorCode.DISCOUNT_PERIOD_OVERLAP);
+        }
+    }
+
+    /**
+     * 🔴 <b>끝난 할인은 «지난 세일의 기록» 이다</b>(2026-09-18) — 고치거나 지우지 않는다.
+     *
+     * <p>G-5 가 컬럼 대신 테이블을 고른 이유 ②가 *"덮어쓰면 끝난 세일이 흔적 없이 사라진다"* 인데,
+     * 수정·삭제가 그 기록을 덮어쓰고 있었다(화면도 「종료」 줄에 두 버튼을 그렸다).
+     * ⚠ 이미 팔린 주문의 금액은 어느 쪽이든 안 변한다(B-7 스냅샷) — 지키는 것은 돈이 아니라 달력·목록의 기록이다.
+     * 끝난 세일을 다시 하려면 새로 등록한다.
+     */
+    private void ensureNotEnded(ProductDiscount discount) {
+        if (discount.isEndedAt(Instant.now())) {
+            throw new BusinessException(ErrorCode.DISCOUNT_ENDED);
         }
     }
 

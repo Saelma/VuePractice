@@ -83,6 +83,16 @@ public class ProductDiscount extends BaseTimeEntity {
     }
 
     /**
+     * 끝났나 — 종료는 배타라 {@code endsAt} 그 순간부터 끝이다.
+     *
+     * <p>🔴 <b>화면의 「종료」 배지와 수정·삭제 거절이 이 한 줄을 같이 쓴다</b> — 둘이 따로 계산하면
+     * 경계에서 «버튼은 보이는데 누르면 409» 가 된다.
+     */
+    public boolean isEndedAt(Instant at) {
+        return !at.isBefore(endsAt);
+    }
+
+    /**
      * 할인가를 만든다 — <b>이 제품에서 세일가를 계산하는 유일한 자리다.</b>
      *
      * <p>🔴 인자는 <b>옵션 가격차까지 더한 값</b>이어야 한다. 즉

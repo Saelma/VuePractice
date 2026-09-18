@@ -8,7 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.glassvue.domain.catalog.entity.Category;
+import com.glassvue.domain.catalog.entity.ProductDiscount;
 import com.glassvue.domain.catalog.repository.CategoryRepository;
+import com.glassvue.domain.catalog.repository.ProductDiscountRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
@@ -54,6 +56,7 @@ class ProductDiscountIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired MemberRepository memberRepository;
     @Autowired CategoryRepository categoryRepository;
+    @Autowired ProductDiscountRepository discountRepository;
     @Autowired PasswordEncoder passwordEncoder;
 
     private static final String JSON = "application/json";
@@ -126,6 +129,18 @@ class ProductDiscountIntegrationTest {
 
     private LocalDate today() {
         return LocalDate.now(KST);
+    }
+
+    /**
+     * <b>이미 끝난</b> 세일을 리포지토리로 바로 넣는다 — API 로는 더 못 만든다(2026-09-18, {@code PRODUCT-400DE}).
+     *
+     * <p>⚠ 정책을 안 타는 픽스처다(WA §3 «픽스처는 두 갈래») — «정책이 생기기 전에 등록돼 이미 끝난 세일»
+     * 을 재현하는 자리다. 경계는 서비스와 같게 만든다: 시작일 00:00 KST(포함) · 종료일 <b>다음 날</b> 00:00(배타).
+     */
+    private String saveEndedDiscount(int rate, LocalDate start, LocalDate end) {
+        return discountRepository.save(ProductDiscount.of(productId, rate,
+                start.atStartOfDay(KST).toInstant(), end.plusDays(1).atStartOfDay(KST).toInstant()))
+                .getId().toString();
     }
 
     /** 오늘 하루짜리 세일을 걸고 id 를 준다 — 「지금 진행 중」 표본. */
@@ -215,10 +230,7 @@ class ProductDiscountIntegrationTest {
     @DisplayName("⚠ **지난** 세일도 가격을 안 바꾼다 — 끝난 세일은 기록으로만 남는다")
     void endedDiscountDoesNotApply() throws Exception {
         LocalDate lastWeek = today().minusDays(7);
-        mockMvc.perform(post(url()).contentType(JSON)
-                        .header(HttpHeaders.AUTHORIZATION, login(adminLoginId))
-                        .content(discountBody(30, lastWeek, lastWeek.plusDays(1))))
-                .andExpect(status().isOk());
+        saveEndedDiscount(30, lastWeek, lastWeek.plusDays(1));
 
         mockMvc.perform(get("/api/products/" + productId))
                 .andExpect(jsonPath("$.data.price").value(10000))
@@ -315,6 +327,75 @@ class ProductDiscountIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("PRODUCT-404D"));
     }
 
+    // ── 지난 기간 · 끝난 할인 (2026-09-18) ─────────────────────
+    //
+    // 쿠폰에서 «기간을 안 보는 쓰기» 가 셋 나온 뒤(09-17) 세일에서 다시 셌다 — 등록은 지난 기간을,
+    // 수정·삭제는 끝난 행을 막지 않았다.
+
+    @Test
+    @DisplayName("🔴 종료일이 이미 지난 기간은 400 — 한 순간도 유효하지 않은 세일을 만들지 않는다")
+    void pastPeriodIsRejected() throws Exception {
+        mockMvc.perform(post(url()).contentType(JSON)
+                        .header(HttpHeaders.AUTHORIZATION, login(adminLoginId))
+                        .content(discountBody(20, today().minusDays(7), today().minusDays(1))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("PRODUCT-400DE"));
+
+        // 🔴 대조군 — **오늘 끝나는** 세일은 된다(종료일 포함이라 오늘 자정까지 유효하다).
+        //    시작일이 지났어도 막지 않는다 — 「어제부터 오늘까지」는 지금 진행 중인 세일이다.
+        mockMvc.perform(post(url()).contentType(JSON)
+                        .header(HttpHeaders.AUTHORIZATION, login(adminLoginId))
+                        .content(discountBody(20, today().minusDays(1), today())))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("진행 중인 할인도 종료일을 지난 날로 고치면 400 — 등록과 같은 검사를 탄다")
+    void updateToPastPeriodIsRejected() throws Exception {
+        String discountId = createTodayDiscount(20);
+
+        mockMvc.perform(put(url() + "/" + discountId).contentType(JSON)
+                        .header(HttpHeaders.AUTHORIZATION, login(adminLoginId))
+                        .content(discountBody(20, today().minusDays(7), today().minusDays(1))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("PRODUCT-400DE"));
+    }
+
+    @Test
+    @DisplayName("🔴 끝난 할인은 수정이 409 — 지난 세일의 기록을 덮어쓰지 않는다")
+    void endedDiscountCannotBeUpdated() throws Exception {
+        LocalDate lastWeek = today().minusDays(7);
+        String discountId = saveEndedDiscount(10, lastWeek, lastWeek);
+
+        // 끝난 세일을 앞으로 옮겨 «되살리는» 요청이다 — 새 기간 자체는 멀쩡하다.
+        // ⚠ 그래서 이 409 는 «새 기간이 틀렸다» 가 아니라 «대상이 끝났다» 에서만 나온다.
+        mockMvc.perform(put(url() + "/" + discountId).contentType(JSON)
+                        .header(HttpHeaders.AUTHORIZATION, login(adminLoginId))
+                        .content(discountBody(50, today(), today())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("PRODUCT-409DE"));
+
+        mockMvc.perform(get(url()).header(HttpHeaders.AUTHORIZATION, login(adminLoginId)))
+                .andExpect(jsonPath("$.data[0].rate").value(10))
+                .andExpect(jsonPath("$.data[0].endDate").value(lastWeek.toString()))
+                .andExpect(jsonPath("$.data[0].status").value("ENDED"));
+    }
+
+    @Test
+    @DisplayName("🔴 끝난 할인은 삭제가 409 — 달력·목록에서 지난 세일이 사라지지 않는다")
+    void endedDiscountCannotBeDeleted() throws Exception {
+        LocalDate lastWeek = today().minusDays(7);
+        String discountId = saveEndedDiscount(10, lastWeek, lastWeek);
+
+        mockMvc.perform(delete(url() + "/" + discountId)
+                        .header(HttpHeaders.AUTHORIZATION, login(adminLoginId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("PRODUCT-409DE"));
+
+        mockMvc.perform(get(url()).header(HttpHeaders.AUTHORIZATION, login(adminLoginId)))
+                .andExpect(jsonPath("$.data.length()").value(1));
+    }
+
     // ── 목록: 정렬·가격필터가 세일가를 본다 ────────────────────
 
     @Test
@@ -380,8 +461,7 @@ class ProductDiscountIntegrationTest {
         LocalDate lastWeek = today().minusDays(7);
         LocalDate nextWeek = today().plusDays(7);
         String auth = login(adminLoginId);
-        mockMvc.perform(post(url()).contentType(JSON).header(HttpHeaders.AUTHORIZATION, auth)
-                .content(discountBody(10, lastWeek, lastWeek))).andExpect(status().isOk());
+        saveEndedDiscount(10, lastWeek, lastWeek);
         createTodayDiscount(20);
         mockMvc.perform(post(url()).contentType(JSON).header(HttpHeaders.AUTHORIZATION, auth)
                 .content(discountBody(30, nextWeek, nextWeek))).andExpect(status().isOk());

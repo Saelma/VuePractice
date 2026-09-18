@@ -5,10 +5,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.glassvue.domain.coupon.entity.Coupon;
+import com.glassvue.domain.coupon.entity.DiscountType;
+import com.glassvue.domain.coupon.repository.CouponRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
 import com.jayway.jsonpath.JsonPath;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +41,7 @@ class CouponFlowIntegrationTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired MemberRepository memberRepository;
+    @Autowired CouponRepository couponRepository;
     @Autowired PasswordEncoder passwordEncoder;
 
     private static final String JSON = "application/json";
@@ -76,7 +81,7 @@ class CouponFlowIntegrationTest {
                         .contentType(JSON)
                         .content("{\"name\":\"ZZ 5천원\",\"discountType\":\"FIXED\",\"discountValue\":5000,"
                                + "\"minOrderAmount\":30000,"
-                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2027-01-01T00:00:00Z\"}"))
+                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2099-01-01T00:00:00Z\"}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String couponId = JsonPath.read(body, "$.data");
 
@@ -109,7 +114,7 @@ class CouponFlowIntegrationTest {
                         .contentType(JSON)
                         .content("{\"name\":\"ZZ 잘리는쿠폰\",\"discountType\":\"FIXED\",\"discountValue\":5000,"
                                + "\"minOrderAmount\":1000,"
-                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2027-01-01T00:00:00Z\"}"))
+                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2099-01-01T00:00:00Z\"}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String couponId = JsonPath.read(body, "$.data");
         mockMvc.perform(post("/api/admin/coupons/" + couponId + "/issue?memberId=" + userId)
@@ -169,7 +174,7 @@ class CouponFlowIntegrationTest {
                         .contentType(JSON)
                         .content("{\"name\":\"" + name + "\",\"discountType\":\"PERCENT\",\"discountValue\":10,"
                                + "\"minOrderAmount\":10000,\"maxDiscountAmount\":3000,"
-                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2027-01-01T00:00:00Z\"}"))
+                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2099-01-01T00:00:00Z\"}"))
                 .andExpect(status().isOk());
 
         // 200 을 상태코드로만 보지 않고 "정의가 실제로 실려 오는지" 까지 본다(기본 정렬 createdAt DESC).
@@ -189,13 +194,10 @@ class CouponFlowIntegrationTest {
     @DisplayName("🔴 사용 기간이 끝난 쿠폰은 수동 발급이 거절되고, 발급 창만 닫힌 이벤트 쿠폰은 발급된다")
     void issueRejectsExpiredButAllowsClosedEventWindow() throws Exception {
         String admin = login(adminLoginId);
-        String expired = JsonPath.read(createCoupon(admin, couponBody("FIXED", 1000,
-                "2026-01-01T00:00:00Z", "2026-01-31T00:00:00Z")).andReturn().getResponse().getContentAsString(), "$.data");
-        String closedEvent = JsonPath.read(createCoupon(admin,
-                "{\"name\":\"ZZ 창닫힌이벤트\",\"discountType\":\"FIXED\",\"discountValue\":1000,\"minOrderAmount\":0,"
-                        + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"issueUntil\":\"2026-01-01T23:59:59Z\","
-                        + "\"validUntil\":\"2099-01-01T00:00:00Z\"}")
-                .andReturn().getResponse().getContentAsString(), "$.data");
+        // ⚠ 둘 다 이제 API 로는 못 만든다(2026-09-18, 400Y·400Z) — 정책 이전에 만들어져 끝난 쿠폰을 재현한다.
+        String expired = savedCoupon("ZZ Q축", "2026-01-01T00:00:00Z", "2026-01-31T00:00:00Z", null);
+        String closedEvent = savedCoupon("ZZ 창닫힌이벤트", "2026-01-01T00:00:00Z", "2099-01-01T00:00:00Z",
+                "2026-01-01T23:59:59Z");
 
         mockMvc.perform(post("/api/admin/coupons/" + expired + "/issue?memberId=" + userId).header("Authorization", admin))
                 .andExpect(status().isBadRequest())
@@ -211,8 +213,7 @@ class CouponFlowIntegrationTest {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         String expiredName = "ZZ탭만료 " + suffix;
         String activeName = "ZZ탭유효 " + suffix;
-        createCoupon(admin, couponBody("FIXED", 1000, "2026-01-01T00:00:00Z", "2026-01-31T00:00:00Z")
-                .replace("ZZ Q축", expiredName)).andExpect(status().isOk());
+        savedCoupon(expiredName, "2026-01-01T00:00:00Z", "2026-01-31T00:00:00Z", null);
         createCoupon(admin, couponBody("FIXED", 1000, "2026-01-01T00:00:00Z", "2099-01-01T00:00:00Z")
                 .replace("ZZ Q축", activeName)).andExpect(status().isOk());
 
@@ -243,21 +244,72 @@ class CouponFlowIntegrationTest {
                 .contentType(JSON).content(body));
     }
 
+    /**
+     * 쿠폰을 <b>리포지토리로 바로</b> 만든다 — 이미 끝난 쿠폰은 API 로 더 못 만든다(2026-09-18).
+     * ⚠ 정책을 안 타는 픽스처다(WA §3 «픽스처는 두 갈래») — «정책 이전에 만들어져 끝난 쿠폰» 을 재현하는 자리다.
+     */
+    private String savedCoupon(String name, String from, String until, String issueUntil) {
+        return couponRepository.save(Coupon.builder()
+                .name(name).discountType(DiscountType.FIXED).discountValue(1_000L).minOrderAmount(30_000L)
+                .validFrom(Instant.parse(from)).validUntil(Instant.parse(until))
+                .issueUntil(issueUntil == null ? null : Instant.parse(issueUntil))
+                .build()).getId().toString();
+    }
+
+    @Test
+    @DisplayName("🔴 이미 끝난 쿠폰은 만들 수 없다 — 사용 마감이 지났으면 400Y, 이벤트 발급 창이 닫혔으면 400Z")
+    void createRejectsAlreadyEnded() throws Exception {
+        String admin = login(adminLoginId);
+
+        // 사용 마감이 지났다 → 발급(400F)·가입 지정(400X)이 뒤에서 막아 아무에게도 못 가는 정의가 된다.
+        createCoupon(admin, couponBody("FIXED", 1000, "2026-01-01T00:00:00Z", "2026-01-31T00:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COUPON-400Y"));
+
+        // 쓸 수는 있지만 발급 창이 이미 닫힌 이벤트 → 「받기」가 한 번도 안 열린다.
+        createCoupon(admin, "{\"name\":\"ZZ 창닫힌이벤트\",\"discountType\":\"FIXED\",\"discountValue\":1000,"
+                        + "\"minOrderAmount\":0,\"validFrom\":\"2026-01-01T00:00:00Z\","
+                        + "\"issueUntil\":\"2026-01-01T23:59:59Z\",\"validUntil\":\"2099-01-01T00:00:00Z\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COUPON-400Z"));
+
+        // 🔴 **순서** — 창이 뒤집혔으면서 지난 날이기도 하면 **뒤집힌 쪽(400W)** 으로 답한다(/code-review 지적).
+        //    ① 발급 마감이 시작보다 앞(마감은 지난 날) ② 사용 마감이 발급 마감보다 앞(사용 마감은 지난 날).
+        createCoupon(admin, "{\"name\":\"ZZ 뒤집힌창\",\"discountType\":\"FIXED\",\"discountValue\":1000,"
+                        + "\"minOrderAmount\":0,\"validFrom\":\"2098-01-01T00:00:00Z\","
+                        + "\"issueUntil\":\"2026-01-01T23:59:59Z\",\"validUntil\":\"2099-01-01T00:00:00Z\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COUPON-400W"));
+        createCoupon(admin, "{\"name\":\"ZZ 받자마자만료\",\"discountType\":\"FIXED\",\"discountValue\":1000,"
+                        + "\"minOrderAmount\":0,\"validFrom\":\"2025-12-01T00:00:00Z\","
+                        + "\"issueUntil\":\"2026-02-01T00:00:00Z\",\"validUntil\":\"2026-01-01T00:00:00Z\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COUPON-400W"));
+
+        // 🔴 대조군 — **아직 시작 전**인 쿠폰은 만들어진다(미리 만들어 두는 것이 정상이다).
+        //    «끝났나» 가 아니라 «유효한가» 로 잘못 물으면 여기가 빨개진다.
+        createCoupon(admin, couponBody("FIXED", 1000, "2098-01-01T00:00:00Z", "2099-01-01T00:00:00Z"))
+                .andExpect(status().isOk());
+    }
+
     @Test
     @DisplayName("🔴 상시 쿠폰도 사용 기간이 뒤집히면 거절된다 — 그전엔 이벤트 쿠폰만 검사했다")
     void plainCouponWithReversedPeriodIsRejected() throws Exception {
         String admin = login(adminLoginId);
 
         // 사용 마감이 시작보다 앞이다 → 만들어지면 «영원히 못 쓰는 쿠폰» 이 조용히 남는다.
-        createCoupon(admin, couponBody("FIXED", 5000, "2027-01-01T00:00:00Z", "2026-01-01T00:00:00Z"))
-                .andExpect(status().isBadRequest());
+        // ⚠ 마감(2026-01-01)이 지난 날이기도 하다 — 더 근본적인 쪽(400V)으로 답해야 한다(2026-09-18).
+        createCoupon(admin, couponBody("FIXED", 5000, "2099-01-01T00:00:00Z", "2026-01-01T00:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COUPON-400V"));
 
         // ⚠ 같은 날은? «이후» 를 요구하므로 거절이다 — 0초짜리 쿠폰은 못 쓰는 쿠폰과 같다.
         createCoupon(admin, couponBody("FIXED", 5000, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COUPON-400V"));
 
         // 🔴 대조군 — 정상 기간은 만들어진다. 없으면 «전부 거절» 과 구별이 안 된다.
-        createCoupon(admin, couponBody("FIXED", 5000, "2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"))
+        createCoupon(admin, couponBody("FIXED", 5000, "2026-01-01T00:00:00Z", "2099-01-01T00:00:00Z"))
                 .andExpect(status().isOk());
     }
 
@@ -266,11 +318,11 @@ class CouponFlowIntegrationTest {
     void percentOver100IsRejected() throws Exception {
         String admin = login(adminLoginId);
 
-        createCoupon(admin, couponBody("PERCENT", 101, "2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"))
+        createCoupon(admin, couponBody("PERCENT", 101, "2026-01-01T00:00:00Z", "2099-01-01T00:00:00Z"))
                 .andExpect(status().isBadRequest());
 
         // ⚠ 100% 는 «전액 할인» 이라 뜻이 있다 — 막지 않는다.
-        createCoupon(admin, couponBody("PERCENT", 100, "2026-01-01T00:00:00Z", "2027-01-01T00:00:00Z"))
+        createCoupon(admin, couponBody("PERCENT", 100, "2026-01-01T00:00:00Z", "2099-01-01T00:00:00Z"))
                 .andExpect(status().isOk());
     }
 
@@ -286,7 +338,7 @@ class CouponFlowIntegrationTest {
         mockMvc.perform(post("/api/admin/coupons").header("Authorization", admin).contentType(JSON)
                         .content("{\"name\":\"ZZ 퍼주는\",\"discountType\":\"FIXED\",\"discountValue\":5000,"
                                + "\"minOrderAmount\":1000,"
-                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2027-01-01T00:00:00Z\"}"))
+                               + "\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2099-01-01T00:00:00Z\"}"))
                 .andExpect(status().isOk());
     }
 }

@@ -74,9 +74,17 @@ public class CouponService {
      */
     @Transactional
     public UUID create(CouponCreateRequest req, AuthUser actor) {
+        // 🔴 **순서가 곧 답이다**(2026-09-18): 뒤집힌 기간(400V·400W) → 이미 끝났나(400Y·400Z) → 겹침(400O).
+        //    둘 이상 틀렸으면 **더 근본적인 쪽**으로 답한다 — 뒤집힌 창은 «지났다» 보다 먼저 고칠 것이고,
+        //    이미 끝난 창을 운영 이벤트와 겹친다고 답하면 관리자는 엉뚱한 쿠폰을 찾는다.
         validateValues(req);
-        if (req.issueUntil() != null) {
+        boolean event = req.issueUntil() != null;
+        if (event) {
             validateEventWindow(req.validFrom(), req.issueUntil(), req.validUntil());
+        }
+        ensureNotAlreadyEnded(req);
+        if (event) {
+            ensureNoEventOverlap(req.validFrom(), req.issueUntil());
         }
         Coupon coupon = couponRepository.save(Coupon.builder()
                 .name(req.name())
@@ -123,14 +131,25 @@ public class CouponService {
     }
 
     /**
-     * 이벤트 쿠폰 등록 검증 셋(G-8).
+     * 🔴 <b>이미 끝난 기간으로도 만들어졌다</b>(2026-09-18, BACKLOG Q-8) — 발급(400F)·가입 지정(400X)이
+     * 뒤에서 막으니 아무에게도 못 가는 정의가 「만료됨」 탭에 조용히 쌓인다.
      *
-     * <p>🔴 <b>앱이 유일한 방어다.</b> Oracle 유니크 인덱스로는 «기간 겹침» 을 못 막는다 —
-     * {@code welcome} 처럼 «행이 하나» 를 막는 것이면 함수기반 인덱스로 됐겠지만, 여기서 막아야 하는
-     * 것은 <b>미래 이벤트를 여러 개 등록해 두되 발급 창만 안 겹치게</b> 하는 것이다
-     * (달력 예고를 하려면 미래 행이 여러 개 있어야 한다).
-     * → DB 가 받쳐 주지 않으므로 «겹치는 둘을 등록» 을 <b>테스트로 못 박아 둔다.</b>
+     * <p>⚠ <b>시작 전 쿠폰은 막지 않는다</b> — 미리 만들어 두는 것이 정상이다(«유효한가» 가 아니라 «끝났나» 다).
+     * ⚠ 뒤집힌 기간 검사 <b>뒤</b>, 겹침 검사 <b>앞</b>에서 불린다({@link #create} 의 순서).
      */
+    private void ensureNotAlreadyEnded(CouponCreateRequest req) {
+        Instant now = Instant.now();
+        if (now.isAfter(req.validUntil())) {
+            throw new BusinessException(ErrorCode.COUPON_CREATE_EXPIRED);
+        }
+        // 발급 창이 이미 닫힌 이벤트는 「받기」가 한 번도 안 열린다. 관리자 수동 발급(CS)은 되지만
+        // 그건 상시 쿠폰으로 만들면 되는 일이다.
+        if (req.issueUntil() != null && now.isAfter(req.issueUntil())) {
+            throw new BusinessException(ErrorCode.COUPON_CREATE_WINDOW_CLOSED);
+        }
+    }
+
+    /** 이벤트 발급 창의 모양(G-8) — 뒤집혔거나 사용 기간 밖으로 삐져나가면 400W. */
     private void validateEventWindow(Instant validFrom, Instant issueUntil, Instant validUntil) {
         // 발급 창이 뒤집히면(마감이 시작보다 앞) 아무도 못 받는 이벤트가 조용히 등록된다.
         if (issueUntil.isBefore(validFrom)) {
@@ -140,6 +159,19 @@ public class CouponService {
         if (validUntil.isBefore(issueUntil)) {
             throw new BusinessException(ErrorCode.COUPON_ISSUE_WINDOW_INVALID);
         }
+    }
+
+    /**
+     * 이벤트 발급 창 겹침(G-8) — 2026-09-18 에 {@link #validateEventWindow} 에서 떼어 냈다.
+     * 이미 끝난 창은 여기 오기 전에 거절된다({@link #create} 의 순서).
+     *
+     * <p>🔴 <b>앱이 유일한 방어다.</b> Oracle 유니크 인덱스로는 «기간 겹침» 을 못 막는다 —
+     * {@code welcome} 처럼 «행이 하나» 를 막는 것이면 함수기반 인덱스로 됐겠지만, 여기서 막아야 하는
+     * 것은 <b>미래 이벤트를 여러 개 등록해 두되 발급 창만 안 겹치게</b> 하는 것이다
+     * (달력 예고를 하려면 미래 행이 여러 개 있어야 한다).
+     * → DB 가 받쳐 주지 않으므로 «겹치는 둘을 등록» 을 <b>테스트로 못 박아 둔다.</b>
+     */
+    private void ensureNoEventOverlap(Instant validFrom, Instant issueUntil) {
         List<Coupon> conflicts = couponRepository.findEventsOverlapping(validFrom, issueUntil);
         if (!conflicts.isEmpty()) {
             // 🔴 «겹친다» 만 말하면 확인할 방법이 없다 — 관리자는 목록에서 발급 창을 눈으로 맞춰 봐야 하고,

@@ -27,6 +27,7 @@ import {
   fetchProductDiscounts, createProductDiscount, updateProductDiscount, deleteProductDiscount,
   discountStatusText,
 } from '../api/product';
+import { fetchServerToday } from '../api/period';
 import EmptyState from '../components/EmptyState.vue';
 import SkeletonList from '../components/SkeletonList.vue';
 
@@ -39,6 +40,12 @@ const error = ref('');
 const formError = ref('');
 const busy = ref('');
 const saving = ref(false);
+
+/**
+ * 서버가 알려 준 KST 오늘 — 종료일 칸의 `min` 과 «이미 지난 기간» 안내가 쓴다.
+ * 🔴 **브라우저 시계로 대신하지 않는다**(B-26). 못 받으면 비워 두고 서버의 400(`PRODUCT-400DE`)에 맡긴다.
+ */
+const todayKst = ref('');
 
 /** 수정 중인 할인 id. null 이면 「새로 등록」이다. */
 const editingId = ref(null);
@@ -63,6 +70,13 @@ async function load() {
 }
 
 onMounted(load);
+onMounted(async () => {
+  try {
+    todayKst.value = (await fetchServerToday()).today;
+  } catch {
+    todayKst.value = '';
+  }
+});
 
 /** 세일 전 판매가 — 되읽기 문장이 쓸 기준값이다. ⚠ `price` 가 아니다(그건 이미 할인된 값일 수 있다). */
 const basePrice = computed(() => product.value?.regularPrice ?? 0);
@@ -86,6 +100,15 @@ const previewText = computed(() => {
 const periodInvalid = computed(() => {
   const { startDate, endDate } = form.value;
   return !!startDate && !!endDate && endDate < startDate;
+});
+
+/**
+ * 종료일이 이미 지났다 — 한 순간도 유효하지 않은 세일이다(2026-09-18, 서버는 `PRODUCT-400DE`).
+ * ⚠ 시작일은 안 본다 — 진행 중인 세일을 고칠 때 시작일은 늘 지난 날이다.
+ */
+const periodPast = computed(() => {
+  const { endDate } = form.value;
+  return !!todayKst.value && !!endDate && endDate < todayKst.value;
 });
 
 function dateText(iso) {
@@ -115,6 +138,10 @@ async function onSubmit() {
   }
   if (periodInvalid.value) {
     formError.value = '종료일은 시작일보다 뒤여야 합니다.';
+    return;
+  }
+  if (periodPast.value) {
+    formError.value = '종료일이 이미 지났습니다.';
     return;
   }
   saving.value = true;
@@ -221,7 +248,7 @@ function badgeClass(status) {
           </label>
           <label class="field">
             <span class="field-label">종료일</span>
-            <input v-model="form.endDate" type="date" class="ipt" />
+            <input v-model="form.endDate" type="date" class="ipt" :min="todayKst || undefined" />
             <span class="muted">이 날이 <b>끝날 때까지</b> 세일입니다</span>
           </label>
         </div>
@@ -229,10 +256,11 @@ function badgeClass(status) {
         <!-- 만들 것을 문장으로 되읽어 준다 (G-8 의 「조용히 상시 쿠폰」 사고 이후의 규칙) -->
         <p v-if="previewText" class="muted">{{ previewText }}</p>
         <p v-if="periodInvalid" class="alert-error">종료일이 시작일보다 앞입니다.</p>
+        <p v-else-if="periodPast" class="alert-error">종료일이 이미 지났습니다 — 한 번도 적용되지 않는 세일입니다.</p>
         <p v-if="formError" class="alert-error">{{ formError }}</p>
 
         <div class="flex gap-2">
-          <button type="submit" class="btn btn-primary btn-sm" :disabled="saving || periodInvalid">
+          <button type="submit" class="btn btn-primary btn-sm" :disabled="saving || periodInvalid || periodPast">
             {{ saving ? '저장 중…' : (editingId ? '수정' : '등록') }}
           </button>
           <button v-if="editingId" type="button" class="btn btn-secondary btn-sm" @click="resetForm">
@@ -266,17 +294,25 @@ function badgeClass(status) {
             <p class="font-medium tabular-nums text-ink-900">{{ row.rate }}% 할인</p>
             <p class="muted mt-1 text-sm tabular-nums">{{ row.startDate }} ~ {{ row.endDate }}</p>
           </div>
-          <button
-            type="button"
-            class="btn btn-secondary btn-sm shrink-0"
-            @click="startEdit(row)"
-          >수정</button>
-          <button
-            type="button"
-            class="btn btn-danger btn-sm shrink-0"
-            :disabled="busy === row.id"
-            @click="onDelete(row)"
-          >{{ busy === row.id ? '삭제 중…' : '삭제' }}</button>
+          <!--
+            🔴 끝난 세일은 **고치지도 지우지도 않는다**(2026-09-18, 서버는 `PRODUCT-409DE`) — 지난 세일의 기록이다.
+               버튼을 그렸다가 409 를 보여 주지 않고, **왜 없는지**를 한 줄로 말한다(쿠폰 「삭제」 버튼과 같은 방식).
+               `status` 는 서버가 정한 값이라 거절 기준과 같은 경계다.
+          -->
+          <p v-if="row.status === 'ENDED'" class="muted shrink-0 text-sm">지난 세일은 기록으로 남습니다</p>
+          <template v-else>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm shrink-0"
+              @click="startEdit(row)"
+            >수정</button>
+            <button
+              type="button"
+              class="btn btn-danger btn-sm shrink-0"
+              :disabled="busy === row.id"
+              @click="onDelete(row)"
+            >{{ busy === row.id ? '삭제 중…' : '삭제' }}</button>
+          </template>
         </li>
       </ul>
     </template>

@@ -14,6 +14,7 @@ import {
 } from '../api/coupon';
 import { fetchAdminMembers, roleText } from '../api/member';
 import { priceText } from '../api/product';
+import { fetchServerToday } from '../api/period';
 import EmptyState from '../components/EmptyState.vue';
 
 const coupons = ref([]);
@@ -52,6 +53,19 @@ async function loadCoupons() {
   }
 }
 onMounted(loadCoupons);
+
+/**
+ * 서버가 알려 준 KST 오늘 — 종료일·발급 마감일 칸의 `min` 과 저장 전 안내가 쓴다(2026-09-18).
+ * 🔴 브라우저 시계로 대신하지 않는다(B-26). 못 받으면 비워 두고 서버의 400(`COUPON-400Y`·`400Z`)에 맡긴다.
+ */
+const todayKst = ref('');
+onMounted(async () => {
+  try {
+    todayKst.value = (await fetchServerToday()).today;
+  } catch {
+    todayKst.value = '';
+  }
+});
 
 function switchTab(value) {
   if (tab.value === value) return;
@@ -158,11 +172,15 @@ async function onCreate() {
   if (isPercent.value && form.discountValue > 100) { createMsg.err = '정률 할인은 100%를 넘을 수 없습니다.'; return; }
   if (!form.validFrom || !form.validUntil) { createMsg.err = '유효기간을 지정하세요.'; return; }
   if (form.validFrom > form.validUntil) { createMsg.err = '시작일이 종료일보다 늦습니다.'; return; }
+  // 이미 끝난 쿠폰은 만들지 않는다 — 발급·가입 지정이 뒤에서 막아 아무에게도 못 간다(서버 COUPON-400Y).
+  if (todayKst.value && form.validUntil < todayKst.value) { createMsg.err = '유효 종료일이 이미 지났습니다.'; return; }
   // ⚠ 서버도 같은 것을 막는다(COUPON-400W). 여기서 먼저 보는 건 왕복 없이 알려주기 위해서다 —
   //    「겹치는 이벤트가 이미 있다」는 화면이 알 수 없어 서버 답을 그대로 띄운다.
   if (form.issueUntil) {
     if (form.issueUntil < form.validFrom) { createMsg.err = '발급 마감일이 시작일보다 빠릅니다.'; return; }
     if (form.issueUntil > form.validUntil) { createMsg.err = '발급 마감일이 사용 종료일보다 늦습니다 — 받자마자 만료됩니다.'; return; }
+    // 발급 창이 이미 닫혔으면 「받기」가 한 번도 안 열린다(서버 COUPON-400Z).
+    if (todayKst.value && form.issueUntil < todayKst.value) { createMsg.err = '발급 마감일이 이미 지났습니다.'; return; }
   }
 
   createMsg.loading = true;
@@ -362,7 +380,7 @@ async function onDeleteCoupon(c) {
           </label>
           <label class="field">
             <span class="field-label">유효 종료일</span>
-            <input v-model="form.validUntil" type="date" class="ipt" />
+            <input v-model="form.validUntil" type="date" class="ipt" :min="todayKst || undefined" />
           </label>
         </div>
 
@@ -377,7 +395,7 @@ async function onDeleteCoupon(c) {
           <legend class="px-1 text-xs text-ink-500">이벤트 쿠폰으로 만들기 (선택)</legend>
           <label class="field">
             <span class="field-label">발급 마감일 — 비우면 상시 쿠폰</span>
-            <input v-model="form.issueUntil" type="date" class="ipt" @change="onIssueUntilChange" />
+            <input v-model="form.issueUntil" type="date" class="ipt" :min="todayKst || undefined" @change="onIssueUntilChange" />
           </label>
           <!--
             ⚠ 한 문단으로 붙여 놨더니 줄이 안 나뉘어 안 읽혔다(2026-08-13, 사용자 지적).

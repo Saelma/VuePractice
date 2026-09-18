@@ -6,6 +6,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.glassvue.domain.coupon.entity.Coupon;
+import com.glassvue.domain.coupon.entity.DiscountType;
+import com.glassvue.domain.coupon.repository.CouponRepository;
 import com.glassvue.domain.member.entity.Member;
 import com.glassvue.domain.member.entity.Role;
 import com.glassvue.domain.member.repository.MemberRepository;
@@ -57,6 +60,7 @@ class EventCouponIntegrationTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired MemberRepository memberRepository;
+    @Autowired CouponRepository couponRepository;
     @Autowired PasswordEncoder passwordEncoder;
 
     private static final String JSON = "application/json";
@@ -226,9 +230,15 @@ class EventCouponIntegrationTest {
         // ⚠ 한 해 전이 안전한 것은 우연이 아니다: **이벤트 쿠폰 기능은 2026-08-13 에 생겼다**(G-8, V49).
         //    그 이전 발급 창을 가진 쿠폰은 **구조적으로 있을 수 없다** — «아마 없겠지» 가 아니다.
         //    (근본은 그대로다: 공유 DB라 운영 상태를 전제하는 단언은 언젠가 깨진다 — 08-13 §9-4.)
+        //
+        // ⚠ **리포지토리로 넣는다**(2026-09-18) — 발급 창이 이미 닫힌 이벤트는 API 로 더 못 만든다(`COUPON-400Z`).
+        //    그래서 겹침 검사도 안 탄다 — 위 «한 해 전» 은 이제 운영 이벤트와 헷갈리지 않게 하는 값으로만 남는다.
         String closed = "ZZ지난해 이벤트 " + UUID.randomUUID().toString().substring(0, 8);
-        createCoupon(admin, closed, now.minus(400, ChronoUnit.DAYS),
-                now.minus(399, ChronoUnit.DAYS), now.plus(20, ChronoUnit.DAYS)).andExpect(status().isOk());
+        couponRepository.save(Coupon.builder()
+                .name(closed).discountType(DiscountType.FIXED).discountValue(3_000L).minOrderAmount(0L)
+                .validFrom(now.minus(400, ChronoUnit.DAYS)).issueUntil(now.minus(399, ChronoUnit.DAYS))
+                .validUntil(now.plus(20, ChronoUnit.DAYS))
+                .build());
 
         String banner = mockMvc.perform(get("/api/coupons/event").header("Authorization", user))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();

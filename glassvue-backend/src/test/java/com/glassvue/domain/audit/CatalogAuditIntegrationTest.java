@@ -349,7 +349,7 @@ class CatalogAuditIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, auth)
                         .content("{\"name\":\"" + name + "\",\"discountType\":\"FIXED\","
                                 + "\"discountValue\":5000,\"validFrom\":\"2026-01-01T00:00:00Z\","
-                                + "\"validUntil\":\"2027-01-01T00:00:00Z\"}"))
+                                + "\"validUntil\":\"2099-01-01T00:00:00Z\"}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         return UUID.fromString(JsonPath.read(res, "$.data"));
     }
