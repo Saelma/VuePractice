@@ -42,7 +42,7 @@ CONNECT="$DB_USER/$DB_PASSWORD@//$DB_HOST:$DB_PORT/$DB_SERVICE"
 PARFILE=$(umask 077; mktemp)
 SQLFILE=$(umask 077; mktemp)
 trap 'rm -f "$PARFILE" "$SQLFILE"' EXIT
-# 비밀번호는 명령줄에 안 올린다(backup-db.sh 와 같은 이유 — /proc/<pid>/cmdline).
+# 비밀번호는 명령줄에 안 올린다(backup-db.sh 와 같은 이유). `whenever sqlerror` 는 `connect` 앞이다.
 printf 'userid=%s\ndirectory=%s\ndumpfile=%s\nlogfile=%s\nremap_schema=%s:%s\ntable_exists_action=replace\n' \
   "$CONNECT" "$DIR_OBJECT" "$DUMP" "$IMP_LOG" "$DB_USER" "$TARGET" > "$PARFILE"
 
@@ -55,7 +55,7 @@ OTHER_ERR=$(grep -oE 'ORA-[0-9]+' "$BACKUP_DIR/$IMP_LOG" 2>/dev/null | grep -v '
 
 # 풀린 쪽: esptest 의 테이블별 실제 행 수(통계가 아니라 count(*)).
 {
-  printf 'connect %s\nset pagesize 0 feedback off heading off linesize 200 serveroutput on\nwhenever sqlerror exit 2\n' "$CONNECT"
+  printf 'whenever sqlerror exit 2\nconnect %s\nset pagesize 0 feedback off heading off linesize 200 serveroutput on\n' "$CONNECT"
   printf "declare n number; begin for t in (select table_name from all_tables where owner='%s') loop\n" "$TARGET"
   printf "execute immediate 'select count(*) from %s.\"'||t.table_name||'\"' into n; dbms_output.put_line(t.table_name||' '||n); end loop; end;\n/\nexit\n" "$TARGET"
 } > "$SQLFILE"

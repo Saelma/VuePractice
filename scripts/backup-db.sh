@@ -44,8 +44,8 @@ LOG="esp-$STAMP.log"
 TAR="uploads-$STAMP.tar.gz"
 CONNECT="$DB_USER/$DB_PASSWORD@//$DB_HOST:$DB_PORT/$DB_SERVICE"
 
-# 🔴 **비밀번호를 명령줄에 올리지 않는다** — `/proc/<pid>/cmdline` 은 누구에게나 읽힌다
-#    (db/migration/README 가 2026-08-04 에 같은 이유로 `--args` 를 버렸다). 권한 600 파라미터 파일로 넘기고 지운다.
+# 🔴 **비밀번호를 명령줄에 올리지 않는다** — 명령줄 인자는 `/proc/<pid>/cmdline` 에 보인다 — sqlplus 는 뜬 직후 접속 문자열을 공백으로 덮지만(2026-09-18 실측) 그 전 짧은 창이 있고, expdp·java 는 덮어 준다는 보장이 없다
+#    (db/migration/README 가 2026-08-04 에 java 의 `--args` 를 버린 것과 같은 판단). 권한 600 파라미터 파일로 넘기고 지운다.
 PARFILE=$(umask 077; mktemp)
 SQLFILE=$(umask 077; mktemp)
 trap 'rm -f "$PARFILE" "$SQLFILE"' EXIT
@@ -57,7 +57,7 @@ expdp parfile="$PARFILE" > /dev/null 2>&1
 EXPDP_RC=$?
 
 # 대조 기준: 지금 DB 의 테이블 수. sqlplus 도 `connect` 를 입력으로 넘겨 명령줄에 비밀번호를 안 남긴다.
-printf 'connect %s\nset pagesize 0 feedback off heading off\nwhenever sqlerror exit 2\nselect count(*) from user_tables;\nexit\n' \
+printf 'whenever sqlerror exit 2\nconnect %s\nset pagesize 0 feedback off heading off\nselect count(*) from user_tables;\nexit\n' \
   "$CONNECT" > "$SQLFILE"
 TABLES=$(sqlplus -s -L /nolog < "$SQLFILE" | tr -d '[:space:]')
 

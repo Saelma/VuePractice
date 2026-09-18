@@ -214,8 +214,11 @@ if [ "$MARKS" -eq 1 ] && [ "$TODAY" = "$(date +%F)" ] && [ -f "$REPO_DIR/.env" ]
       [ -z "$SQL_LINES" ] && exit 0
       # ⚠ **20초 상한**. 배포 관문에서 도는 자리라 DB 가 응답이 없으면 매달린다 —
       #   못 붙는 것은 «못 붙었다» 로 빨리 말하는 것이 낫다(-L 은 재시도만 막지 무응답은 못 막는다).
-      ACTUAL=$(printf 'set heading off feedback off pagesize 0 linesize 200\nwhenever sqlerror exit 2\n%sexit\n' "$SQL_LINES" \
-               | timeout 20 sqlplus -s -L "$DB_USER/$DB_PASSWORD@//$DB_HOST:$DB_PORT/$DB_SERVICE" 2>/dev/null)
+      # 🔴 비밀번호는 명령줄이 아니라 표준입력의 `connect` 로 넘긴다(2026-09-18 — 명령줄 인자는 `/proc/<pid>/cmdline` 에 보인다 — sqlplus 는 뜬 직후 접속 문자열을 공백으로 덮지만(2026-09-18 실측) 그 전 짧은 창이 있고, expdp·java 는 덮어 준다는 보장이 없다).
+      #    `whenever sqlerror` 는 `connect` **앞** — 그래야 접속 실패가 실패로 끝난다.
+      ACTUAL=$(printf 'whenever sqlerror exit 2\nconnect %s/%s@//%s:%s/%s\nset heading off feedback off pagesize 0 linesize 200\nwhenever sqlerror exit 2\n%sexit\n' \
+                 "$DB_USER" "$DB_PASSWORD" "$DB_HOST" "$DB_PORT" "$DB_SERVICE" "$SQL_LINES" \
+               | timeout 20 sqlplus -s -L /nolog 2>/dev/null)
       # 🔴 «못 붙었다» 를 **명시 신호**로 남긴다. 빈 파일로 두면 «맞았다» 와 구별이 안 된다(WA §3-6).
       echo "$ACTUAL" | grep -q '|' || { echo "__NOCONN__"; exit 0; }
       while read -r name val; do

@@ -30,7 +30,11 @@ export ORACLE_HOME="${ORACLE_HOME:-/opt/oracle/product/19c/dbhome_1}"
 export PATH="$ORACLE_HOME/bin:$PATH"
 export NLS_LANG="${NLS_LANG:-KOREAN_KOREA.AL32UTF8}"
 
-OUT=$(sqlplus -s -L "$DB_USER/$DB_PASSWORD@//$DB_HOST:$DB_PORT/$DB_SERVICE" <<'SQL'
+# 🔴 **비밀번호를 명령줄에 올리지 않는다**(2026-09-18). 명령줄 인자는 `/proc/<pid>/cmdline` 에 보인다 — sqlplus 는 뜬 직후 접속 문자열을 공백으로 덮지만(2026-09-18 실측) 그 전 짧은 창이 있고, expdp·java 는 덮어 준다는 보장이 없다.
+#    `/nolog` 로 띄우고 `connect` 를 표준입력으로 넘긴다 — `printf` 는 bash 내장이라 따로 프로세스가 안 생긴다.
+#    🔴 `whenever sqlerror` 를 **`connect` 앞**에 둔다 — 뒤에 두면 접속 실패에도 sqlplus 가 0 으로 끝나고, 뒤이은
+#    «Not connected» 오류 줄들이 불변식으로 세어져 «20개 중 22개만 읽혔다» 같은 **틀린 이유**가 찍혔다(실측).
+OUT=$( { printf 'whenever sqlerror exit 2\nconnect %s/%s@//%s:%s/%s\n' "$DB_USER" "$DB_PASSWORD" "$DB_HOST" "$DB_PORT" "$DB_SERVICE"; cat <<'SQL'
 set pagesize 0 feedback off heading off linesize 200
 whenever sqlerror exit 2
 
@@ -170,7 +174,7 @@ select 'notif 가 없는 상품을 가리킨다|'||count(*) from notification n
                     where p.id = hextoraw(replace(regexp_substr(n.link,'[0-9a-f-]{36}$'),'-','')));
 exit
 SQL
-)
+} | sqlplus -s -L /nolog)
 
 if [ $? -ne 0 ]; then
   echo "⚠ DB 에 못 붙었거나 쿼리가 실패했다 — 판정 불가:"; echo "$OUT" | sed 's/^/    /'; exit 2

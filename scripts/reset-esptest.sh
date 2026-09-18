@@ -27,13 +27,14 @@ export PATH="$ORACLE_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="$ORACLE_HOME/lib:${LD_LIBRARY_PATH:-}"
 export NLS_LANG=AMERICAN_AMERICA.AL32UTF8
 
-# 비밀번호를 명령줄에 안 올린다 — `connect` 를 표준입력으로 넘긴다(/proc/<pid>/cmdline 은 누구에게나 읽힌다).
+# 비밀번호를 명령줄에 안 올린다 — `connect` 를 표준입력으로 넘긴다(명령줄 인자는 `/proc/<pid>/cmdline` 에 보인다 — sqlplus 는 뜬 직후 접속 문자열을 공백으로 덮지만(2026-09-18 실측) 그 전 짧은 창이 있고, expdp·java 는 덮어 준다는 보장이 없다).
+# `whenever sqlerror` 는 `connect` **앞** — 뒤에 두면 접속 실패가 0 으로 끝나 뒤 PL/SQL 이 «Not connected» 로 헛돈다.
 SQLFILE=$(umask 077; mktemp)
 trap 'rm -f "$SQLFILE"' EXIT
 cat > "$SQLFILE" <<SQL
+whenever sqlerror exit 2
 connect esptest/${ESPTEST_PASSWORD}@//${DB_HOST}:${DB_PORT}/${DB_SERVICE:-espdb}
 set serveroutput on pagesize 0 feedback off heading off linesize 200
-whenever sqlerror exit 2
 BEGIN
   IF USER <> 'ESPTEST' THEN RAISE_APPLICATION_ERROR(-20001, 'not esptest: '||USER); END IF;
   -- 의존하는 쪽부터: 뷰·시노님 → 테이블(제약·인덱스·LOB·트리거가 함께 간다) → 나머지.
