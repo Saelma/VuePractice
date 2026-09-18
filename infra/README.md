@@ -211,9 +211,83 @@ curl --cacert glassvue.crt https://127.0.0.1/api/products   # 200 이어야 한�
 # 호스트에서는: curl --cacert glassvue.crt https://localhost/api/products
 ```
 
+## 데이터 백업 (2026-09-18, BACKLOG F-5)
+
+위 절들은 **서버를 다시 세우는 법**이고, 여기는 **그 위에 쌓인 데이터**다. 둘은 따로다 —
+Flyway 는 스키마를 만들 뿐이고, 주문·회원·이미지는 **이 절차가 없으면 VM 과 함께 사라진다.**
+
+| 무엇 | 어디 | 어떻게 뜨나 |
+|---|---|---|
+| DB `ESP` 스키마 | Oracle `espdb` | `expdp` — `scripts/backup-db.sh` |
+| 업로드 이미지 | `/var/www/glassvue-uploads` | `tar` — 같은 스크립트, **같은 타임스탬프** |
+| `.env` | `/home/ecstel/work/.env` | 🔴 **여기 없다** — 비밀값이라 사용자 보관처(위 「여기 없는 것」) |
+
+🔴 **DB 만 뜨면 이미지를 잃는다** — DB 에는 이미지 **경로**만 있다. 🔴 **VM 안의 백업은 백업이 아니다** — 호스트로 가져가야 한다.
+⚠ 덤프에는 **회원 이메일·비밀번호 해시**가 들어 있다 — 저장소에 넣지 않고, 호스트 보관처도 `.env` 와 같은 취급을 한다.
+
+### 1회 설정
+
+`DATA_PUMP_DIR` 는 `oracle:oinstall 750` 안이라 **`ecstel` 이 못 읽는다** — 그대로 쓰면 백업마다 sudo 로 꺼내야 하고,
+sudo 가 끼는 절차는 건너뛰게 된다(`db/migration/README` 가 같은 이유로 sudo 를 걷어냈다). 그래서 폴더를 따로 둔다:
+
+```bash
+# [ecstel@ecstel ~]$  (sudo — 직접 실행)
+sudo mkdir -p /opt/glassvue-backup
+sudo chown oracle:ecstel /opt/glassvue-backup   # oracle 이 쓰고 ecstel 이 읽고 지운다
+sudo chmod 2770 /opt/glassvue-backup            # setgid — 새 파일도 ecstel 그룹으로 생긴다
+ls -ld /opt/glassvue-backup                     # drwxrws---. oracle ecstel
+```
+```sql
+-- ESP 로 접속해서(DBA 역할이 있어 sudo 불필요)
+create or replace directory GLASSVUE_BACKUP as '/opt/glassvue-backup';
+```
+⚠ `mkdir && chown && chmod` 를 한 줄로 쳤더니 **`mkdir` 만 되고** `root:root 755` 로 남았다(2026-09-18 — sudo 비밀번호에서 끊긴 것으로 본다).
+**`ls -ld` 로 소유자까지 보고** 넘어간다.
+
+### 뜨기 · 가져가기
+
+```bash
+# [ecstel@ecstel ~]$
+./scripts/backup-db.sh            # sudo 불필요 · 최근 7벌 보관 · 끝에 scp 명령을 찍는다
+```
+```powershell
+# PS> (호스트) — 스크립트가 찍어 준 줄 그대로
+scp -P 2222 "ecstel@127.0.0.1:/opt/glassvue-backup/*-<STAMP>.*" .
+```
+- 판정은 expdp 종료코드가 아니라 **내보낸 테이블 수 = DB 테이블 수 · tar 안 파일 수 = 폴더 파일 수** 다(종료코드 0 = 성립, 1 = 실패, 2 = 판정 불가).
+- 🔴 **비밀번호를 명령줄에 안 올린다** — 권한 600 임시 파라미터 파일로 넘기고 지운다(`/proc/<pid>/cmdline` 은 누구에게나 읽힌다).
+- 실패한 날은 **옛 벌을 안 지운다** — 지우면 남은 좋은 벌까지 준다.
+
+### 복구되는지 확인 — `esptest` 에 풀어 본다
+
+```bash
+./scripts/check-backup-restore.sh            # 가장 최근 벌 · 또는 STAMP 를 인자로
+```
+덤프를 **`esptest` 에**(`remap_schema=ESP:ESPTEST`) 풀고, 테이블별 행 수를 **덤프 로그의 `exported … N rows`** 와 대조한다
+(운영의 지금 값과 대조하면 백업 뒤에 움직인 만큼 «실패» 로 보인다). 운영 스키마는 건드리지 않는다.
+⚠ impdp 가 **종료코드 5** 로 끝나는 게 정상이다 — `ESPTEST` 사용자·`SEQ_ORDER_NO` 가 이미 있어 `ORA-31684` 두 건을 오류로 센다.
+그 밖의 `ORA-` 가 나오면 스크립트가 따로 찍는다. ⚠ 돌리고 나면 `esptest` 에 **운영 데이터 사본**이 남는다 — 다음 마이그레이션 검증이 어차피 비운다.
+
+### 실제 복구 (새 서버) — ⚠ **아직 끝까지 밟아 본 적 없다**
+
+2026-09-18 에 확인한 것은 **`esptest` 로 풀리는 것까지**다. 새 VM 에서 처음부터는 안 해 봤다. 순서는 이렇게 본다:
+
+1. 위 「서버를 처음부터 세울 때」대로 Oracle·`ESP` 사용자(**빈 스키마**)·nginx·유닛을 세운다. `.env` 를 보관처에서 되돌린다.
+2. 1회 설정(폴더 + 디렉터리 객체)을 하고, 호스트의 덤프를 `/opt/glassvue-backup` 에 올린다.
+3. `impdp` — `schemas=ESP`, `directory=GLASSVUE_BACKUP`, `dumpfile=esp-<STAMP>.dmp`(비밀번호는 parfile 로).
+   🔴 **빈 스키마에 푼다** — 기존 스키마에 `table_exists_action=replace` 로 풀면 **`SEQ_ORDER_NO` 가 옛 값으로 남아**
+   다음 주문번호가 복구된 주문과 겹칠 수 있다(위 확인에서 그 시퀀스가 «이미 있음» 으로 건너뛰어졌다).
+4. 이미지: `sudo tar -xzf uploads-<STAMP>.tar.gz -C /var/www` → `sudo chown -R ecstel:nginx /var/www/glassvue-uploads` → `sudo chmod 750 /var/www/glassvue-uploads`.
+5. 백엔드 기동 — Flyway 이력도 덤프에 있으므로 «적용할 것 없음» 이 나와야 한다.
+
+⚠ **덤프가 옮기는 것**: 데모 계정·약한 비밀번호도 **그대로 따라간다**. BACKLOG §D 의 «외부 노출 단계는 새 환경에 새로 만든다» 는
+**데이터를 옮기지 않는다** 는 전제다 — 이 절차는 **같은 성격의 VM 을 되살릴 때** 쓴다.
+
 ## 서버를 처음부터 세울 때 빠지는 것
 
 이 디렉토리로도 **자동 복구되지 않는** 것들. 재구축 시 손으로 해야 한다.
+
+⚠ **데이터(주문·회원·이미지)는 이 목록이 아니라 위 「데이터 백업」 절이다.**
 
 1. **Oracle 19c 설치·`espdb` PDB 생성** — 스키마는 Flyway(`V1__init.sql`)가 만들지만 DB 자체는 아니다.
 2. **`/etc/nginx/ssl/`** 인증서 배치(위 절차).
