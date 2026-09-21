@@ -339,7 +339,11 @@ public class OrderService {
         requireCancellable(order);
         order.cancel(reason);
         applyCancellation(order);
-        log.info("Order cancelled: {} refundedPoint={}", id, order.getUsedPoint());
+        // 🔴 **`getUsedPoint()` 가 아니라 `remainingUsedPoint()` 다** (2026-09-21, BACKLOG §I-11).
+        //    바로 윗줄 `applyCancellation` 이 되돌리는 값이 그것이다 — G-4(2026-08-24)가 로직을
+        //    «남은 것만» 으로 고칠 때 **이 로그만 원본 스냅샷에 남았다.** 부분 취소를 거친 주문이면
+        //    로그가 **실제 환불보다 크다**(`20260826-6117` 이 그 경로다) — 되짚는 사람이 틀린 값을 믿는다.
+        log.info("Order cancelled: {} refundedPoint={}", id, order.remainingUsedPoint());
     }
 
     /**
@@ -366,8 +370,9 @@ public class OrderService {
         order.cancelByAdmin(reason, actor.id(), actor.nickname());
         applyCancellation(order);
         publishAudit(AuditAction.ORDER_CANCEL, actor, order, reason);
+        // ⚠ 본인 취소와 **같은 이유로** `remainingUsedPoint()` 다(위 주석) — 여기도 같이 어긋나 있었다.
         log.info("Order cancelled by admin: {} admin={} refundedPoint={}",
-                id, actor.id(), order.getUsedPoint());
+                id, actor.id(), order.remainingUsedPoint());
     }
 
     /**
@@ -704,11 +709,9 @@ public class OrderService {
         //       그래도 여기 두는 이유: 위 두 줄(`requested`·`lines`)이 **정산 뒤에 읽으면 0 이 되는**
         //       값이라, 같은 블록에 있으면 다음 사람이 «여기는 정산 전» 을 한 번에 읽는다.
         String returnReason = order.getReturnReason();
-        String returnedDetail = requested.stream()
-                .map(it -> it.getProductName()
-                        + (it.getVariantName() == null ? "" : " (" + it.getVariantName() + ")")
-                        + " " + it.getReturnRequestedQuantity() + "개")
-                .collect(Collectors.joining(", "));
+        // 🔴 **식은 `Order.requestedReturnSummary()` 한 곳에 있다** (2026-09-21, §I-11).
+        //    관리자에게 가는 «요청» 알림이 같은 문자열을 쓰게 되면서 여기서 조립하면 **두 벌**이 된다.
+        String returnedDetail = order.requestedReturnSummary();
 
         ReturnSettlement settlement = order.applyRequestedReturns();
 

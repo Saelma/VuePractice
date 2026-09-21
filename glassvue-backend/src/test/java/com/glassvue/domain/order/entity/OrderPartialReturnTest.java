@@ -65,6 +65,51 @@ class OrderPartialReturnTest {
         o.requestReturn("ZZ-사유", Map.of(itemAt(o, index).getId(), qty));
     }
 
+    // ── «무엇을 몇 개» 한 줄 (2026-09-21, BACKLOG §I-11) ──────────────
+
+    @Test
+    @DisplayName("🔴 요약이 **이번에 고른 것만** 말한다 — 안 고른 품목이 따라 들어가면 알림이 거짓말한다")
+    void summaryCarriesOnlyRequestedItems() {
+        Order o = delivered(0, 0, 0, 10_000, 20_000);
+        request(o, 0, 1);
+
+        assertThat(o.requestedReturnSummary()).isEqualTo("상품10000 1개");
+    }
+
+    @Test
+    @DisplayName("여러 품목이면 원장 detail 과 **같은 모양**으로 잇는다(«, » 구분)")
+    void summaryJoinsMultipleItems() {
+        Order o = delivered(0, 0, 0, 10_000, 20_000);
+        o.requestReturn("ZZ-사유", Map.of(
+                itemAt(o, 0).getId(), 1L,
+                itemAt(o, 1).getId(), 1L));
+
+        assertThat(o.requestedReturnSummary()).contains("상품10000 1개").contains("상품20000 1개")
+                .contains(", ");
+    }
+
+    @Test
+    @DisplayName("🔴 **정산 뒤에 읽으면 빈 문자열**이다 — 호출부가 정산 «앞» 에서 떠야 하는 이유")
+    void summaryIsEmptyAfterSettlement() {
+        Order o = delivered(0, 0, 0, 10_000, 20_000);
+        request(o, 0, 1);
+        assertThat(o.requestedReturnSummary()).isNotBlank();   // 정산 전에는 있다
+
+        o.applyRequestedReturns();
+
+        // ⚠ 이 단언이 빨개지면 «정산 앞에서 뜬다» 규약이 깨진 것이 아니라, 이 메서드가
+        //   요청 수량이 아닌 다른 칸을 보기 시작했다는 뜻이다 — 그때는 호출부 순서를 다시 본다.
+        assertThat(o.requestedReturnSummary()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("⚠ 아무것도 안 고르면 **빈 문자열**이다 — «없음» 을 지어 넣지 않는다(문구가 갈라 준다)")
+    void summaryIsEmptyWhenNothingRequested() {
+        Order o = delivered(0, 0, 0, 10_000);
+
+        assertThat(o.requestedReturnSummary()).isEmpty();
+    }
+
     // ── 🔴 전액 수렴 — 이 테스트 하나가 배분식 전체를 떠받친다 ──────────────
 
     @Test

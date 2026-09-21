@@ -34,10 +34,18 @@ public class ReturnRequestAlertHandler {
     private final NotificationCommandService notificationService;
 
     public void handle(OrderReturnRequestedEvent event) {
+        // 🔴 «무엇을 몇 개» 를 말한다 (2026-09-21, BACKLOG §I-11). 전엔 주문번호와 사유만 있어서
+        //    관리자가 **열어 보기 전에는 규모를 몰랐다** — 부분 반품(G-10) 뒤로는 그게 정보다.
+        //    ⚠ 요약도 사유와 **같은 규칙**으로 갈라 준다: 비어 있으면 그 자리를 아예 안 만든다
+        //       («… 반품을 요청했습니다» 가 « 반품을» 로 시작해 빈칸이 보이면 값이 지워진 것처럼 읽힌다).
+        String what = (event.itemsSummary() == null || event.itemsSummary().isBlank())
+                ? "반품을"
+                : event.itemsSummary() + " 반품을";
+        String head = event.buyerNickname() + "님이 " + what + " 요청했습니다.";
         // 사유는 선택값이다. 없을 때 "사유: " 로 끝나면 값이 지워진 것처럼 읽힌다.
         String message = (event.reason() == null || event.reason().isBlank())
-                ? event.buyerNickname() + "님이 반품을 요청했습니다. (사유 미입력)"
-                : event.buyerNickname() + "님이 반품을 요청했습니다. 사유: " + event.reason();
+                ? head + " (사유 미입력)"
+                : head + " 사유: " + event.reason();
         String link = "/orders/" + event.orderId();
 
         // ⚠ 링크는 주문 상세다 — 승인·거절을 하는 자리가 거기다(관리자는 남의 주문도 열 수 있다,

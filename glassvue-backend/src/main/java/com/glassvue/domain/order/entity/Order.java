@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -706,6 +707,33 @@ public class Order extends BaseTimeEntity {
         this.returnRequestedAt = Instant.now();
         this.returnRejectedReason = null;
         this.returnRejectedAt = null;
+    }
+
+    /**
+     * 🔴 <b>이번 회차 반품 요청의 «무엇을 몇 개» 한 줄</b> — «몽쉘 (L) 2개, 반팔티 1개»
+     * (2026-09-21, BACKLOG §I-11).
+     *
+     * <p><b>왜 서비스가 아니라 엔티티인가</b>: 이 문자열을 읽는 곳이 <b>셋</b>이다 —
+     * 감사 원장 {@code detail} · {@link com.glassvue.domain.order.event.OrderReturnedEvent} 의
+     * {@code itemsSummary}(승인 알림) · {@link com.glassvue.domain.order.event.OrderReturnRequestedEvent}
+     * (관리자에게 가는 요청 알림). 앞의 둘은 <b>승인 시점</b>에, 마지막은 <b>요청 시점</b>에 필요하다.
+     * 서비스에 두면 <b>같은 식이 두 벌</b>이 된다 — 「남은 것」식이 셋이 된 자리와 글자 그대로 같은
+     * 모양이라(BACKLOG §I-1 이 그 사본 넷 때문에 났다), <b>처음부터 한 곳에 둔다.</b>
+     *
+     * <p>🔴 <b>«정산 전» 에 읽어야 한다.</b> {@link #applyRequestedReturns()} 가 돌고 나면
+     * {@code returnRequestedQuantity} 가 0 이 되어 <b>빈 문자열</b>이 나온다 —
+     * {@code OrderService.approveReturn} 이 이 값을 정산 <b>앞</b>에서 뜨는 이유가 그것이다.
+     *
+     * <p>⚠ 고른 것이 하나도 없으면 <b>빈 문자열</b>이다. 호출부가 «없음» 같은 말을 지어 넣지 않고
+     * <b>문구에서 갈라 준다</b>(사유가 비어 있을 때와 같은 규칙).
+     */
+    public String requestedReturnSummary() {
+        return items.stream()
+                .filter(it -> it.getReturnRequestedQuantity() > 0)
+                .map(it -> it.getProductName()
+                        + (it.getVariantName() == null ? "" : " (" + it.getVariantName() + ")")
+                        + " " + it.getReturnRequestedQuantity() + "개")
+                .collect(Collectors.joining(", "));
     }
 
     /**

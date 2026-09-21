@@ -28,7 +28,8 @@ class AdminOrderEventListenerTest {
     @DisplayName("반품 요청 이벤트를 Handler 에 위임만 한다")
     void delegatesReturnRequestedToHandler() {
         OrderReturnRequestedEvent event = new OrderReturnRequestedEvent(
-                UUID.randomUUID(), UUID.randomUUID(), "20260812-0001", "ZZ구매자", "변심");
+                UUID.randomUUID(), UUID.randomUUID(), "20260812-0001", "ZZ구매자", "변심",
+                "몽쉘 1개");
 
         listener.onOrderReturnRequested(event);
 

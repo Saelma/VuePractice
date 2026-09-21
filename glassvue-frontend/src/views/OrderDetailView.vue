@@ -358,12 +358,36 @@ const STEPS = [
 ];
 const currentStep = computed(() => {
   const s = order.value?.status;
-  if (s === 'DELIVERED') return 3;
+  // 🔴 **반품 상태도 「배송 완료」다** (2026-09-21, BACKLOG §I-11). 반품은 배송완료 **뒤**에만
+  //    일어나는데, 전엔 이 둘이 기본값 `return 0` 으로 떨어져 스텝이 **「주문 접수」로 되감겼다** —
+  //    고객이 «내 주문이 처음으로 돌아갔나» 로 읽는다. 진행은 멈춘 것이지 되돌아간 것이 아니다.
+  //    ⚠ 부분 반품은 여기 안 온다 — 남은 것이 있으면 상태가 `DELIVERED` 로 **되돌아간다**(Order:839).
+  if (s === 'DELIVERED' || s === 'RETURN_REQUESTED' || s === 'RETURNED') return 3;
   if (s === 'SHIPPED') return 2;
   if (s === 'PAID') return 1;
   return 0; // ORDERED
 });
 const isCancelled = computed(() => order.value?.status === 'CANCELLED');
+
+/**
+ * 반품 안내 (2026-09-21, BACKLOG §I-11) — 취소와 **같은 자리·같은 모양**이다.
+ * ⚠ 다만 취소는 스텝을 **대신하고**, 반품은 스텝 **위에** 붙는다: 취소는 진행이 멈춘 것이라
+ * 스텝이 거짓이 되지만, 반품은 배송완료까지 **실제로 갔다.** 그 여정을 지우면 안 된다.
+ */
+const isReturning = computed(
+  () => order.value?.status === 'RETURN_REQUESTED' || order.value?.status === 'RETURNED',
+);
+// 🔴 `RETURNED` 는 «남은 것이 없다» 는 뜻이다(Order:839 — `hasNothingLeft()` 일 때만 떨어진다).
+//    부분 반품은 `DELIVERED` 로 돌아오므로 여기서 «일부 반품» 을 말하지 않는다 — 그건 품목 줄이 말한다.
+const returnNoticeText = computed(() =>
+  order.value?.status === 'RETURNED'
+    ? '반품이 완료되어 이 주문에 남은 상품이 없어요.'
+    : '반품 요청을 접수했어요. 관리자 확인을 기다리고 있어요.',
+);
+// 시각은 취소와 **같은 규칙**이다 — 없으면 줄을 감춘다(지어내지 않는다).
+const returnNoticeAt = computed(() =>
+  order.value?.status === 'RETURNED' ? order.value?.returnedAt : order.value?.returnRequestedAt,
+);
 </script>
 
 <template>
@@ -433,7 +457,17 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <span class="text-ink-900">고객센터에서 대신 취소했어요 ({{ order.cancelledByName }})</span>
           </p>
         </template>
-        <ol v-else class="flex items-start">
+        <template v-else>
+        <!--
+          반품 안내 (2026-09-21, §I-11). ⚠ 취소처럼 스텝을 **대신하지 않는다** — 반품 주문은
+          배송완료까지 실제로 갔으므로 그 여정을 지우면 «언제 받았나» 를 잃는다.
+        -->
+        <p v-if="isReturning" class="mb-4 flex flex-wrap items-center gap-2 text-sm text-ink-500">
+          <span class="badge shrink-0" :class="orderStatusClass(order.status)">{{ orderStatusText(order.status) }}</span>
+          <span>{{ returnNoticeText }}</span>
+          <span v-if="returnNoticeAt" class="tabular-nums">{{ fmt(returnNoticeAt) }}</span>
+        </p>
+        <ol class="flex items-start">
           <li v-for="(st, i) in STEPS" :key="st.key" class="flex flex-1 flex-col items-center text-center">
             <!-- 연결선 + 점 -->
             <div class="flex w-full items-center">
@@ -453,6 +487,7 @@ const isCancelled = computed(() => order.value?.status === 'CANCELLED');
             <span v-if="st.at(order)" class="muted mt-0.5 tabular-nums">{{ fmt(st.at(order)) }}</span>
           </li>
         </ol>
+        </template>
       </div>
 
       <!-- 관리자가 남의 주문을 볼 때만 "누구 주문인지"(주문 시점 스냅샷).

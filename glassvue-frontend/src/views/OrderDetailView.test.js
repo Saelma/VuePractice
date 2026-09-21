@@ -791,3 +791,95 @@ describe('OrderDetailView — 관리자 대행 반품 요청 (§I-15)', () => {
     expect(requestReturnByAdmin).not.toHaveBeenCalled();
   });
 });
+
+// ── 진행 스텝이 반품 상태를 안다 (2026-09-21, BACKLOG §I-11) ──────────────
+//
+// 🔴 **전엔 `currentStep` 의 기본값 `return 0` 으로 떨어져 「주문 접수」로 되감겼다.** 반품은
+//    배송완료 **뒤**에만 일어나는데 화면은 처음으로 돌아간 것처럼 그렸다 — 진행이 멈춘 것과
+//    되돌아간 것은 다르다. ⚠ 취소는 스텝을 **대신하고**(진행이 멈췄다), 반품은 스텝 **위에** 붙는다
+//    (배송완료까지 실제로 갔다). 그 차이를 여기서 못 박는다.
+describe('OrderDetailView — 진행 스텝과 반품 안내 (§I-11)', () => {
+  let w;
+
+  beforeEach(() => { authState.user = { id: ME, role: 'USER' }; push.mockReset(); });
+  afterEach(() => { if (w) w.unmount(); w = null; authState.user = null; });
+
+  async function open(data) {
+    getOrder.mockReset().mockResolvedValue(data);
+    w = mount(OrderDetailView, {
+      props: { id: 'o1' },
+      global: { stubs: { RouterLink: true, ItemThumb: true } },
+    });
+    await flushPromises();
+    return w;
+  }
+
+  /** 지금 칠해진 스텝 = `aria-current="true"` 인 점의 순번(0-based). */
+  const activeStep = (w) => w.findAll('ol li').findIndex(
+    (li) => li.find('[aria-current="true"]').exists(),
+  );
+
+  it('배송 완료는 마지막 스텝이다 (기준선)', async () => {
+    const w = await open(order({ status: 'DELIVERED', deliveredAt: '2026-08-26T00:00:00Z' }));
+
+    expect(activeStep(w)).toBe(3);
+  });
+
+  it('🔴 반품 요청 중이어도 스텝이 **「주문 접수」로 되감기지 않는다**', async () => {
+    const w = await open(order({
+      status: 'RETURN_REQUESTED',
+      deliveredAt: '2026-08-26T00:00:00Z',
+      returnRequestedAt: '2026-08-27T00:00:00Z',
+    }));
+
+    // 🔴 고침 전에는 이 값이 0 이었다 — 고객이 «내 주문이 처음으로 돌아갔나» 로 읽는 자리다.
+    expect(activeStep(w)).toBe(3);
+  });
+
+  it('🔴 반품 완료도 마찬가지다', async () => {
+    const w = await open(order({
+      status: 'RETURNED',
+      deliveredAt: '2026-08-26T00:00:00Z',
+      returnedAt: '2026-08-28T00:00:00Z',
+    }));
+
+    expect(activeStep(w)).toBe(3);
+  });
+
+  it('반품 요청 중이면 스텝 **위에** 안내가 붙는다 — 스텝은 그대로 남는다', async () => {
+    const w = await open(order({
+      status: 'RETURN_REQUESTED',
+      deliveredAt: '2026-08-26T00:00:00Z',
+      returnRequestedAt: '2026-08-27T00:00:00Z',
+    }));
+
+    expect(w.text()).toContain('반품 요청을 접수했어요');
+    // ⚠ 안내가 스텝을 **대신하면** «언제 받았나» 를 잃는다 — 취소와 갈리는 지점이다.
+    expect(w.find('ol').exists()).toBe(true);
+  });
+
+  it('🔴 반품 완료 문구는 «남은 것이 없다» 고 말한다 — RETURNED 가 그 뜻이다', async () => {
+    const w = await open(order({
+      status: 'RETURNED',
+      deliveredAt: '2026-08-26T00:00:00Z',
+      returnedAt: '2026-08-28T00:00:00Z',
+    }));
+
+    // 부분 반품은 상태가 DELIVERED 로 **되돌아오므로** 여기서 «일부» 를 말하면 거짓이 된다.
+    expect(w.text()).toContain('남은 상품이 없어요');
+  });
+
+  it('⚠ 취소는 **스텝을 대신한다** — 반품과 갈리는 지점이라 함께 못 박는다', async () => {
+    const w = await open(order({ status: 'CANCELLED', cancelledAt: '2026-08-25T00:00:00Z' }));
+
+    expect(w.text()).toContain('취소되어 진행이 멈췄어요');
+    expect(w.find('ol').exists()).toBe(false);
+  });
+
+  it('⚠ 반품이 아니면 안내 줄이 **아예 없다**', async () => {
+    const w = await open(order({ status: 'DELIVERED', deliveredAt: '2026-08-26T00:00:00Z' }));
+
+    expect(w.text()).not.toContain('반품 요청을 접수했어요');
+    expect(w.text()).not.toContain('남은 상품이 없어요');
+  });
+});

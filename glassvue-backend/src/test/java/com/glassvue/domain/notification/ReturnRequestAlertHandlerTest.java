@@ -45,7 +45,12 @@ class ReturnRequestAlertHandlerTest {
     private final UUID adminB = UUID.randomUUID();
 
     private OrderReturnRequestedEvent event(String reason) {
-        return new OrderReturnRequestedEvent(orderId, buyerId, "20260812-0001", "ZZ구매자", reason);
+        return event(reason, "몽쉘 (L) 2개, 반팔티 1개");
+    }
+
+    private OrderReturnRequestedEvent event(String reason, String itemsSummary) {
+        return new OrderReturnRequestedEvent(orderId, buyerId, "20260812-0001", "ZZ구매자",
+                reason, itemsSummary);
     }
 
     @Test
@@ -126,6 +131,43 @@ class ReturnRequestAlertHandlerTest {
         handler.handle(event("   "));
 
         assertThat(message()).contains("(사유 미입력)");
+    }
+
+    @Test
+    @DisplayName("🔴 문구가 «무엇을 몇 개» 를 말한다 — 관리자가 열어 보기 전에 규모를 안다 (§I-11)")
+    void messageCarriesItems() {
+        when(memberService.adminIds()).thenReturn(List.of(adminA));
+
+        handler.handle(event("사이즈가 안 맞아요"));
+
+        // ⚠ 부분 반품(G-10) 뒤로는 «반품 요청» 이 전량이 아닐 수 있다 — 그래서 수량이 정보다.
+        assertThat(message())
+                .contains("몽쉘 (L) 2개, 반팔티 1개")
+                .contains("ZZ구매자")
+                .contains("사유: 사이즈가 안 맞아요");
+    }
+
+    @Test
+    @DisplayName("⚠ 요약이 비면 그 자리를 **아예 안 만든다** — 빈칸이 보이면 값이 지워진 것처럼 읽힌다")
+    void messageWithoutItems() {
+        when(memberService.adminIds()).thenReturn(List.of(adminA));
+
+        handler.handle(event("변심", ""));
+
+        // 🔴 « 반품을» 처럼 공백이 겹치면 안 된다 — 사유가 비었을 때와 **같은 규칙**이다.
+        assertThat(message())
+                .contains("ZZ구매자님이 반품을 요청했습니다.")
+                .doesNotContain("  ");
+    }
+
+    @Test
+    @DisplayName("⚠ 요약이 null 이어도 터지지 않는다 — 이벤트는 «비어 있을 수 있다» 고 적혀 있다")
+    void messageWithNullItems() {
+        when(memberService.adminIds()).thenReturn(List.of(adminA));
+
+        handler.handle(event("변심", null));
+
+        assertThat(message()).contains("ZZ구매자님이 반품을 요청했습니다.");
     }
 
     @Test
