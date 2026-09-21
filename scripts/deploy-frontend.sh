@@ -33,6 +33,14 @@ fi
 HANDOFF_CHECK="$(dirname "${BASH_SOURCE[0]}")/check-handoff.sh"
 [ -x "$HANDOFF_CHECK" ] && "$HANDOFF_CHECK" || true
 
+# --- 조건부 잔여가 낡았나 (2026-09-21) ---
+# §조건부 잔여는 **이월과 달리 처분 규약이 없어** 아무도 안 집으면 영원히 판정되지 않는다.
+# 실제로 08-27 이후 아홉 개 문서 연속 «그대로 물려받는다» 였고, 그날 판정하니 **서른여섯 중 일곱이 거짓**이었다.
+# 그래서 그 절이 지목한 «고유명»(주문번호·표본 이름·파일·식별자)을 **실물과** 대조한다.
+# **막지는 않는다** — 위 검사들과 같은 판단. 🔴 종료코드 2 는 «못 쟀다» 다(성립이 아니다).
+RESIDUE_CHECK="$(dirname "${BASH_SOURCE[0]}")/check-stale-residue.sh"
+[ -x "$RESIDUE_CHECK" ] && "$RESIDUE_CHECK" || true
+
 echo "▶ 빌드…"
 if [ "$(id -un)" = "root" ]; then
   runuser -l ecstel -c "pnpm -C '$FRONT_DIR' build"   # 빌드는 프로젝트 소유자(ecstel)로
