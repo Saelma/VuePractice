@@ -47,6 +47,25 @@ public class MemberService {
     private final ApplicationEventPublisher eventPublisher;
 
     /**
+     * 그 회원이 <b>지금 있나</b> — 다른 도메인이 «보낼 대상이 실재하나» 를 묻는 공개 API
+     * (2026-09-21, BACKLOG §F-9).
+     *
+     * <p>🔴 <b>왜 생겼나</b>: 탈퇴는 <b>하드 삭제</b>라 회원 행이 사라지는데, 주문·리뷰는 남는다(F-1).
+     * 그래서 <b>탈퇴 «뒤» 에</b> 관리자가 그 주문을 취소하면 <b>없는 사람 앞으로 알림이 새로 생겼다</b>
+     * (2026-09-21 실측 — 불변식 ⑬ 이 그날 처음 1 이 됐다).
+     * ⚠ 기존 방어 셋이 전부 <b>«탈퇴 시점»</b> 을 본다(탈퇴 리스너 · 보관 배치 · `ProductPurgedEvent`) —
+     * <b>그 뒤에 생기는 것</b>은 아무도 안 막았다.
+     *
+     * <p>⚠ <b>DB FK 로는 못 막는다</b> — `notification` 에 FK 가 없고, 지금 <b>고아 행이 하나 남아 있어</b>
+     * (2026-09-21 사용자 결정으로 남김) 제약을 걸면 생성 자체가 실패한다.
+     * <b>앱이 막는 수밖에 없다</b>(V61 이 같은 이유를 적어 뒀다).
+     */
+    @Transactional(readOnly = true)
+    public boolean exists(UUID memberId) {
+        return memberId != null && memberRepository.existsById(memberId);
+    }
+
+    /**
      * 관리자 회원 id 목록 — 관리자 대상 알림(재고 부족 등)을 만들 때 쓰는 다른 도메인용 공개 API.
      *
      * <p>{@link Role#adminRoles()} 라 <b>SUPER_ADMIN 도 포함</b>한다. 2026-08-10 §16-3 이전에는

@@ -1,5 +1,6 @@
 package com.glassvue.domain.notification.service;
 
+import com.glassvue.domain.member.service.MemberService;
 import com.glassvue.domain.notification.dto.NotificationResponse;
 import com.glassvue.domain.notification.entity.Notification;
 import com.glassvue.domain.notification.entity.NotificationPref;
@@ -27,6 +28,7 @@ public class NotificationCommandService {
     private final NotificationRepository notificationRepository;
     private final NotificationPrefRepository prefRepository;
     private final NotificationStream stream;
+    private final MemberService memberService;
 
     /**
      * 알림 한 건 생성 + 실시간 푸시. 설정에서 그 타입을 껐으면 <b>만들지 않는다</b>(opt-out).
@@ -34,13 +36,30 @@ public class NotificationCommandService {
      * <p>저장 뒤 SSE 로 미는데, 페이로드가 알림 전체라 화면은 재조회 없이 목록·토스트에 바로 넣는다.
      * 푸시는 best-effort — 실패해도(끊긴 연결 등) 알림은 DB 에 남아 재조회 때 보인다.
      *
-     * @return <b>실제로 만들었으면</b> {@code true}, 설정에서 꺼져 있어 건너뛰었으면 {@code false}.
+     * <p>🔴 <b>받을 사람이 없으면 만들지 않는다</b> (2026-09-21, BACKLOG §F-9). 탈퇴는 하드 삭제인데
+     * 주문·리뷰는 남으므로(F-1), <b>탈퇴 «뒤» 에</b> 관리자가 그 주문을 취소하면 <b>아무도 영원히 못 읽는
+     * 알림</b>이 생겼다(2026-09-21 실측 — 불변식 ⑬ 이 그날 처음 1 이 됐다).
+     * ⚠ 기존 방어 셋은 전부 <b>«탈퇴 시점»</b> 을 본다(탈퇴 리스너 · 보관 배치 · {@code ProductPurgedEvent}) —
+     * <b>그 뒤에 생기는 것</b>은 아무도 안 막았다. 그래서 «정리» 를 하나 더 얹는 것이 답이 아니다.
+     * 🔴 <b>여기가 «알림을 만드는 유일한 입구» 라 한 곳으로 족하다</b> — 발행 자리(주문·반품·재고…)마다
+     * 막으면 «손으로 늘리는 목록» 이 되어 반드시 빠진다(WA §2-12).
+     * ⚠ <b>정보는 안 잃는다</b> — 그 조작은 {@code admin_audit_log} 에 남는다. 알림의 목적은 «전달» 이고
+     * «기록» 은 원장이 한다. <b>받을 사람이 없으면 목적이 없다.</b>
+     * ⚠ <b>비용</b>: 알림 한 건마다 {@code existsById} 가 한 번 더 돈다(PK 조회라 가볍다).
+     *
+     * @return <b>실제로 만들었으면</b> {@code true}, <b>안 만들었으면</b> {@code false}
+     *         (설정에서 꺼져 있거나, <b>받을 회원이 없거나</b>).
      *         ⚠ 이 반환값은 <b>마케팅 발송(B-21 후속)이 "몇 명에게 갔는지" 를 정직하게 세기 위해</b>
      *         생겼다. 대상 수만 세고 발송 결과를 안 세면 <b>토글을 끈 사람까지 "보냈다"로 보고</b>하게 된다.
      *         기존 호출부(이벤트 핸들러들)는 반환값을 쓰지 않는다 — 무시해도 무해하다.
      */
     @Transactional
     public boolean create(UUID memberId, NotificationType type, String title, String message, String link) {
+        // 🔴 **설정보다 먼저 본다** — 없는 회원의 설정을 묻는 것은 뜻이 없다.
+        if (!memberService.exists(memberId)) {
+            log.info("[알림] 받을 회원이 없어 만들지 않는다 — member={} type={}", memberId, type);
+            return false;
+        }
         boolean enabled = prefRepository.findByMemberIdAndType(memberId, type)
                 .map(NotificationPref::isEnabled)
                 .orElse(true); // 행이 없으면 켜짐(기본 on)
