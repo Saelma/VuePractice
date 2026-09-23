@@ -129,12 +129,14 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("반품 승인 → 구매자에게 **환불 금액과 함께** (돈이 움직였는데 말이 없으면 안 된다)")
     void returnedNotifiesBuyer() {
-        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 25_000L, List.of(), "ZZ상품 1개", true));
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 25_000L, 0L, List.of(), "ZZ상품 1개", true));
 
         Notified n = captured();
         assertThat(n.memberId()).isEqualTo(buyerId);
         assertThat(n.type()).isEqualTo(NotificationType.ORDER);
         assertThat(n.message()).contains("25000");
+        // ⚠ 대조군(I-16): 회수한 적립이 0 이면 «회수» 를 안 붙인다 — 「0원 회수」 는 안내가 아니라 혼란이다.
+        assertThat(n.message()).doesNotContain("회수");
         assertThat(n.link()).isEqualTo("/orders/" + orderId);
     }
 
@@ -148,7 +150,7 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("🔴 부분 반품이면 «일부» 라고 말하고 **무엇이 몇 개** 인지 밝힌다")
     void partialReturnSaysPartial() {
-        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 12_858L, List.of(),
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 12_858L, 0L, List.of(),
                 "지바 1개, 반팔티 1개", false));
 
         Notified n = captured();
@@ -158,10 +160,27 @@ class OrderNotificationHandlerTest {
         assertThat(n.message()).contains("12858");
     }
 
+    /**
+     * 🔴 <b>회수한 적립을 말하지 않던 자리다</b> (2026-09-23, BACKLOG I-16) — 알림은 환불액을 말하는데 잔액은
+     * «환불 − 회수» 만큼만 올라, 운영의 반품 18건 전부가 <b>받은 돈보다 크게</b> 말했다.
+     * 적립금 원장 줄({@code 반품 환불 10000 (적립 200 회수)})과 <b>같은 두 숫자</b>를 말해야 둘이 안 어긋난다.
+     */
+    @Test
+    @DisplayName("🔴 적립을 회수했으면 «(구매 적립 N원 회수)» 를 붙인다 — 잔액이 오르는 만큼과 말이 맞게")
+    void returnedSaysReversedEarn() {
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 10_000L, 200L, List.of(),
+                "지바 1개", false));
+
+        Notified n = captured();
+        // ⚠ 글자 그대로 적는다 — 운영 20260921-9475(2026-09-23)가 받았어야 할 문구다.
+        assertThat(n.message()).isEqualTo(ORDER_NO
+                + " · 지바 1개 반품이 완료되었어요. 10000원이 적립금으로 환불되었습니다(구매 적립 200원 회수).");
+    }
+
     @Test
     @DisplayName("⚠ 대조군: 전량 반품이면 예전과 **같은 문구**다 (기존 주문의 알림은 안 바뀐다)")
     void fullReturnKeepsOldWording() {
-        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 25_000L, List.of(), "ZZ상품 1개", true));
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 25_000L, 0L, List.of(), "ZZ상품 1개", true));
 
         Notified n = captured();
         assertThat(n.title()).isEqualTo("반품이 완료되었어요");
@@ -208,7 +227,7 @@ class OrderNotificationHandlerTest {
     @Test
     @DisplayName("⚠ 환불액이 0이면 금액 문구를 **넣지 않는다** (배송완료 적립과 같은 판단)")
     void returnedWithoutRefund() {
-        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 0L, List.of(), "ZZ상품 1개", true));
+        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 0L, 0L, List.of(), "ZZ상품 1개", true));
 
         Notified n = captured();
         assertThat(n.message()).isEqualTo(ORDER_NO + " · 반품이 완료되었어요.");
@@ -279,7 +298,7 @@ class OrderNotificationHandlerTest {
                         handler.handle(new OrderItemCancelledEvent(orderId, buyerId, ORDER_NO, List.of(),
                                 "지바 1개", 10_000L, 0L, false))),
                 new Case("반품 승인", () ->
-                        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 25_000L, List.of(),
+                        handler.handle(new OrderReturnedEvent(orderId, buyerId, ORDER_NO, 25_000L, 0L, List.of(),
                                 "지바 1개", true))),
                 new Case("반품 거절", () ->
                         handler.handle(new OrderReturnRejectedEvent(orderId, buyerId, ORDER_NO, "ZZ-사용 흔적"))));

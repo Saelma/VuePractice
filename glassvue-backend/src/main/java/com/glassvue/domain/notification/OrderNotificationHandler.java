@@ -153,13 +153,18 @@ public class OrderNotificationHandler {
         String what = event.fullyReturned()
                 ? "반품이 완료되었어요."
                 : event.itemsSummary() + " 반품이 완료되었어요.";
+        // 🔴 회수한 적립도 말한다 (I-16) — 잔액은 «환불 − 회수» 만큼 오른다. 환불액만 말하면 받은 돈보다
+        //    크게 말한다. 적립금 원장 줄(«반품 환불 X (적립 Y 회수)»)과 같은 두 숫자다 · 경위: handoffs/2026-09-23-handoff.md §4-7
+        String reversed = event.reversedEarnedPoint() > 0
+                ? "(구매 적립 " + event.reversedEarnedPoint() + "원 회수)"
+                : "";
         String message = withOrderNo(event.orderNo(), event.refundedPoint() > 0
-                ? what + " " + event.refundedPoint() + "원이 적립금으로 환불되었습니다."
+                ? what + " " + event.refundedPoint() + "원이 적립금으로 환불되었습니다" + reversed + "."
                 : what);
         notificationService.create(event.memberId(), NotificationType.ORDER,
                 title, message, "/orders/" + event.orderId());
-        log.info("[알림] 반품 승인 — order={} member={} refunded={} full={}", event.orderId(),
-                event.memberId(), event.refundedPoint(), event.fullyReturned());
+        log.info("[알림] 반품 승인 — order={} member={} refunded={} reversed={} full={}", event.orderId(),
+                event.memberId(), event.refundedPoint(), event.reversedEarnedPoint(), event.fullyReturned());
     }
 
     /**

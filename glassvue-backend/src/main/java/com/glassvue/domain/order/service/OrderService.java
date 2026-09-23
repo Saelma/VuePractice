@@ -733,7 +733,8 @@ public class OrderService {
         }
         // 판매량 되돌림은 catalog 가 구독한다 — 환불(동기)이 끝난 뒤 결과 알림(주문 취소와 같은 규약).
         eventPublisher.publishEvent(
-                OrderReturnedEvent.of(order, settlement.refundAmount(), lines, returnedDetail));
+                OrderReturnedEvent.of(order, settlement.refundAmount(), settlement.earnedToReverse(), lines,
+                        returnedDetail));
         // ⚠ 원장에는 **무엇을 몇 개 되돌리고 얼마를 돌려줬나** 를 적는다. 부분 반품이 생기면서
         //   금액만으로는 «어느 품목이 빠졌나» 를 못 되짚는다(ORDER_ITEM_CANCEL 이 같은 자리에서 정한 것).
         // 🔴 **사유를 «앞» 에 둔다** (2026-08-27, §I-13 결정). 전엔 「품목목록 / 환불액 / 사유」 순이라

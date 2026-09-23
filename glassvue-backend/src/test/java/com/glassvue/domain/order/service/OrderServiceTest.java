@@ -381,6 +381,7 @@ class OrderServiceTest {
         // 🔴 여기도 숫자를 그대로 적는다 — `order.refundableAmount()` 는 승인 뒤 0 이라 자기 자신과
         //    비교하는 셈이 된다(위 refundReturnedOrder 단언과 같은 이유, 2026-08-25).
         assertThat(returnedEvent.refundedPoint()).isEqualTo(15_000L);
+        assertThat(returnedEvent.reversedEarnedPoint()).isZero();   // 적립 전이라 회수할 것이 없다
         // 🔴 판매량 되돌림은 **이번에 반품된 수량**이어야 한다 (G-10) — 예전엔 원본 수량을 실었다.
         //    전량 반품이면 둘이 같지만, 부분이 생기면 갈린다(WA §1-2-1: 목록이 맞아도 «양»이 틀린다).
         assertThat(returnedEvent.lines()).singleElement()
@@ -946,6 +947,9 @@ class OrderServiceTest {
         // 판매량도 **1개만** 되돌린다.
         OrderReturnedEvent event = capturePublished(OrderReturnedEvent.class);
         assertThat(event.refundedPoint()).isEqualTo(8_000L);
+        // 🔴 I-16 (2026-09-23) — 알림이 «(구매 적립 N원 회수)» 를 말하려면 발행이 **정산이 낸 회수액**을 실어야 한다.
+        //    위 refundReturnedOrder 의 80 과 같은 값이다(원장과 알림이 같은 숫자를 말한다).
+        assertThat(event.reversedEarnedPoint()).isEqualTo(80L);
         assertThat(event.lines()).singleElement()
                 .satisfies(l -> assertThat(l.quantity()).isEqualTo(1));
     }
