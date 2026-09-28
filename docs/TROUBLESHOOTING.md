@@ -44,7 +44,8 @@
 | **공지 조회수가 덜 오른다 / 올랐던 게 사라졌다** · ⚠ **운영 업로드 폴더에서 이미지 파일이 없어졌다** | 🔴 **앱을 하나 더 띄웠다**(8083 에 `esptest` 등) — 그 앱도 Redis db0·같은 업로드 폴더를 본다. 조회수 플러셔는 **기동 즉시·30초마다** `notice:view:*` 를 가져가 **자기 DB** 에 더하고, 이미지 정리 배치(기동 5분 뒤)는 **자기 DB 의** «주인 없는 이미지» 행을 보고 **폴더의 파일**을 지운다 | **`./scripts/esptest-app.sh` 로만 띄운다**(Redis db2 · 배치 끔 · 별도 폴더). 조회수엔 원장이 없어 **되짚을 수 없다** — 막는 것만 된다 · 2026-09-18 에 격리 없이 여섯 번 띄운 뒤 발견 · `handoffs/2026-09-18-handoff.md` §10 |
 | 스크립트가 **DB 에 못 붙었는데** «20개 중 22개만 읽혔다» 처럼 **엉뚱한 이유**로 끝난다 · 또는 접속 실패인데 종료코드 0 | 🔴 **`whenever sqlerror` 가 `connect` 뒤에 있다.** 그러면 접속 실패에도 sqlplus 가 0 으로 끝나고, 뒤 SELECT 들의 «Not connected» 오류 줄이 결과로 섞인다 | **`whenever sqlerror exit 2` 를 `connect` 앞에** 둔다(실측: 틀린 비밀번호 → 2). 🔴 확인은 **틀린 비밀번호 `.env` 사본**으로 돌려 «판정 불가» 가 나오는지 본다 · ⚠ `sqlplus 계정/비밀번호@…` 인자는 sqlplus 가 뜬 직후 **스스로 공백으로 덮는다**(`/proc/<pid>/cmdline` 실측) — 그래도 `/nolog` + 표준입력 `connect` 로 넘긴다 · `handoffs/2026-09-18-handoff.md` §9 |
 | **화면(뷰) 테스트가 단독으로는 늘 초록인데 전체 스위트에서만 가끔 빨개진다** — 게다가 🔴 **실패하는 테스트가 매번 다르다** | 🔴 **`flushPromises()` 를 «정해진 횟수» 만큼 부르고 있다.** DevExtreme 그리드는 `CustomStore.load` → 내부 렌더 → Vue 갱신을 거치는데 **그 프로미스 개수는 우리 사정이 아니다.** 단독 실행에선 두 번으로 충분하다가, 전체 스위트로 부하가 걸리면 모자라 **행이 아직 없다** — 그러면 `w.findAll('button').find(...)` 가 `undefined` 라 **`Cannot read properties of undefined (reading 'trigger')`** 로 죽는다. ⚠ **에러 모양이 «테스트 코드 버그» 처럼 보여서** 방금 만진 코드 탓으로 오진하기 쉽다(2026-08-27 실측: 그렇게 두 번 오진했다) | **횟수를 기다림의 «조건» 으로 바꾼다** — 행이 그려졌음을 뜻하는 표시(모든 행에 있는 버튼 등)가 나올 때까지 `flushPromises()` + `setTimeout(0)` 를 돌리고, 못 찾으면 **명시적으로 던진다**(조용히 통과시키지 않는다). `OrderAdminView.test.js` 의 `untilRendered()` 가 본보기 · 🔴 **판정법**: 단독 실행으로는 절대 안 잡힌다 — **파일 하나를 고쳐 캐시를 무효화한 직후 전체 스위트**를 돌리면 잘 재현된다 · `handoffs/2026-08-27-handoff.md` §8 |
-| **배치(`@Scheduled`)가 예상한 시각에 안 돈다** — 몇 분도 아니고 **수십 분** 어긋난다 | 🔴 **VM 이 멈춰 있었다(정지·서스펜드·클럭 점프).** `@Scheduled(fixedDelay)` 는 «기동 + N시간마다» 를 **벽시계로 약속하지 않는다** — 멈춘 만큼 통째로 밀린다. ⚠ **멈췄다는 사실이 앱 로그 어디에도 «내가 멈췄다» 로는 안 남는다.** 2026-08-27 실측: 상품 영구삭제 배치가 예측(`:16`)이 아니라 `:00:2x` 에 돌아 **16분 반** 차이로 유예 임계를 비껴갔고, 원인은 **1시간 24분 정지**였다 | **판정은 Hikari 경고 한 줄로 한다**: `journalctl -u glassvue-backend \| grep -iE "clock leap\|starvation"` → `HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=...)`. 하우스키퍼는 **30초**마다 도므로 **delta 가 곧 멈춰 있던 시간**이다. 🔴 **배치 시각을 예측할 땐 계산하지 말고 «지난 실행 로그» 에서 주기를 읽는다** — 그 배치가 남긴 INFO 줄이 가장 싸고 정확한 근거다 · `handoffs/2026-08-27-handoff.md` §11-2 |
+| **배치(`@Scheduled`)가 예상한 시각에 안 돈다** — 몇 분도 아니고 **수십 분** 어긋난다 | 🔴 **VM 이 멈춰 있었다(정지·서스펜드·클럭 점프).** `@Scheduled(fixedDelay)` 는 «기동 + N시간마다» 를 **벽시계로 약속하지 않는다** — 멈춘 만큼 통째로 밀린다. ⚠ **멈췄다는 사실이 앱 로그 어디에도 «내가 멈췄다» 로는 안 남는다.** 2026-08-27 실측: 상품 영구삭제 배치가 예측(`:16`)이 아니라 `:00:2x` 에 돌아 **16분 반** 차이로 유예 임계를 비껴갔고, 원인은 **1시간 24분 정지**였다 | **판정은 Hikari 경고 한 줄로 한다**: `journalctl -u glassvue-backend \| grep -iE "clock leap\|starvation"` → `HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=...)`. 하우스키퍼는 **30초**마다 도므로 **delta 가 곧 멈춰 있던 시간**이다. 🔴 **배치 시각을 예측할 땐 «지난 실행 로그» 가 있으면 거기서 주기를 읽는다** — 멈춤까지 반영된 가장 정확한 근거다. ⚠ **없는 게 보통이다** — 세 배치는 **0건이면 로그를 안 남긴다**. 그땐 WA §3-4-1 대로 `Started … in N seconds` + `initialDelay` 로 계산한다 · `handoffs/2026-08-27-handoff.md` §11-2 |
+| 🔴 **배치가 며칠 동안 아예 안 돌았다** · 또는 **한 회차가 밀린 것을 한꺼번에 많이** 지웠다(2026-09-28: 알림 정리 **51건** 한 번에) | 🔴 **VM 이 꺼져 있었다.** 이 VM 은 **매일 아침 부팅되고 17시 전후에 꺼진다** — 하루 주기 배치는 **부팅마다 한 번**, 주말·휴일엔 **0번**이다. ⚠ **wtmp(`last reboot`)에 기록이 없다고 «켜져 있었다» 가 아니다** — 꺼진 것은 기록이 안 남는다. 저널도 휘발성이라 clock leap 줄조차 없다 | **sysstat 으로 가동 구간을 본다**(sudo 불필요): `LC_ALL=C sar -f /var/log/sa/saDD` — 그날 파일이 **이번 달 것인가**, `LINUX RESTART` 와 마지막 샘플 시각. 곁증거는 `ls -la --time-style=full-iso /var/log/` 의 `messages`·`cron` mtime. 🔴 **판정은 DB 로 한다** — 그 사이 새로 생긴 행이 없으면 «줄어든 수 = 그 회차의 로그 건수» 로 앞 회차가 0 이었음이 갈린다 · `handoffs/2026-09-28-handoff.md` §2 |
 | 로그인 실패를 쓰는 테스트가 어느 날 429 | MockMvc 는 IP 가 전부 `127.0.0.1` → 시도 제한 카운터를 공유 | WA §3 — `X-Real-IP` 로 자기 IP 를 준다 |
 | 변형을 넣었는데 **하나도 안 빨개진다** | 테스트가 그 경로에 못 닿았거나, 그 규칙이 코드에 아예 없다. ⚠ **화면 테스트라면 방어가 두 겹인지 본다**(2026-08-14): 버튼에 `:disabled` 가 걸려 있으면 `trigger('click')` 이 **두 번째부터 아예 안 나가서**, JS 가드(핸들러의 이른 return)를 지워도 초록이다 — 테스트가 가드가 아니라 **`disabled` 속성**을 보고 있었던 것이다(WA §2-4-1 동치 변형의 UI 판) | WA §3 · 가르는 법: **`await` 를 빼고 같은 틱에 연달아** 트리거한다. Vue 는 비동기로 렌더하므로 `disabled` 가 DOM 에 붙기 **전에** 두 번째가 도착한다 — **실제 브라우저의 빠른 연타가 그 모양**이라 인위적인 상황이 아니다 · `handoffs/2026-08-14-handoff.md` §10-4 |
 | 변형을 넣었더니 **테스트가 아니라 워커가 죽는다** | 운영 코드가 한 겹 방어뿐(가드 하나에만 안전이 걸려 있다) | WA §3 · `handoffs/2026-08-05-handoff.md` §6-3 |
@@ -90,7 +91,7 @@
 | 로그를 뒤졌는데 **0건**이라 "안 밟혔다"고 판단했다 | **재부팅이 저널을 지웠다.** 이 VM 의 journald 는 휘발성이라 **현재 부팅분만** 남는다 — 날짜가 같아도 갈린다 | WA §3-3-1 — 판정 **전에** `uptime -s`. 대상 시각이 그보다 앞이면 그 0 은 무효다. ⚠ 돈·재고는 **원장(DB)** 으로 본다(`point_history`·`stock_history`) · `handoffs/2026-08-10-handoff.md` §6 |
 | 취소·반품했는데 **재고가 일부만** 복원됐다 | 그 주문이 가리키는 **옵션(`product_variant`)이 이미 삭제**됐다. `increaseStock` 은 조용히 넘어가고 **이력도 안 남긴다**(재고가 안 변했는데 남기면 원장이 거짓이 된다) — **설계다** | 옵션 생사를 먼저 본다: `select i.product_name, v.id from order_item i left join product_variant v on v.id=i.variant_id where i.order_id=…` · `handoffs/2026-08-10-handoff.md` §9-2 |
 | `systemctl is-active` 는 `active` 인데 안 된다 | 프로세스는 살아 있고 기능은 죽었다 | WA §5 — `/actuator/health` 로 본다 |
-| 재부팅 뒤 백엔드가 `deactivating (stop-sigterm)` · `Result: timeout` 인데 **로그엔 `Started … in 129 seconds` 가 찍혀 있다** | 🔴 **기동에 성공했는데 systemd 가 결승선 직전에 죽였다.** `TimeoutStartSec=120` 인데 **콜드 부팅 첫 기동이 129초** 걸린다(같은 VM 의 Oracle 이 함께 뜨느라 느리다). `Restart=on-failure` 로 재시도하면 캐시가 더워져 **57초**에 뜨므로 **혼자 낫는다** — 그래서 «가끔 뜨는데 가끔 실패» 로 보인다 | ⚠ **«실패» 로 기록되지만 원인은 앱이 아니다.** 판별: `journalctl -u glassvue-backend \| grep "Started GlassvueBackendApplication in"` 로 **소요 초를 본다** — 120 을 넘겼으면 이 건이다. 항구 대책은 `TimeoutStartSec` 를 늘리는 것(§3-7) · `handoffs/2026-08-21-handoff.md` §6 |
+| 재부팅 뒤 백엔드가 `deactivating (stop-sigterm)` · `Result: timeout` 인데 **로그엔 `Started … in 129 seconds` 가 찍혀 있다** | 🔴 **기동에 성공했는데 systemd 가 결승선 직전에 죽였다.** ✅ **2026-08-21 에 `TimeoutStartSec=300` 으로 늘렸다**(2026-09-28 실측 `TimeoutStartUSec=5min` · 그날 콜드 부팅 88.8초) — 아래는 그 전 `120` 이던 때의 모양이다. `TimeoutStartSec=120` 이었는데 **콜드 부팅 첫 기동이 129초** 걸린다(같은 VM 의 Oracle 이 함께 뜨느라 느리다). `Restart=on-failure` 로 재시도하면 캐시가 더워져 **57초**에 뜨므로 **혼자 낫는다** — 그래서 «가끔 뜨는데 가끔 실패» 로 보인다 | ⚠ **«실패» 로 기록되지만 원인은 앱이 아니다.** 판별: `journalctl -u glassvue-backend \| grep "Started GlassvueBackendApplication in"` 로 **소요 초를 본다** — 120 을 넘겼으면 이 건이다. 300 을 넘겼으면 다시 이 건이다(§3-7) · `handoffs/2026-08-21-handoff.md` §6 |
 | 🔴 **`.git/index` 가 0바이트** · `fatal: 현재 브랜치가 망가진 것처럼 보입니다` · object 파일 몇 개가 0바이트 | **크래시·강제 재부팅이 git 쓰기를 잘랐다.** ⚠ **커밋 «내용» 은 거의 안 깨진다** — 깨지는 건 마지막에 쓰인 것들(index · loose ref · 그 커밋의 object 몇 개)이다. 🔴 **push 는 성공했는데 로컬만 날아간 상태일 수 있다**(원격이 로컬보다 앞선다) | 복구 순서는 §5-1. **먼저 `git ls-remote origin` 과 `.git/logs/HEAD`(reflog)를 본다** — 둘 다 크래시에 잘 살아남고, 되돌아갈 SHA 를 알려 준다 · `handoffs/2026-08-21-handoff.md` §6 |
 | 메일이 안 온다 | **운영은 발송이 꺼져 있다**(`spring.mail` 키 없음) — 그게 정상 | WA §3 · `README.md` |
 | 배포 종료 로그에 `NoClassDefFoundError` 무더기 | 구 프로세스 밑에서 jar 를 갈아치웠다 | **§2-3 (아래)** |
@@ -201,7 +202,7 @@ journalctl -u glassvue-backend --since "10 min ago" | grep -E 'Graceful shutdown
 
 | 무엇을 답하나 | 어디 | 한계 |
 |---|---|---|
-| **화면을 열었나** | **nginx 접근 로그** (`/usr/local/nginx/logs/access.log`) | 「열었다」까지다. 무엇을 했는지는 모른다. |
+| **화면을 열었나** | **nginx 접근 로그** (`/var/log/nginx/glassvue-access.log`) ⚠ 2026-09-28 정정 — 옮겨 적을 때 `/usr/local/nginx/logs/access.log`(없는 경로)로 틀렸다. 원본 `handoffs/2026-09-10-handoff.md` 는 맞았다 | 「열었다」까지다. 무엇을 했는지는 모른다. |
 | **무엇을 했나** | **`admin_audit_log` 테이블** | 🔴 **관리자 동작만** 남는다. 일반 회원·비로그인 동선은 못 본다. |
 
 ⚠ **테스트 실행과 사람의 동작을 반드시 가른다** — `@SpringBootTest` 전수는 **실 DB 를 쓴다.**
@@ -322,7 +323,7 @@ DB 가 아직 몸을 푸는 동안 커넥션 풀·Flyway 검증·JPA 스키마 �
       «timeout» 만 있고 «몇 초 걸렸나» 가 없다.
 - [ ] ⚠ **앱을 의심하기 전에 이걸 먼저 본다.** 2026-08-21 에는 디스크·OOM·메모리를 먼저 팠는데
       **셋 다 정상**이었다(디스크 52% · OOM 없음). 시간을 쓴 순서가 틀렸다.
-- [ ] 🔴 **항구 대책은 `TimeoutStartSec` 를 늘리는 것**이다(제안 — sudo 라 사용자가 적용):
+- [x] 🔴 **항구 대책은 `TimeoutStartSec` 를 늘리는 것**이다 — ✅ **2026-08-21 적용**(`infra/systemd/glassvue-backend.service` · 2026-09-28 `systemctl show` → `5min`):
       `/etc/systemd/system/glassvue-backend.service` 의 `TimeoutStartSec=120` → **`300`**.
       ⚠ **`ExecStartPost` 헬스체크 자체는 그대로 둔다** — 그게 «active = 요청 처리 준비 완료» 를
       만드는 장치라, 줄이면 안 된다. 늘려야 하는 건 **기다려 주는 시간**이다.
@@ -427,7 +428,7 @@ UUID 도 파티션 번호도 안 바뀌므로 `fstab` 은 그대로 맞다.
    `rm -f .git/refs/heads/main && git update-ref refs/heads/main <sha>`
    🔴 **`git update-ref` 만으로는 안 된다** — 깨진 ref 는 잠금을 못 잡아
    `cannot lock ref: reference broken` 이 난다. **지우는 것이 먼저다.**
-   ⚠ **지운 채로 두면 `packed-refs` 의 옛 SHA 로 조용히 되돌아간다**(이 레포는 08-14 판이 들어 있다) —
+   ⚠ **지운 채로 두면 `packed-refs` 의 옛 SHA 로 조용히 되돌아간다**(2026-09-28 실측: `ced34fd` — **08-12 커밋**이다) —
    **지우기와 세우기는 한 호흡**이어야 한다.
 5. **인덱스를 다시 만든다**: `rm -f .git/index && git reset`
    ⚠ mixed reset 이라 **작업 트리는 안 건드린다.** (HEAD 가 아직 안 고쳐졌으면 빈 인덱스가 만들어져
